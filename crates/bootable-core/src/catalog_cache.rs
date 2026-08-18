@@ -90,13 +90,39 @@ impl CatalogState {
                 origin: CatalogOrigin::FreshCache,
                 warning: None,
             } => format!("{subject} ready · cached"),
-            Self::Ready { warning, .. } => warning.as_ref().map_or_else(
-                || format!("{subject} ready · cached"),
-                |warning| format!("{subject} ready · cached · {warning}"),
+            Self::Ready {
+                warning: Some(warning),
+                ..
+            } => format!(
+                "{subject} ready · cached · {}",
+                concise_catalog_failure(warning)
             ),
+            Self::Ready { warning: None, .. } => format!("{subject} ready · cached"),
             Self::Empty => format!("No {subject} found"),
-            Self::Failed(message) => format!("Could not load {subject} · {message} · retry"),
+            Self::Failed(message) => format!(
+                "Could not load {subject} · {} · retry",
+                concise_catalog_failure(message)
+            ),
         }
+    }
+}
+
+fn concise_catalog_failure(message: &str) -> &'static str {
+    let message = message.to_ascii_lowercase();
+    if message.contains("network request")
+        || message.contains("connection")
+        || message.contains("timed out")
+        || message.contains("dns")
+    {
+        "network unavailable"
+    } else if message.contains("refresh failed") {
+        "refresh unavailable"
+    } else if message.contains("cache") {
+        "cache unavailable"
+    } else if message.contains("invalid") || message.contains("parse") {
+        "catalog response unsupported"
+    } else {
+        "service unavailable"
     }
 }
 
@@ -384,13 +410,20 @@ mod tests {
                 .short_label("images")
                 .contains("retry")
         );
-        assert!(
+        assert_eq!(
+            CatalogState::Failed(
+                "network request to https://example.invalid failed: connection refused".into()
+            )
+            .short_label("images"),
+            "Could not load images · network unavailable · retry"
+        );
+        assert_eq!(
             CatalogState::Ready {
                 origin: CatalogOrigin::StaleCache,
-                warning: Some("refresh failed".into()),
+                warning: Some("refresh failed: network request to https://example.invalid".into()),
             }
-            .short_label("images")
-            .contains("refresh failed")
+            .short_label("images"),
+            "images ready · cached · network unavailable"
         );
     }
 }
