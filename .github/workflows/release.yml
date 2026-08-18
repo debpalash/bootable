@@ -56,9 +56,37 @@ jobs:
             cp packaging/app.bootable.Bootable.desktop "$stage/"
             cp packaging/app.bootable.write-media.policy "$stage/"
           fi
+          cp scripts/install.sh "$stage/"
           cp README.md LICENSE "$stage/"
           tar -C "$stage" -czf "$asset" .
           sha256sum "$asset" > "${asset}.sha256" 2>/dev/null || shasum -a 256 "$asset" > "${asset}.sha256"
+      - name: Verify Unix release archive
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          asset="bootable-${version}-${{ matrix.target }}.tar.gz"
+          verify="$(mktemp -d)"
+          trap 'rm -rf "$verify"' EXIT
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum -c "${asset}.sha256"
+          else
+            shasum -a 256 -c "${asset}.sha256"
+          fi
+          tar -xzf "$asset" -C "$verify"
+          for executable in bootable bootable-desktop bootable-helper install.sh; do
+            test -x "$verify/$executable"
+          done
+          for file in README.md LICENSE bootable.svg; do
+            test -f "$verify/$file"
+          done
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            test -f "$verify/app.bootable.Bootable.desktop"
+            test -f "$verify/app.bootable.write-media.policy"
+          fi
+          test "$("$verify/bootable" --version)" = "bootable $version"
+          "$verify/bootable" --help >/dev/null
       - name: Package Windows artifacts
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -75,6 +103,37 @@ jobs:
           Compress-Archive -Path stage/* -DestinationPath $asset
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
           "$hash  $asset" | Set-Content -NoNewline "$asset.sha256"
+      - name: Verify Windows release archive
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $asset = "bootable-$version-${{ matrix.target }}.zip"
+          $expectedHash = (Get-Content "$asset.sha256" -Raw).Split(' ')[0]
+          $actualHash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+          if ($actualHash -ne $expectedHash) { throw 'Packaged ZIP checksum does not match its sidecar.' }
+          $verify = Join-Path $env:RUNNER_TEMP 'bootable-release-verify'
+          Expand-Archive -LiteralPath $asset -DestinationPath $verify
+          $required = @(
+            'bootable.exe',
+            'bootable-desktop.exe',
+            'bootable-helper.exe',
+            'install.ps1',
+            'bootable.svg',
+            'README.md',
+            'LICENSE'
+          )
+          foreach ($name in $required) {
+            if (-not (Test-Path -LiteralPath (Join-Path $verify $name) -PathType Leaf)) {
+              throw "Release ZIP is missing $name."
+            }
+          }
+          $reportedVersion = & (Join-Path $verify 'bootable.exe') --version
+          if ($LASTEXITCODE -ne 0 -or $reportedVersion.Trim() -ne "bootable $version") {
+            throw "Release binary reported unexpected version: $reportedVersion"
+          }
+          & (Join-Path $verify 'bootable.exe') --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged TUI failed its help smoke test.' }
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: bootable-*
