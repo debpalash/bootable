@@ -388,6 +388,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn windows_uses_basic_data_fat32_strategy() {
         let plan = build(
@@ -413,6 +414,7 @@ mod tests {
         assert!(!plan.confirmation_matches("ERASE /dev/sdz BC123456 "));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn windows_mbr_uefi_plan_uses_parted_and_active_partition() {
         let options = WriteOptions {
@@ -445,6 +447,44 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_mbr_uefi_plan_uses_native_windows_tools() {
+        let options = WriteOptions {
+            windows_partition_scheme: crate::model::WindowsPartitionScheme::Mbr,
+            ..WriteOptions::default()
+        };
+        let plan = build_with_options(
+            image(ImageKind::WindowsInstaller {
+                payload: WindowsPayload::Esd,
+                payload_size: Some(3 * 1024 * 1024 * 1024),
+            }),
+            device(),
+            options,
+        )
+        .expect("valid native Windows MBR plan");
+
+        assert!(matches!(
+            plan.strategy,
+            WriteStrategy::WindowsFat32 {
+                partition_scheme: crate::model::WindowsPartitionScheme::Mbr,
+                ..
+            }
+        ));
+        assert!(
+            plan.required_tools
+                .iter()
+                .any(|tool| tool == "powershell.exe")
+        );
+        assert!(!plan.required_tools.iter().any(|tool| tool == "parted"));
+        assert!(
+            plan.steps
+                .iter()
+                .any(|step| step.title.contains("active FAT32"))
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn windows_requirement_bypass_is_explicit_in_the_plan() {
         let mut options = WriteOptions::default();
@@ -478,6 +518,7 @@ mod tests {
         assert!(matches!(error, Error::UnsupportedImage(_)));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn bad_block_check_is_in_the_reviewed_plan() {
         let options = WriteOptions {
@@ -494,6 +535,35 @@ mod tests {
                 .iter()
                 .any(|step| step.title.contains("2 destructive test pattern"))
         );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn bad_block_check_is_rejected_before_a_destructive_plan() {
+        let options = WriteOptions {
+            bad_block_check: crate::model::BadBlockCheck::TwoPasses,
+            ..WriteOptions::default()
+        };
+
+        let error = build_with_options(image(ImageKind::HybridIso), device(), options)
+            .expect_err("unsupported bad-block check");
+
+        assert!(matches!(error, Error::PlatformUnavailable(_)));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn windows_conversion_is_rejected_before_a_destructive_plan() {
+        let error = build(
+            image(ImageKind::WindowsInstaller {
+                payload: WindowsPayload::Wim,
+                payload_size: Some(3 * 1024 * 1024 * 1024),
+            }),
+            device(),
+        )
+        .expect_err("macOS conversion is deliberately unavailable");
+
+        assert!(matches!(error, Error::PlatformUnavailable(_)));
     }
 
     #[test]

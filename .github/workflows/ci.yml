@@ -48,6 +48,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig1-dev libxkbcommon-x11-dev pkg-config
+      - name: Run platform-specific tests
+        if: runner.os != 'Linux'
+        run: cargo test --workspace
       - run: cargo build --release --workspace
 
   qemu-uefi-smoke:
