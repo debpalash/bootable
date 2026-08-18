@@ -27,10 +27,14 @@ Initial public alpha.
   loop devices eligible application targets.
 - A deterministic read-only GRUB/OVMF fixture and machine-readable QEMU frame assertion for CI.
 - Conservative native Windows USB inventory, stable `PhysicalDrive` revalidation, volume detachment,
-  and already-elevated raw write/backup/verification.
+  UAC-authenticated raw write/verification, authenticated loopback helper protocol, and protected
+  Program Files installer.
+- Native Windows GPT/MBR FAT32 installer creation using mounted ISOs and DISM, including oversized
+  WIM splitting, the shared Windows 11 options, CA 2023 boot files, pre-erasure source checks, and
+  post-copy boot-tree verification.
 - Conservative native macOS whole-removable inventory, root-disk exclusion, stable `/dev/rdisk`
   revalidation, unmounting, and already-elevated raw write/backup/verification.
 - macOS administrator authentication through a fixed root-owned helper and private Unix-socket
   reviewed-plan/cancel/progress protocol; the GUI/TUI process remains unprivileged.
 
-Windows UAC elevation and native Windows/macOS extracted FAT32 creation remain unfinished.
+Native macOS extracted FAT32 creation and platform code signing remain unfinished.

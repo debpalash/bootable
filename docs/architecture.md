@@ -36,8 +36,11 @@ The native adapters use the same seam and repeat the same plan-bound checks:
   private Unix socket, macOS presents its administrator prompt, and the helper carries the same
   reviewed-plan/cancel/progress protocol without elevating the frontend.
 
-Platform-native Windows FAT32 creation remains open work. Linux, macOS, and Windows launch narrow
-privileged helpers while the full UI remains unprivileged.
+Windows also mounts installer ISOs with the native storage cmdlets, preflights the complete source
+before clearing the target, creates a bounded FAT32 partition, splits oversized WIMs with DISM,
+applies the shared answer-file model, and verifies the copied boot tree. Platform-native macOS
+Windows FAT32 creation remains open work. All platforms launch narrow privileged helpers while the
+full UI remains unprivileged.
 
 Image classification and policy remain shared across all three operating systems.
 

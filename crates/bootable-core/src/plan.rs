@@ -20,6 +20,18 @@ pub(crate) fn build_with_options(
             "Windows setup options apply only to Windows installer images".into(),
         ));
     }
+    #[cfg(not(target_os = "linux"))]
+    if options.bad_block_check.passes() > 0 {
+        return Err(Error::PlatformUnavailable(
+            "the destructive bad-block test is currently available only on Linux".into(),
+        ));
+    }
+    #[cfg(target_os = "macos")]
+    if matches!(&image.kind, ImageKind::WindowsInstaller { .. }) {
+        return Err(Error::PlatformUnavailable(
+            "native macOS Windows installer conversion is not implemented yet".into(),
+        ));
+    }
     let required = match image.kind {
         ImageKind::WindowsInstaller { .. } => {
             image.size.saturating_add(WINDOWS_FREE_SPACE_ALLOWANCE)
@@ -40,27 +52,11 @@ pub(crate) fn build_with_options(
         } => {
             let split_payload = payload != crate::model::WindowsPayload::SplitWim
                 && payload_size.is_some_and(|size| size > u32::MAX as u64);
-            let mut tools = vec![
-                "wipefs".into(),
-                "partprobe".into(),
-                "mkfs.fat".into(),
-                "mount".into(),
-                "umount".into(),
-                "findmnt".into(),
-                "sync".into(),
-            ];
-            tools.push(match options.windows_partition_scheme {
-                crate::model::WindowsPartitionScheme::Gpt => "sgdisk".into(),
-                crate::model::WindowsPartitionScheme::Mbr => "parted".into(),
-            });
-            if split_payload {
-                tools.push("wimlib-imagex".into());
-            }
-            if options.windows.use_windows_ca_2023
-                && !tools.iter().any(|tool| tool == "wimlib-imagex")
-            {
-                tools.push("wimlib-imagex".into());
-            }
+            let tools = windows_required_tools(
+                split_payload,
+                options.windows.use_windows_ca_2023,
+                options.windows_partition_scheme,
+            );
             (
                 WriteStrategy::WindowsFat32 {
                     payload,
@@ -74,7 +70,7 @@ pub(crate) fn build_with_options(
         ImageKind::HybridIso | ImageKind::RawDiskImage | ImageKind::CompressedDiskImage { .. } => (
             WriteStrategy::RawVerified,
             raw_steps(),
-            vec!["umount".into()],
+            raw_required_tools(),
         ),
         ImageKind::OpticalIso => {
             return Err(Error::UnsupportedImage(
@@ -107,6 +103,66 @@ pub(crate) fn build_with_options(
         required_tools,
         confirmation_phrase,
     })
+}
+
+fn raw_required_tools() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    {
+        vec!["umount".into()]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        vec!["diskutil".into()]
+    }
+    #[cfg(target_os = "windows")]
+    {
+        vec!["powershell.exe".into()]
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        Vec::new()
+    }
+}
+
+fn windows_required_tools(
+    split_payload: bool,
+    use_windows_ca_2023: bool,
+    partition_scheme: crate::model::WindowsPartitionScheme,
+) -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut tools = vec![
+            "wipefs".into(),
+            "partprobe".into(),
+            "mkfs.fat".into(),
+            "mount".into(),
+            "umount".into(),
+            "findmnt".into(),
+            "sync".into(),
+        ];
+        tools.push(match partition_scheme {
+            crate::model::WindowsPartitionScheme::Gpt => "sgdisk".into(),
+            crate::model::WindowsPartitionScheme::Mbr => "parted".into(),
+        });
+        if split_payload || use_windows_ca_2023 {
+            tools.push("wimlib-imagex".into());
+        }
+        tools
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = partition_scheme;
+        let mut tools = vec!["powershell.exe".into()];
+        if split_payload || use_windows_ca_2023 {
+            tools.push("dism.exe".into());
+        }
+        tools
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (split_payload, use_windows_ca_2023, partition_scheme);
+        Vec::new()
+    }
 }
 
 fn validate_target(target: &Device) -> Result<()> {

@@ -20,7 +20,7 @@
 > Check the physical device, keep backups, and do not use it on irreplaceable media. Linux writing
 > is functional. macOS and Windows have conservative removable-device discovery and authenticated
 > narrow-helper raw write/verification paths; the full applications stay unprivileged.
-> Platform-native Windows-media conversion paths are not complete.
+> Native Windows-media creation is implemented on Linux and Windows; macOS conversion is not complete.
 
 Stop bouncing between a distro website, a checksum tool, a decompressor, and a USB writer.
 Bootable discovers images, downloads and verifies them, identifies removable media, explains the
@@ -260,8 +260,11 @@ for a catalog/inspection-only installation where device writing is intentionally
   FAT32 media creation are implemented.
 - Windows: USB-only `Get-Disk` discovery, stable identity revalidation, drive-letter detachment,
   UAC-authenticated `PhysicalDrive` raw writing, cancellation, and verification are implemented.
-  The app accepts only the fixed Program Files helper after owner and ACL validation. Extracted
-  Windows FAT32 creation remains unfinished; raw backup currently requires an elevated process.
+  The app accepts only the fixed Program Files helper after owner and ACL validation. Native GPT/MBR
+  FAT32 installer creation uses Windows ISO mounting and DISM split-WIM/CA-2023 support, with source
+  preflight before erasure and boot-tree verification afterward. Windows' formatter limits the media
+  partition to just under 32 GiB; larger installer trees are refused. Raw backup currently requires
+  an elevated process.
 - macOS: whole removable/ejectable `IOMedia` discovery, root-disk exclusion, stable identity
   revalidation, `diskutil` unmounting, `/dev/rdisk` raw writing, backup, cancellation, and
   verification are implemented. The UI invokes a fixed root-owned helper through the macOS

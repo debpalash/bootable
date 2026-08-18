@@ -27,7 +27,7 @@
 - [x] Windows UAC privilege prompt with fixed protected helper, authenticated loopback protocol,
   cancellation, and stable target revalidation
 - Platform code signing
-- Platform-native Windows FAT32/split-WIM execution
+- [x] Platform-native Windows FAT32/split-WIM execution with preflight and boot-tree verification
 
 ## Later
 
