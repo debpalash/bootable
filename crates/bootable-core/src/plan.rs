@@ -26,12 +26,6 @@ pub(crate) fn build_with_options(
             "the destructive bad-block test is currently available only on Linux".into(),
         ));
     }
-    #[cfg(target_os = "macos")]
-    if matches!(&image.kind, ImageKind::WindowsInstaller { .. }) {
-        return Err(Error::PlatformUnavailable(
-            "native macOS Windows installer conversion is not implemented yet".into(),
-        ));
-    }
     let required = match image.kind {
         ImageKind::WindowsInstaller { .. } => {
             image.size.saturating_add(WINDOWS_FREE_SPACE_ALLOWANCE)
@@ -158,7 +152,16 @@ fn windows_required_tools(
         }
         tools
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = partition_scheme;
+        let mut tools = vec!["diskutil".into(), "hdiutil".into(), "sync".into()];
+        if split_payload || use_windows_ca_2023 {
+            tools.push("wimlib-imagex".into());
+        }
+        tools
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
         let _ = (split_payload, use_windows_ca_2023, partition_scheme);
         Vec::new()
@@ -388,7 +391,7 @@ mod tests {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     #[test]
     fn windows_uses_basic_data_fat32_strategy() {
         let plan = build(
@@ -484,7 +487,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     #[test]
     fn windows_requirement_bypass_is_explicit_in_the_plan() {
         let mut options = WriteOptions::default();
@@ -553,17 +556,19 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn windows_conversion_is_rejected_before_a_destructive_plan() {
-        let error = build(
+    fn windows_conversion_uses_native_disk_and_image_tools() {
+        let plan = build(
             image(ImageKind::WindowsInstaller {
                 payload: WindowsPayload::Wim,
                 payload_size: Some(3 * 1024 * 1024 * 1024),
             }),
             device(),
         )
-        .expect_err("macOS conversion is deliberately unavailable");
+        .expect("macOS conversion plan");
 
-        assert!(matches!(error, Error::PlatformUnavailable(_)));
+        assert!(plan.required_tools.iter().any(|tool| tool == "diskutil"));
+        assert!(plan.required_tools.iter().any(|tool| tool == "hdiutil"));
+        assert!(matches!(plan.strategy, WriteStrategy::WindowsFat32 { .. }));
     }
 
     #[test]

@@ -38,9 +38,10 @@ The native adapters use the same seam and repeat the same plan-bound checks:
 
 Windows also mounts installer ISOs with the native storage cmdlets, preflights the complete source
 before clearing the target, creates a bounded FAT32 partition, splits oversized WIMs with DISM,
-applies the shared answer-file model, and verifies the copied boot tree. Platform-native macOS
-Windows FAT32 creation remains open work. All platforms launch narrow privileged helpers while the
-full UI remains unprivileged.
+applies the shared answer-file model, and verifies the copied boot tree. macOS follows the same
+reviewed strategy with read-only `hdiutil` mounting, strict `diskutil` whole-disk formatting, and
+`wimlib` split-WIM/CA-2023 operations when required. All platforms launch narrow privileged helpers
+while the full UI remains unprivileged.
 
 Image classification and policy remain shared across all three operating systems.
 

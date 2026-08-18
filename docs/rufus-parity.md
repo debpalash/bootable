@@ -16,7 +16,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | MD5/SHA-1/SHA-256/SHA-512 | streaming digest API | CLI + mouse/keyboard picker | mouse picker | Implemented |
 | Hybrid ISO/IMG writing | raw write | consequence modal + polkit helper + live write | consequence modal + polkit helper + live write | Implemented on Linux |
 | Raw write verification | byte-range SHA-256 | phase, speed, ETA, verification | phase, speed, ETA, verification | Implemented on Linux |
-| Windows installer creation | GPT/FAT32 + split WIM | consequence modal + narrow helper + live write | consequence modal + narrow helper + live write | Implemented on Linux and Windows; macOS pending |
+| Windows installer creation | GPT/FAT32 + split WIM | consequence modal + narrow helper + live write | consequence modal + narrow helper + live write | Implemented on Linux, Windows, and macOS |
 | Windows 11 TPM/Secure Boot/RAM bypass | guarded answer file | flag + clickable toggle | clickable toggle | Implemented |
 | Runtime UEFI boot validation | reproducible read-only QEMU/OVMF harness + RGB frame assertion | same script | same script | Implemented in CI with a deterministic UEFI fixture |
 | Bad-block/fake-drive test | 1/2/4 destructive patterns | flag + clickable cycle | clickable cycle | Implemented on Linux |
@@ -35,7 +35,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | Drive-to-image backup (DD/VHD/VHDX/FFU) | atomic raw IMG/RAW/DD backup | CLI + save dialog | background backup + save dialog | Partial: VHD/VHDX/FFU remain |
 | Official ISO/UEFI Shell downloads | not implemented | not implemented | not implemented | Planned |
 | Publisher download integrity | checksum sidecars/manifests, strongest digest, atomic mismatch refusal | integrity label + persistent result | integrity label + persistent result | Implemented for MD5/SHA-1/SHA-256/SHA-512; signatures planned |
-| Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Raw adapters and narrow-helper authorization implemented; Windows FAT32 implemented, macOS pending |
+| Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Raw adapters, narrow-helper authorization, and native Windows FAT32 paths implemented |
 | Localization | not implemented | not implemented | not implemented | Planned |
 
 ## Delivery order
@@ -44,7 +44,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 2. Windows To Go.
 3. Linux persistence, BIOS helpers, and DOS media.
 4. VHD/VHDX/FFU backup, verified downloads, and localization.
-5. Native macOS Windows-media execution and signed platform installers.
+5. Signed platform installers.
 
 Every capability is added to the core first. TUI and GPUI controls ship together and consume the
 same serialized option types so plans cannot differ by frontend.

@@ -28,6 +28,8 @@
   cancellation, and stable target revalidation
 - Platform code signing
 - [x] Platform-native Windows FAT32/split-WIM execution with preflight and boot-tree verification
+- [x] Platform-native macOS GPT/MBR FAT32 Windows media with preflight, split-WIM support, and
+  boot-tree verification
 
 ## Later
 

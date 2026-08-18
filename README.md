@@ -17,10 +17,10 @@
 
 > [!CAUTION]
 > **Bootable 0.1.0-alpha.1 is pre-release software that intentionally erases removable drives.**
-> Check the physical device, keep backups, and do not use it on irreplaceable media. Linux writing
-> is functional. macOS and Windows have conservative removable-device discovery and authenticated
-> narrow-helper raw write/verification paths; the full applications stay unprivileged.
-> Native Windows-media creation is implemented on Linux and Windows; macOS conversion is not complete.
+> Check the physical device, keep backups, and do not use it on irreplaceable media. Linux, macOS,
+> and Windows use conservative removable-device discovery and authenticated narrow-helper write
+> paths; the full applications stay unprivileged. Native Windows-media creation is implemented on
+> all three operating systems.
 
 Stop bouncing between a distro website, a checksum tool, a decompressor, and a USB writer.
 Bootable discovers images, downloads and verifies them, identifies removable media, explains the
@@ -249,6 +249,14 @@ cargo build --release --workspace
 ./target/release/bootable-desktop
 ```
 
+On macOS, the built-in `diskutil` and `hdiutil` tools cover raw and standard Windows media. Install
+`wimlib` when an installer contains a payload larger than FAT32's 4 GiB file limit or when applying
+the Windows CA 2023 bootloader option:
+
+```bash
+brew install wimlib
+```
+
 On Linux, install `bootable-helper` as root-owned `/usr/libexec/bootable-helper` together with
 `packaging/app.bootable.write-media.policy`. The release installer performs this one privileged setup
 step. Bootable refuses to elevate a user-writable helper; set `BOOTABLE_SKIP_PRIVILEGED_HELPER=1` only
@@ -268,7 +276,9 @@ for a catalog/inspection-only installation where device writing is intentionally
 - macOS: whole removable/ejectable `IOMedia` discovery, root-disk exclusion, stable identity
   revalidation, `diskutil` unmounting, `/dev/rdisk` raw writing, backup, cancellation, and
   verification are implemented. The UI invokes a fixed root-owned helper through the macOS
-  administrator prompt and a private Unix socket; extracted Windows FAT32 creation remains unfinished.
+  administrator prompt and a private Unix socket. Native GPT/MBR Windows media uses read-only
+  `hdiutil` source mounting, pre-erasure boot-tree validation, `diskutil` FAT32 formatting,
+  `wimlib` split-WIM/CA-2023 support when needed, and post-copy boot and file-size verification.
 - Desktop and TUI: on Linux, destructive execution uses the same consequence confirmation, a
   polkit/pkexec authentication prompt, cancellable write protocol, and root-owned narrow
   `bootable-helper`; the full interface is never elevated. macOS follows the same narrow-helper
