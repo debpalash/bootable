@@ -16,7 +16,7 @@
 </p>
 
 > [!CAUTION]
-> **Bootable 0.1.0-alpha.1 is pre-release software that intentionally erases removable drives.**
+> **Bootable 0.1.0-alpha.2 is pre-release software that intentionally erases removable drives.**
 > Check the physical device, keep backups, and do not use it on irreplaceable media. Linux, macOS,
 > and Windows use conservative removable-device discovery and authenticated narrow-helper write
 > paths; the full applications stay unprivileged. Native Windows-media creation is implemented on

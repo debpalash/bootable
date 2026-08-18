@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "bootable-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "bzip2",
  "flate2",
@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "bootable-desktop"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
  "bootable-core",
@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "bootable-helper"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "bootable-core",
  "serde_json",
@@ -838,7 +838,7 @@ dependencies = [
 
 [[package]]
 name = "bootable-tui"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
  "bootable-core",

@@ -2,7 +2,7 @@
 set -eu
 
 REPOSITORY="${BOOTABLE_REPOSITORY:-debpalash/bootable}"
-VERSION="${BOOTABLE_VERSION:-0.1.0-alpha.1}"
+VERSION="${BOOTABLE_VERSION:-0.1.0-alpha.2}"
 VARIANT="${1:---gui}"
 INSTALL_ROOT="${BOOTABLE_INSTALL_ROOT:-${HOME}/.local}"
 

@@ -2,6 +2,16 @@
 
 All notable changes to Bootable are documented here.
 
+## 0.1.0-alpha.2 — 2026-08-18
+
+- Native macOS GPT/MBR FAT32 Windows-installer creation with read-only `hdiutil` source mounting,
+  strict whole-disk and partition identity checks, and `diskutil` formatting.
+- Pre-erasure Windows boot-tree, answer-file collision, regular-file, and FAT32-size validation.
+- Oversized install payload splitting and Windows CA 2023 bootloader support through a fixed,
+  preflighted `wimlib-imagex` executable.
+- Post-copy UEFI, Windows payload, split-WIM, and FAT32 file-size verification with cancellable
+  copy and external-tool execution.
+
 ## 0.1.0-alpha.1 — 2026-08-18
 
 Initial public alpha.
