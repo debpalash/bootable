@@ -7,9 +7,12 @@ on:
       - '.github/workflows/pages.yml'
       - 'site/**'
       - 'assets/bootable-logo.svg'
+      - 'assets/bootable-logo-animated.svg'
       - 'assets/bootable-mark.svg'
       - 'docs/screenshots/gui-discover.png'
+      - 'docs/screenshots/gui-demo.gif'
       - 'docs/screenshots/tui-main.png'
+      - 'docs/screenshots/tui-demo.gif'
   workflow_dispatch:
 
 permissions:
@@ -37,9 +40,12 @@ jobs:
           mkdir _site
           cp site/index.html site/404.html site/styles.css site/robots.txt site/sitemap.xml _site/
           cp assets/bootable-logo.svg _site/bootable-logo.svg
+          cp assets/bootable-logo-animated.svg _site/bootable-logo-animated.svg
           cp assets/bootable-mark.svg _site/favicon.svg
           cp docs/screenshots/gui-discover.png _site/gui-discover.png
+          cp docs/screenshots/gui-demo.gif _site/gui-demo.gif
           cp docs/screenshots/tui-main.png _site/tui-main.png
+          cp docs/screenshots/tui-demo.gif _site/tui-demo.gif
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v5
         with:

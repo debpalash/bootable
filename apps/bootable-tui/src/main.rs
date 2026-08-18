@@ -3282,7 +3282,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
     if !wide {
         return vec![Line::from(vec![
             Span::styled(
-                " ↓ BOOTABLE α ",
+                " ♨ USB · BOOTABLE α ",
                 Style::default()
                     .fg(Color::Black)
                     .bg(ACCENT)
@@ -3294,7 +3294,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
     vec![
         Line::from(vec![
             Span::styled(
-                "╭─↓─╮",
+                "╭─┬─╮",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -3306,7 +3306,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
             Span::styled(format!("  ·  {context}"), Style::default().fg(Color::White)),
         ]),
         Line::from(vec![
-            Span::styled("╰───╯", Style::default().fg(ACCENT)),
+            Span::styled("╰─♨─╯", Style::default().fg(ACCENT)),
             Span::styled(format!("  {subtitle}"), Style::default().fg(MUTED)),
         ]),
     ]
@@ -4626,7 +4626,7 @@ fn windows_option_columns(width: u16) -> usize {
 
 fn draw_terminal_too_small(frame: &mut ratatui::Frame<'_>, area: Rect) {
     frame.render_widget(
-        Paragraph::new("╭─↓─╮  BOOTABLE\n╰───╯\n\nResize to at least 44 × 22\nq  Quit")
+        Paragraph::new("╭─┬─╮  BOOTABLE\n╰─♨─╯\n\nResize to at least 44 × 22\nq  Quit")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White))
             .block(panel_block(" Terminal too small ")),
@@ -4773,7 +4773,7 @@ mod layout_tests {
     fn terminal_brand_matches_the_download_to_drive_logo() {
         let lines = brand_lockup(true, "Create boot media", "Deliberate writing");
         assert_eq!(lines.len(), 2);
-        assert!(lines[0].to_string().contains("╭─↓─╮  BOOTABLE"));
-        assert!(lines[1].to_string().contains("╰───╯"));
+        assert!(lines[0].to_string().contains("╭─┬─╮  BOOTABLE"));
+        assert!(lines[1].to_string().contains("╰─♨─╯"));
     }
 }

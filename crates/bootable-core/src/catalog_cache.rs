@@ -43,10 +43,9 @@ impl<T> CatalogFetch<T> {
     }
 
     pub fn status_suffix(&self) -> String {
-        match &self.warning {
-            Some(warning) => format!("{} · {warning}", self.source_label()),
-            None => self.source_label().into(),
-        }
+        // Keep the always-visible status concise. The structured state retains the
+        // detailed warning for diagnostics and retry handling.
+        self.source_label().into()
     }
 }
 

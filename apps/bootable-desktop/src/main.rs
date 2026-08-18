@@ -28,7 +28,7 @@ use gpui_http_client::{AsyncBody, HttpClient, Url, http};
 
 const DEVICE_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const DOWNLOAD_SCAN_INTERVAL: Duration = Duration::from_secs(5);
-const BRAND_MARK_SVG: &[u8] = include_bytes!("../../../assets/bootable-mark.svg");
+const BRAND_MARK_SVG: &[u8] = include_bytes!("../../../assets/bootable-app-mark.svg");
 const BRAND_LOGO_SVG: &[u8] = include_bytes!("../../../assets/bootable-logo.svg");
 const IMAGE_ICON_SVG: &[u8] = include_bytes!("../../../assets/icons/image.svg");
 const USB_ICON_SVG: &[u8] = include_bytes!("../../../assets/icons/usb.svg");
@@ -285,6 +285,7 @@ enum QuickAccess {
 #[derive(Clone, Copy)]
 struct ViewportLayout {
     compact: bool,
+    wide: bool,
     distribution_height: Pixels,
     screenshot_height: Pixels,
     release_height: Pixels,
@@ -293,18 +294,24 @@ struct ViewportLayout {
 impl ViewportLayout {
     fn new(width: Pixels, height: Pixels) -> Self {
         let compact = width < px(960.);
+        let wide = width >= px(1_500.);
         let (screenshot_height, release_height) = if compact {
-            (px(120.), px(160.))
+            (px(96.), px(132.))
         } else if height >= px(1_300.) {
-            (px(180.), px(190.))
+            (px(112.), px(144.))
         } else if height >= px(1_000.) {
-            (px(160.), px(170.))
+            (px(104.), px(136.))
         } else {
-            (px(110.), px(130.))
+            (px(92.), px(120.))
         };
         Self {
             compact,
-            distribution_height: px(228.),
+            wide,
+            distribution_height: if height >= px(840.) {
+                px(288.)
+            } else {
+                px(228.)
+            },
             screenshot_height,
             release_height,
         }
@@ -2476,7 +2483,9 @@ impl BootableView {
                     .child(
                         div()
                             .when(!layout.compact, |column| {
-                                column.w(relative(0.34)).flex_shrink_0()
+                                column
+                                    .w(relative(if layout.wide { 0.28 } else { 0.34 }))
+                                    .flex_shrink_0()
                             })
                             .when(layout.compact, |column| column.w_full())
                             .flex()
@@ -2511,7 +2520,44 @@ impl BootableView {
                                         )
                                     })
                                     .children(distributions),
-                            ),
+                            )
+                            .when_some(self.selected_details.as_ref(), |column, details| {
+                                column.when_some(details.screenshot_url.as_ref(), |column, url| {
+                                    column.child(
+                                        div()
+                                            .relative()
+                                            .h(layout.screenshot_height)
+                                            .w_full()
+                                            .overflow_hidden()
+                                            .rounded_lg()
+                                            .border_1()
+                                            .border_color(rgb(0x243244))
+                                            .child(
+                                                div()
+                                                    .size_full()
+                                                    .flex()
+                                                    .items_center()
+                                                    .justify_center()
+                                                    .gap_2()
+                                                    .bg(rgb(0x0d151f))
+                                                    .text_xs()
+                                                    .text_color(rgb(0x6f8299))
+                                                    .child(
+                                                        Icon::empty()
+                                                            .path("ui/image.svg")
+                                                            .size(px(18.)),
+                                                    )
+                                                    .child(format!("{} screenshot", details.name)),
+                                            )
+                                            .child(
+                                                img(url.clone())
+                                                    .absolute()
+                                                    .size_full()
+                                                    .object_fit(ObjectFit::Contain),
+                                            ),
+                                    )
+                                })
+                            }),
                     )
                     .child(
                         div()
@@ -2583,43 +2629,11 @@ impl BootableView {
                                                     ),
                                             ),
                                     )
-                                    .when_some(details.screenshot_url.as_ref(), |panel, url| {
-                                        panel.child(
-                                            div()
-                                                .relative()
-                                                .h(layout.screenshot_height)
-                                                .w_full()
-                                                .overflow_hidden()
-                                                .rounded_lg()
-                                                .border_1()
-                                                .border_color(rgb(0x243244))
-                                                .child(
-                                                    div()
-                                                        .size_full()
-                                                        .flex()
-                                                        .items_center()
-                                                        .justify_center()
-                                                        .gap_2()
-                                                        .bg(rgb(0x0d151f))
-                                                        .text_xs()
-                                                        .text_color(rgb(0x6f8299))
-                                                        .child(
-                                                            Icon::empty()
-                                                                .path("ui/image.svg"),
-                                                        )
-                                                        .child("Screenshot preview"),
-                                                )
-                                                .child(
-                                                    img(url.clone())
-                                                        .absolute()
-                                                        .size_full()
-                                                        .object_fit(ObjectFit::Contain),
-                                                ),
-                                        )
-                                    })
                                     .when_some(details.description.as_ref(), |panel, description| {
                                         panel.child(
                                             div()
+                                                .max_h(px(62.))
+                                                .overflow_hidden()
                                                 .text_xs()
                                                 .text_color(rgb(0xa9b8c9))
                                                 .child(description.clone()),
@@ -2694,6 +2708,11 @@ impl BootableView {
     }
 
     fn catalog_card(&self, cx: &mut Context<Self>, layout: ViewportLayout) -> impl IntoElement {
+        let advanced_label = if self.advanced {
+            "Hide options"
+        } else {
+            "Setup options"
+        };
         let content = if self.quick_access == QuickAccess::Windows {
             self.windows_quick_card(cx).into_any_element()
         } else if self.quick_access == QuickAccess::Omarchy {
@@ -2813,6 +2832,54 @@ impl BootableView {
                                 .min_w(px(220.))
                                 .when(layout.compact, |search| search.w_full())
                                 .child(Input::new(&self.catalog_search).w_full()),
+                        )
+                    })
+                    .when(layout.wide, |toolbar| {
+                        toolbar.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .flex_shrink_0()
+                                .gap_2()
+                                .child(
+                                    Button::new("downloads")
+                                        .compact()
+                                        .icon(Icon::empty().path("ui/download.svg"))
+                                        .label(format!("Downloads · {}", self.download_jobs.len()))
+                                        .when(self.downloads_open, |button| button.primary())
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.toggle_downloads(cx)),
+                                        ),
+                                )
+                                .child(
+                                    Button::new("catalog")
+                                        .compact()
+                                        .icon(Icon::empty().path("ui/discover.svg"))
+                                        .label("Close catalog")
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.toggle_catalog(cx)),
+                                        ),
+                                )
+                                .when(self.image.is_some(), |actions| {
+                                    actions.child(
+                                        Button::new("advanced")
+                                            .compact()
+                                            .icon(Icon::empty().path("ui/settings.svg"))
+                                            .label(advanced_label)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.toggle_advanced(cx)
+                                            })),
+                                    )
+                                })
+                                .child(
+                                    Button::new("refresh")
+                                        .compact()
+                                        .icon(Icon::empty().path("ui/refresh.svg"))
+                                        .tooltip("Refresh removable drives")
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.refresh_devices(cx)),
+                                        ),
+                                ),
                         )
                     }),
             )
@@ -4193,6 +4260,8 @@ impl BootableView {
                             .flex_col()
                             .gap_1()
                             .flex_1()
+                            .min_w(px(0.))
+                            .overflow_hidden()
                             .text_sm()
                             .text_color(rgb(0xa9b8c9))
                             .child(self.status.clone())
@@ -4316,17 +4385,22 @@ impl Render for BootableView {
                     div()
                         .w_full()
                         .h_full()
-                        .max_w(px(1_320.))
+                        .max_w(px(1_720.))
                         .flex()
                         .flex_col()
-                        .child(
-                            div()
-                                .flex_shrink_0()
-                                .px_5()
-                                .pt_4()
-                                .pb_3()
-                                .when(layout.compact, |header| header.px_3().pt_3().pb_2())
-                                .child(self.header_bar(cx, layout.compact)),
+                        .when(
+                            !(self.catalog_open && self.review_plan.is_none() && layout.wide),
+                            |shell| {
+                                shell.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .px_5()
+                                        .pt_4()
+                                        .pb_3()
+                                        .when(layout.compact, |header| header.px_3().pt_3().pb_2())
+                                        .child(self.header_bar(cx, layout.compact)),
+                                )
+                            },
                         )
                         .child(
                             div()
@@ -4536,21 +4610,24 @@ mod tests {
     fn viewport_layout_uses_space_without_breaking_compact_windows() {
         let compact = ViewportLayout::new(px(800.), px(1_400.));
         assert!(compact.compact);
-        assert_eq!(compact.distribution_height, px(228.));
+        assert!(!compact.wide);
+        assert_eq!(compact.distribution_height, px(288.));
 
         let regular = ViewportLayout::new(px(1_200.), px(900.));
         assert!(!regular.compact);
-        assert_eq!(regular.distribution_height, px(228.));
+        assert!(!regular.wide);
+        assert_eq!(regular.distribution_height, px(288.));
 
         let ultrawide_height = ViewportLayout::new(px(2_048.), px(1_120.));
         assert!(!ultrawide_height.compact);
-        assert_eq!(ultrawide_height.distribution_height, px(228.));
-        assert_eq!(ultrawide_height.screenshot_height, px(160.));
-        assert_eq!(ultrawide_height.release_height, px(170.));
+        assert!(ultrawide_height.wide);
+        assert_eq!(ultrawide_height.distribution_height, px(288.));
+        assert_eq!(ultrawide_height.screenshot_height, px(104.));
+        assert_eq!(ultrawide_height.release_height, px(136.));
 
         let tall = ViewportLayout::new(px(1_200.), px(1_500.));
-        assert_eq!(tall.distribution_height, px(228.));
-        assert_eq!(tall.screenshot_height, px(180.));
-        assert_eq!(tall.release_height, px(190.));
+        assert_eq!(tall.distribution_height, px(288.));
+        assert_eq!(tall.screenshot_height, px(112.));
+        assert_eq!(tall.release_height, px(144.));
     }
 }

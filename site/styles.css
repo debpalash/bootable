@@ -94,7 +94,7 @@ nav a:hover,
 .hero {
   min-height: 720px;
   display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(480px, 1.18fr);
+  grid-template-columns: minmax(0, 0.76fr) minmax(520px, 1.24fr);
   align-items: center;
   gap: clamp(42px, 7vw, 96px);
   padding: 92px 0 76px;
@@ -189,37 +189,62 @@ footer a:focus-visible {
   font-size: 0.78rem;
 }
 
-.hero-visual {
+.hero-demos {
+  position: relative;
+  min-height: 560px;
+}
+
+.demo-window {
+  position: absolute;
+  margin: 0;
   overflow: hidden;
   border: 1px solid #2a3c52;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #0b121b;
   box-shadow: 0 38px 90px rgba(0, 0, 0, 0.38);
+}
+
+.demo-window figcaption {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font: 600 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+
+.demo-window figcaption span {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--accent-deep);
+  color: var(--accent);
+  font-size: 0.66rem;
+}
+
+.demo-window img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.demo-gui {
+  inset: 0 5% auto 0;
+  transform: rotate(-0.6deg);
+}
+
+.demo-tui {
+  width: 72%;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
   transform: rotate(0.8deg);
 }
 
-.window-bar {
-  height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.window-bar span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #304258;
-}
-
-.hero-visual img {
-  width: 100%;
-  height: 520px;
-  display: block;
-  object-fit: cover;
-  object-position: top;
+.demo-still {
+  display: none !important;
 }
 
 .alpha-note {
@@ -428,7 +453,12 @@ footer {
     padding-top: 72px;
   }
 
-  .hero-visual {
+  .hero-demos {
+    min-height: 620px;
+  }
+
+  .demo-gui,
+  .demo-tui {
     transform: none;
   }
 
@@ -488,8 +518,16 @@ footer {
     padding: 58px 0 54px;
   }
 
-  .hero-visual img {
-    height: 390px;
+  .hero-demos {
+    min-height: 0;
+    display: grid;
+    gap: 14px;
+  }
+
+  .demo-window {
+    position: relative;
+    inset: auto;
+    width: 100%;
   }
 
   .alpha-note {
@@ -533,5 +571,13 @@ footer {
 
   .button {
     transition: none;
+  }
+
+  .demo-motion {
+    display: none !important;
+  }
+
+  .demo-still {
+    display: block !important;
   }
 }

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="278" height="64" viewBox="0 0 278 64" fill="none">
+  <style>
+    .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flame 1.8s ease-in-out infinite; }
+    .core { transform-box: fill-box; transform-origin: 50% 100%; animation: core 1.25s ease-in-out infinite alternate; }
+    .glow { animation: glow 1.8s ease-in-out infinite; }
+    .ember { animation: ember 1.8s ease-out infinite; }
+    @keyframes flame { 0%,100% { transform: scale(1) rotate(-1deg); } 45% { transform: scale(.94,1.06) rotate(1.5deg); } 72% { transform: scale(1.03,.97) rotate(-.5deg); } }
+    @keyframes core { from { opacity: .72; transform: scale(.88,1); } to { opacity: 1; transform: scale(1.04,1.08); } }
+    @keyframes glow { 0%,100% { opacity: .22; } 50% { opacity: .5; } }
+    @keyframes ember { 0% { opacity: 0; transform: translate(0,5px) scale(.6); } 25% { opacity: 1; } 75%,100% { opacity: 0; transform: translate(3px,-10px) scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .flame,.core,.glow,.ember { animation: none; } }
+  </style>
+  <g>
+    <rect x="3" y="3" width="58" height="58" rx="17" fill="#111923" stroke="#243244" stroke-width="2"/>
+    <circle class="glow" cx="32" cy="39" r="17" fill="#F0BD62" opacity=".22"/>
+    <path d="M25 13h14v12H25z" fill="#0B1119" stroke="#5BD7C0" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M29 13v6M35 13v6" stroke="#E8F0F8" stroke-width="2.5" stroke-linecap="round"/>
+    <rect x="20" y="23" width="24" height="29" rx="7" fill="#153A36" stroke="#5BD7C0" stroke-width="3"/>
+    <g class="flame">
+      <path d="M33.5 47.5c5.2-1.4 8-5.2 7.3-9.7-.6-3.5-2.9-6.3-6.9-9.8.1 4.5-2.3 6.2-4.1 8.1-1.4-1.6-1.8-3.2-1.5-5.1-3.8 3.1-5.7 6.3-5.1 9.7.7 4.2 4.7 7.6 10.3 6.8Z" fill="#F0BD62"/>
+      <path class="core" d="M32.5 46c2.6-.9 4.1-2.8 3.8-5.1-.2-1.8-1.4-3.3-3.4-5.3 0 2.3-1.2 3.2-2.1 4.2-.8-.8-1-1.6-.8-2.6-2 1.7-2.9 3.4-2.5 5.1.4 2.2 2.4 3.9 5 3.7Z" fill="#FFF0B8"/>
+    </g>
+    <circle class="ember" cx="39" cy="29" r="1.4" fill="#FFF0B8"/>
+  </g>
+  <text x="76" y="41" fill="#E8F0F8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="30" font-weight="650" letter-spacing="-0.8">Bootable</text>
+</svg>

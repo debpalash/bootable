@@ -12,7 +12,16 @@
 > [!CAUTION]
 > **Alpha software:** writing erases the selected device. Check the physical target and keep backups.
 
-<p align="center"><img width="100%" alt="Bootable desktop app" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff"></p>
+<table>
+  <tr>
+    <td width="50%"><img alt="Bootable desktop app" src="docs/screenshots/gui-demo.gif"></td>
+    <td width="50%"><img alt="Bootable mouse-friendly TUI" src="docs/screenshots/tui-demo.gif"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>GUI</strong></td>
+    <td align="center"><strong>TUI + mouse</strong></td>
+  </tr>
+</table>
 
 Download
 --------
