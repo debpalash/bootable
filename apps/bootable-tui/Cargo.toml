@@ -1,0 +1,25 @@
+[package]
+name = "bootable-tui"
+description = "Terminal interface for Bootable"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "bootable"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+bootable-core = { path = "../../crates/bootable-core" }
+image.workspace = true
+ratatui.workspace = true
+ratatui-image.workspace = true
+rfd = "0.15"
+serde_json.workspace = true
+
+[lints]
+workspace = true

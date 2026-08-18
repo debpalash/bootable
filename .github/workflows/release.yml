@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: Package ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            archive: tar
+          - os: macos-14
+            target: aarch64-apple-darwin
+            archive: tar
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-x11-dev pkg-config
+      - run: cargo test --workspace
+      - run: cargo build --release --workspace --target ${{ matrix.target }}
+      - name: Package Unix artifacts
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          asset="bootable-${version}-${{ matrix.target }}.tar.gz"
+          stage="$(mktemp -d)"
+          cp "target/${{ matrix.target }}/release/bootable" "$stage/"
+          cp "target/${{ matrix.target }}/release/bootable-desktop" "$stage/"
+          cp assets/bootable-mark.svg "$stage/bootable.svg"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cp "target/${{ matrix.target }}/release/bootable-helper" "$stage/"
+            cp packaging/app.bootable.Bootable.desktop "$stage/"
+            cp packaging/app.bootable.write-media.policy "$stage/"
+          fi
+          cp README.md LICENSE "$stage/"
+          tar -C "$stage" -czf "$asset" .
+          sha256sum "$asset" > "${asset}.sha256" 2>/dev/null || shasum -a 256 "$asset" > "${asset}.sha256"
+      - name: Package Windows artifacts
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $asset = "bootable-$version-${{ matrix.target }}.zip"
+          New-Item -ItemType Directory -Path stage
+          Copy-Item "target/${{ matrix.target }}/release/bootable.exe" stage/
+          Copy-Item "target/${{ matrix.target }}/release/bootable-desktop.exe" stage/
+          Copy-Item README.md,LICENSE stage/
+          Compress-Archive -Path stage/* -DestinationPath $asset
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+          "$hash  $asset" | Set-Content -NoNewline "$asset.sha256"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: bootable-*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            bootable-*.tar.gz
+            bootable-*.zip
+            bootable-*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish prerelease
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            ## Bootable alpha
+
+            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux has the complete authenticated write path. Windows and macOS include conservative removable-device discovery and raw write/verification adapters, but still require an already elevated process and do not yet create extracted Windows FAT32 media.
+          files: dist/*

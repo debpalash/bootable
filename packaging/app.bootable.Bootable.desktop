@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Bootable
+GenericName=Boot media writer
+Comment=Create verified boot media from trusted images
+Exec=@EXEC@
+Icon=bootable
+Terminal=false
+Categories=System;Utility;
+Keywords=USB;ISO;IMG;boot;installer;Rufus;
+StartupWMClass=app.bootable.Bootable

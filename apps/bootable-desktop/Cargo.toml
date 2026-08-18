@@ -1,0 +1,20 @@
+[package]
+name = "bootable-desktop"
+description = "GPUI desktop interface for Bootable"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bootable-core = { path = "../../crates/bootable-core" }
+gpui.workspace = true
+gpui-component.workspace = true
+gpui_http_client.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+rfd = "0.15"
+
+[lints]
+workspace = true

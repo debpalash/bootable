@@ -1,0 +1,57 @@
+[workspace]
+members = [
+    "crates/bootable-core",
+    "apps/bootable-tui",
+    "apps/bootable-desktop",
+    "apps/bootable-helper",
+]
+default-members = [
+    "crates/bootable-core",
+    "apps/bootable-tui",
+    "apps/bootable-helper",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.88"
+
+[workspace.dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
+gpui = "0.2.2"
+gpui-component = "0.5.1"
+gpui_http_client = "0.2.2"
+image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+futures = "0.3"
+libc = "0.2"
+md-5 = "0.10"
+ratatui = "0.30"
+ratatui-image = { version = "11.0.6", default-features = false, features = ["crossterm", "image-defaults"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+roxmltree = "0.20"
+scraper = "0.24"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+sha1 = "0.10"
+tempfile = "3.20"
+thiserror = "2.0"
+url = "2.5"
+xz2 = "0.1"
+flate2 = "1.1"
+fs2 = "0.4.3"
+bzip2 = "0.6"
+zstd = "0.13"
+zip = { version = "4.6", default-features = false, features = ["deflate", "bzip2", "zstd"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unwrap_used = "deny"
