@@ -11,7 +11,7 @@ mod plan;
 mod platform;
 #[cfg(target_os = "linux")]
 mod privilege;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", all(test, unix)))]
 #[cfg_attr(test, allow(dead_code))]
 mod privilege_macos;
 #[cfg(any(target_os = "windows", test))]

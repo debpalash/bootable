@@ -13,7 +13,7 @@ mod windows;
 #[cfg(target_os = "windows")]
 pub(crate) use windows::NativePlatform;
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", all(test, unix)))]
 #[cfg_attr(test, allow(dead_code))]
 mod macos;
 
