@@ -1508,7 +1508,7 @@ impl App {
                 KeyCode::Char('l') => self.toggle_windows_bitlocker(),
                 KeyCode::Char('a') => self.toggle_windows_named_account(),
                 KeyCode::Char('r') => self.toggle_windows_regional(),
-                KeyCode::Char('q') => self.toggle_windows_qol(),
+                KeyCode::Char('y') => self.toggle_windows_qol(),
                 KeyCode::Char('c') => self.toggle_windows_ca_2023(),
                 KeyCode::Char('k') => self.toggle_windows_skusi_policy(),
                 KeyCode::Char('s') => self.toggle_windows_s_mode(),
@@ -2680,6 +2680,9 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                             _ => {}
                         }
                         continue;
+                    }
+                    if key.code == KeyCode::Char('q') {
+                        return Ok(());
                     }
                     if app.downloads_open {
                         app.handle_download_key(key.code);
