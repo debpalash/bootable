@@ -63,6 +63,9 @@ pub enum Error {
     #[error("download manager error: {0}")]
     DownloadManager(String),
 
+    #[error("could not open the default browser: {0}")]
+    BrowserOpen(String),
+
     #[error("operation cancelled safely")]
     OperationCancelled,
 

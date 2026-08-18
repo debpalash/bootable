@@ -1401,6 +1401,21 @@ impl App {
         }
     }
 
+    fn open_selected_distrowatch_page(&mut self) {
+        let Some(page_url) = self
+            .distributions
+            .get(self.catalog_selected)
+            .map(|distribution| distribution.page_url.clone())
+        else {
+            self.status = "Choose a distribution first".into();
+            return;
+        };
+        self.status = match self.engine.open_distrowatch_page(&page_url) {
+            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Err(error) => error.to_string(),
+        };
+    }
+
     fn download_pi_catalog_image(&mut self) {
         let Some(image) = self
             .pi_catalog
@@ -1551,6 +1566,13 @@ impl App {
         }
         if code == KeyCode::Char('r') {
             self.retry_catalog();
+            return;
+        }
+        if code == KeyCode::Char('b')
+            && self.discovery_source == DiscoverySource::DistroWatch
+            && self.catalog_releases.is_empty()
+        {
+            self.open_selected_distrowatch_page();
             return;
         }
         if code == KeyCode::Char('1') {
@@ -2508,6 +2530,11 @@ impl App {
                             self.choose_image();
                         } else {
                             match self.discovery_source {
+                                DiscoverySource::DistroWatch
+                                    if self.catalog_releases.is_empty() =>
+                                {
+                                    self.open_selected_distrowatch_page()
+                                }
                                 DiscoverySource::DistroWatch => self.download_catalog_release(),
                                 DiscoverySource::RaspberryPi => self.download_pi_catalog_image(),
                             }
@@ -3282,7 +3309,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
     if !wide {
         return vec![Line::from(vec![
             Span::styled(
-                " ♨ USB · BOOTABLE α ",
+                " USB♨  BOOTABLE α ",
                 Style::default()
                     .fg(Color::Black)
                     .bg(ACCENT)
@@ -3294,7 +3321,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
     vec![
         Line::from(vec![
             Span::styled(
-                "╭─┬─╮",
+                "┌┬┬┐",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -3306,7 +3333,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
             Span::styled(format!("  ·  {context}"), Style::default().fg(Color::White)),
         ]),
         Line::from(vec![
-            Span::styled("╰─♨─╯", Style::default().fg(ACCENT)),
+            Span::styled("╰♨─╯", Style::default().fg(ACCENT)),
             Span::styled(format!("  {subtitle}"), Style::default().fg(MUTED)),
         ]),
     ]
@@ -3605,6 +3632,11 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .spacing(1)
         .split(rows[2]);
     render_button(frame, actions[0], "↻  Retry", false);
+    let open_page_fallback = app.discovery_source == DiscoverySource::DistroWatch
+        && app.quick_access != QuickAccess::Windows
+        && app.catalog_releases.is_empty()
+        && !app.distributions.is_empty()
+        && !app.details_state.is_loading();
     let can_download = if app.quick_access == QuickAccess::Windows {
         true
     } else {
@@ -3620,10 +3652,12 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             "▣  Choose Windows ISO"
         } else if app.discovery_source == DiscoverySource::RaspberryPi {
             "⇩  Download, verify & use"
+        } else if open_page_fallback {
+            "↗  Open DistroWatch download page  [b]"
         } else {
             "⇩  Download & use ISO"
         },
-        can_download,
+        can_download || open_page_fallback,
     );
     app.hit_regions.catalog_retry = Some(actions[0]);
     app.hit_regions.catalog_close = None;
@@ -4626,7 +4660,7 @@ fn windows_option_columns(width: u16) -> usize {
 
 fn draw_terminal_too_small(frame: &mut ratatui::Frame<'_>, area: Rect) {
     frame.render_widget(
-        Paragraph::new("╭─┬─╮  BOOTABLE\n╰─♨─╯\n\nResize to at least 44 × 22\nq  Quit")
+        Paragraph::new("┌┬┬┐  BOOTABLE α\n╰♨─╯\n\nResize to at least 44 × 22\nq  Quit")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White))
             .block(panel_block(" Terminal too small ")),
@@ -4773,7 +4807,7 @@ mod layout_tests {
     fn terminal_brand_matches_the_download_to_drive_logo() {
         let lines = brand_lockup(true, "Create boot media", "Deliberate writing");
         assert_eq!(lines.len(), 2);
-        assert!(lines[0].to_string().contains("╭─┬─╮  BOOTABLE"));
-        assert!(lines[1].to_string().contains("╰─♨─╯"));
+        assert!(lines[0].to_string().contains("┌┬┬┐  BOOTABLE α"));
+        assert!(lines[1].to_string().contains("╰♨─╯"));
     }
 }

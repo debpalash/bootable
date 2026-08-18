@@ -143,6 +143,11 @@ impl Bootable {
         catalog_cache::load_or_fetch(&key, mode, || catalog::distribution_bundle(slug))
     }
 
+    pub fn open_distrowatch_page(&self, page_url: &str) -> Result<()> {
+        let page = validated_distrowatch_page(page_url)?;
+        webbrowser::open(page.as_str()).map_err(|error| Error::BrowserOpen(error.to_string()))
+    }
+
     pub fn iso_releases(&self, source_url: &str) -> Result<Vec<IsoRelease>> {
         catalog::iso_releases(source_url)
     }
@@ -486,5 +491,45 @@ impl Bootable {
     ) -> Result<()> {
         self.platform
             .backup(device_id_or_path, destination.as_ref(), &mut progress)
+    }
+}
+
+fn validated_distrowatch_page(page_url: &str) -> Result<url::Url> {
+    let page = url::Url::parse(page_url)
+        .map_err(|error| Error::BrowserOpen(format!("invalid page URL: {error}")))?;
+    let allowed = page.scheme() == "https"
+        && matches!(
+            page.host_str(),
+            Some("distrowatch.com" | "www.distrowatch.com")
+        )
+        && page.path() == "/table.php"
+        && page
+            .query_pairs()
+            .any(|(key, value)| key == "distribution" && !value.is_empty());
+    if !allowed {
+        return Err(Error::BrowserOpen(
+            "refused a page outside the DistroWatch distribution catalog".into(),
+        ));
+    }
+    Ok(page)
+}
+
+#[cfg(test)]
+mod browser_page_tests {
+    use super::validated_distrowatch_page;
+
+    #[test]
+    fn distrowatch_page_validation_blocks_untrusted_browser_targets() {
+        assert!(
+            validated_distrowatch_page("https://distrowatch.com/table.php?distribution=manjaro")
+                .is_ok()
+        );
+        assert!(
+            validated_distrowatch_page("http://distrowatch.com/table.php?distribution=x").is_err()
+        );
+        assert!(
+            validated_distrowatch_page("https://example.com/table.php?distribution=x").is_err()
+        );
+        assert!(validated_distrowatch_page("https://distrowatch.com/search.php").is_err());
     }
 }

@@ -28,7 +28,7 @@ use gpui_http_client::{AsyncBody, HttpClient, Url, http};
 
 const DEVICE_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const DOWNLOAD_SCAN_INTERVAL: Duration = Duration::from_secs(5);
-const BRAND_MARK_SVG: &[u8] = include_bytes!("../../../assets/bootable-app-mark.svg");
+const BRAND_MARK_SVG: &[u8] = include_bytes!("../../../assets/bootable-mark.svg");
 const BRAND_LOGO_SVG: &[u8] = include_bytes!("../../../assets/bootable-logo.svg");
 const IMAGE_ICON_SVG: &[u8] = include_bytes!("../../../assets/icons/image.svg");
 const USB_ICON_SVG: &[u8] = include_bytes!("../../../assets/icons/usb.svg");
@@ -1167,6 +1167,23 @@ impl BootableView {
         .detach();
     }
 
+    fn open_selected_distrowatch_page(&mut self, cx: &mut Context<Self>) {
+        let Some(page_url) = self
+            .selected_distribution
+            .and_then(|index| self.distributions.get(index))
+            .map(|distribution| distribution.page_url.clone())
+        else {
+            self.status = "Choose a distribution first".into();
+            cx.notify();
+            return;
+        };
+        self.status = match self.engine.open_distrowatch_page(&page_url) {
+            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Err(error) => error.to_string(),
+        };
+        cx.notify();
+    }
+
     fn retry_discovery(&mut self, cx: &mut Context<Self>) {
         if self.discovery_source == DiscoverySource::RaspberryPi {
             self.show_raspberry_pi_with(CacheMode::Refresh, cx);
@@ -2247,6 +2264,9 @@ impl BootableView {
         cx: &mut Context<Self>,
         layout: ViewportLayout,
     ) -> impl IntoElement {
+        let show_page_fallback = self.selected_distribution.is_some()
+            && self.catalog_releases.is_empty()
+            && !self.distro_loading;
         let query = self.catalog_search_query(cx);
         let distributions = self
             .distributions
@@ -2693,16 +2713,29 @@ impl BootableView {
                                     })
                                     .children(releases),
                             )
-                            .child(
-                                Button::new("download-catalog-iso")
-                                    .primary()
-                                    .disabled(self.selected_release.is_none())
-                                    .icon(Icon::empty().path("ui/download.svg"))
-                                    .label("Download & use ISO")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.download_catalog_release(cx)
-                                    })),
-                            ),
+                            .when(show_page_fallback, |panel| {
+                                panel.child(
+                                    Button::new("open-distrowatch-page")
+                                        .primary()
+                                        .icon(Icon::empty().path("ui/discover.svg"))
+                                        .label("Open DistroWatch download page")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.open_selected_distrowatch_page(cx)
+                                        })),
+                                )
+                            })
+                            .when(!show_page_fallback, |panel| {
+                                panel.child(
+                                    Button::new("download-catalog-iso")
+                                        .primary()
+                                        .disabled(self.selected_release.is_none())
+                                        .icon(Icon::empty().path("ui/download.svg"))
+                                        .label("Download & use ISO")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.download_catalog_release(cx)
+                                        })),
+                                )
+                            }),
                     ),
             )
     }
@@ -4054,17 +4087,9 @@ impl BootableView {
                     .items_center()
                     .gap_3()
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .size(px(36.))
-                            .rounded_xl()
-                            .border_1()
-                            .border_color(rgb(0x2f7f72))
-                            .bg(rgb(0x12342f))
-                            .text_color(rgb(0x5bd7c0))
-                            .child(Icon::empty().path("brand/bootable-mark.svg").size(px(24.))),
+                        img("brand/bootable-mark.svg")
+                            .size(px(38.))
+                            .object_fit(ObjectFit::Contain),
                     )
                     .child(
                         div()
@@ -4072,9 +4097,22 @@ impl BootableView {
                             .flex_col()
                             .child(
                                 div()
-                                    .text_lg()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Bootable"),
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_lg()
+                                            .font_weight(FontWeight::BOLD)
+                                            .child("BOOTABLE"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(0xe5b95f))
+                                            .child("α"),
+                                    ),
                             )
                             .when(!compact, |brand| {
                                 brand.child(
@@ -4359,24 +4397,24 @@ impl Render for BootableView {
                             .items_center()
                             .gap_2()
                             .text_color(rgb(0x5bd7c0))
-                            .child(Icon::empty().path("brand/bootable-mark.svg").size(px(20.)))
+                            .child(
+                                img("brand/bootable-mark.svg")
+                                    .size(px(22.))
+                                    .object_fit(ObjectFit::Contain),
+                            )
                             .child(
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe8f0f8))
-                                    .child("Bootable"),
+                                    .child("BOOTABLE"),
                             )
                             .child(
                                 div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded_md()
-                                    .bg(rgb(0x3a3022))
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child("ALPHA"),
+                                    .child("α"),
                             ),
                     ),
             )
