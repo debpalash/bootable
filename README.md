@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/bootable-logo.svg" width="360" alt="Bootable"></p>
+<p align="center"><a href="https://bootable.palash.dev"><img src="assets/bootable-logo.svg" width="360" alt="Bootable"></a></p>
 
 <p align="center"><strong>Cross-platform boot media writer for ISO, IMG, RAW, and compressed images.</strong></p>
 
