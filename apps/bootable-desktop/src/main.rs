@@ -1025,7 +1025,7 @@ impl BootableView {
             return;
         };
         if job.status != DownloadStatus::Completed {
-            self.status = "Only completed, verified downloads can be selected".into();
+            self.status = "Only completed downloads can be selected".into();
             cx.notify();
             return;
         }
@@ -1035,7 +1035,7 @@ impl BootableView {
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using verified download {}", job.destination.display());
+                self.status = format!("Using completed download {}", job.destination.display());
             }
             Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
         }
@@ -2336,6 +2336,11 @@ impl BootableView {
                     .size
                     .map(format_bytes)
                     .unwrap_or_else(|| "Size unknown".into());
+                let integrity = release
+                    .checksum_algorithm
+                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
+                    .map(|algorithm| format!("Publisher {algorithm}"))
+                    .unwrap_or_else(|| "No publisher checksum".into());
                 div()
                     .id(("release", index))
                     .flex()
@@ -2351,7 +2356,14 @@ impl BootableView {
                     .border_color(rgb(if selected { 0x3ebfa7 } else { 0x1f2c3c }))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected_release = Some(index);
-                        this.status = "ISO selected • download is verified before use".into();
+                        let has_checksum = this.catalog_releases.get(index).is_some_and(|release| {
+                            release.checksum.is_some() || release.checksum_url.is_some()
+                        });
+                        this.status = if has_checksum {
+                            "ISO selected • publisher checksum will be verified before use".into()
+                        } else {
+                            "ISO selected • publisher checksum unavailable; HTTPS length and boot structure will be checked".into()
+                        };
                         cx.notify();
                     }))
                     .child(
@@ -2361,7 +2373,23 @@ impl BootableView {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(release.name.clone()),
                     )
-                    .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(size))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_end()
+                            .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(size))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(if integrity.starts_with("Publisher") {
+                                        0x5bd7c0
+                                    } else {
+                                        0x7890a8
+                                    }))
+                                    .child(integrity),
+                            ),
+                    )
             })
             .collect::<Vec<_>>();
         let distribution_state = if !query.is_empty() {

@@ -238,10 +238,17 @@ pub(crate) fn download_image(
         phase: ProgressPhase::Verifying,
         completed: extracted_size,
         total: Some(extracted_size),
-        message: format!(
-            "Stage 5/6 · Image verified and finalized at {}",
-            destination.display()
-        ),
+        message: if image.download_sha256.is_some() || image.extracted_sha256.is_some() {
+            format!(
+                "Stage 5/6 · Publisher SHA-256 verified · finalized at {}",
+                destination.display()
+            )
+        } else {
+            format!(
+                "Stage 5/6 · Transfer sizes verified · publisher checksum unavailable · finalized at {}",
+                destination.display()
+            )
+        },
     });
     Ok(())
 }

@@ -185,6 +185,7 @@ impl Bootable {
         mut progress: impl FnMut(Progress),
     ) -> Result<ImageReport> {
         catalog::download_iso(release, destination, control, &mut progress)?;
+        let publisher_checksum = release.checksum.is_some() || release.checksum_url.is_some();
         control.checkpoint()?;
         progress(Progress {
             phase: ProgressPhase::Verifying,
@@ -197,7 +198,17 @@ impl Bootable {
             phase: ProgressPhase::Finished,
             completed: report.size,
             total: Some(report.size),
-            message: format!("Ready · verified {}", report.path.display()),
+            message: if publisher_checksum {
+                format!(
+                    "Ready · publisher checksum verified · {}",
+                    report.path.display()
+                )
+            } else {
+                format!(
+                    "Ready · HTTPS transfer and boot structure checked · publisher checksum unavailable · {}",
+                    report.path.display()
+                )
+            },
         });
         Ok(report)
     }
@@ -254,6 +265,8 @@ impl Bootable {
         mut progress: impl FnMut(Progress),
     ) -> Result<ImageReport> {
         pi_catalog::download_image(image, destination, control, &mut progress)?;
+        let publisher_checksum =
+            image.download_sha256.is_some() || image.extracted_sha256.is_some();
         control.checkpoint()?;
         progress(Progress {
             phase: ProgressPhase::Verifying,
@@ -266,7 +279,17 @@ impl Bootable {
             phase: ProgressPhase::Finished,
             completed: report.size,
             total: Some(report.size),
-            message: format!("Ready · verified {}", report.path.display()),
+            message: if publisher_checksum {
+                format!(
+                    "Ready · publisher checksum verified · {}",
+                    report.path.display()
+                )
+            } else {
+                format!(
+                    "Ready · transfer sizes and boot structure checked · publisher checksum unavailable · {}",
+                    report.path.display()
+                )
+            },
         });
         Ok(report)
     }

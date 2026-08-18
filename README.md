@@ -83,6 +83,9 @@ iTerm2 graphics when available and falls back to colored Unicode half-blocks eve
 - Persistent FIFO download queue and history shared by both interfaces, with pause, cancellation,
   retry, validated HTTP Range resume, progress, speed, ETA, atomic finalization, and free-space
   preflight.
+- Publisher checksum discovery for direct sidecars and GNU/BSD checksum manifests; MD5, SHA-1,
+  SHA-256, and SHA-512 are persisted with queued jobs and verified before atomic finalization. Both
+  interfaces explicitly distinguish publisher-verified media from HTTPS-only transfers.
 - MD5, SHA-1, SHA-256, and SHA-512 calculation; destructive bad-block tests; atomic raw backups.
 
 The detailed implementation inventory lives in [Rufus parity](docs/rufus-parity.md), and unfinished

@@ -24,6 +24,7 @@ const MAX_CATALOG_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CRAWL_DEPTH: usize = 3;
 const MAX_CRAWL_PAGES: usize = 16;
+const MAX_CHECKSUM_DIRECTORY_PAGES: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DistributionSummary {
@@ -180,19 +181,11 @@ pub(crate) fn distribution_bundle(slug: &str) -> Result<DistributionBundle> {
     let mut warnings = Vec::new();
     for source in &details.download_pages {
         match iso_releases(source) {
-            Ok(found) => {
-                for release in found {
-                    if !releases
-                        .iter()
-                        .any(|existing: &IsoRelease| existing.url == release.url)
-                    {
-                        releases.push(release);
-                    }
-                }
-            }
+            Ok(found) => releases.extend(found),
             Err(error) => warnings.push(error.to_string()),
         }
     }
+    deduplicate_releases(&mut releases);
     Ok(DistributionBundle {
         details,
         releases,
@@ -203,7 +196,7 @@ pub(crate) fn distribution_bundle(slug: &str) -> Result<DistributionBundle> {
 pub(crate) fn iso_releases(source_url: &str) -> Result<Vec<IsoRelease>> {
     let source = secure_url(source_url)?;
     if is_direct_iso(&source) {
-        return Ok(vec![IsoRelease {
+        let mut releases = vec![IsoRelease {
             name: iso_name(&source).unwrap_or_else(|| "download.iso".into()),
             url: source.to_string(),
             size: None,
@@ -211,7 +204,14 @@ pub(crate) fn iso_releases(source_url: &str) -> Result<Vec<IsoRelease>> {
             checksum_algorithm: None,
             checksum: None,
             checksum_url: None,
-        }]);
+        }];
+        if let Some(directory) = iso_directory_url(&source)
+            && let Ok(html) = fetch_text(directory.as_str())
+            && let Ok((_, _, checksum_sources)) = parse_download_page(&html, &directory)
+        {
+            associate_checksum_sources(&mut releases, &checksum_sources);
+        }
+        return Ok(releases);
     }
     if let Some(rss_url) = sourceforge_rss_url(&source) {
         return parse_sourceforge_rss(&fetch_text(rss_url.as_str())?);
@@ -227,6 +227,7 @@ pub(crate) fn download_iso(
 ) -> Result<()> {
     control.checkpoint()?;
     let source = secure_url(&release.url)?;
+    let publisher_checksum = resolve_publisher_checksum(release)?;
     if !release.name.to_ascii_lowercase().ends_with(".iso") {
         return Err(Error::InvalidDownload(
             "the selected catalog entry is not an ISO image".into(),
@@ -285,14 +286,14 @@ pub(crate) fn download_iso(
         message: "Stage 3/5 · Transfer complete · partial file synced".into(),
     });
 
-    if let (Some(algorithm), Some(expected)) = (release.checksum_algorithm, &release.checksum) {
+    if let Some((algorithm, expected)) = publisher_checksum.as_ref() {
         progress(Progress {
             phase: ProgressPhase::Verifying,
             completed: 0,
             total,
             message: format!("Stage 4/5 · Verifying {algorithm} checksum"),
         });
-        let actual = match checksum::compute_controlled(staged.path(), algorithm, control) {
+        let actual = match checksum::compute_controlled(staged.path(), *algorithm, control) {
             Ok(actual) => actual,
             Err(error) => {
                 if matches!(error, Error::OperationCancelled) {
@@ -318,12 +319,68 @@ pub(crate) fn download_iso(
         phase: ProgressPhase::Verifying,
         completed,
         total,
-        message: format!(
-            "Stage 4/5 · Download verified and finalized at {}",
-            destination.display()
-        ),
+        message: match publisher_checksum {
+            Some((algorithm, _)) => format!(
+                "Stage 4/5 · Publisher {algorithm} verified · finalized at {}",
+                destination.display()
+            ),
+            None => format!(
+                "Stage 4/5 · HTTPS transfer length verified · publisher checksum unavailable · finalized at {}",
+                destination.display()
+            ),
+        },
     });
     Ok(())
+}
+
+fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<(ChecksumAlgorithm, String)>> {
+    let embedded = match (release.checksum_algorithm, release.checksum.as_deref()) {
+        (Some(algorithm), Some(value)) => Some((algorithm, validated_checksum(algorithm, value)?)),
+        (Some(_), None) if release.checksum_url.is_some() => None,
+        (None, None) => None,
+        _ => {
+            return Err(Error::InvalidDownload(format!(
+                "incomplete checksum metadata for {}",
+                release.name
+            )));
+        }
+    };
+    let Some(checksum_url) = release.checksum_url.as_deref() else {
+        return Ok(embedded);
+    };
+    let checksum_url = secure_url(checksum_url)?;
+    let document = match fetch_text(checksum_url.as_str()) {
+        Ok(document) => document,
+        Err(_error) if embedded.is_some() => return Ok(embedded),
+        Err(error) => return Err(error),
+    };
+    let sidecar = parse_publisher_checksum(
+        &document,
+        &release.name,
+        checksum_algorithm_from_url(&checksum_url),
+    )
+    .ok_or_else(|| {
+        Error::InvalidDownload(format!(
+            "publisher checksum file does not contain a supported digest for {}",
+            release.name
+        ))
+    })?;
+    Ok(match embedded {
+        Some(current) if checksum_strength(current.0) > checksum_strength(sidecar.0) => {
+            Some(current)
+        }
+        _ => Some(sidecar),
+    })
+}
+
+fn validated_checksum(algorithm: ChecksumAlgorithm, value: &str) -> Result<String> {
+    let value = value.trim();
+    if checksum_algorithm_from_hex(value) != Some(algorithm) {
+        return Err(Error::InvalidDownload(format!(
+            "publisher {algorithm} checksum has an invalid format"
+        )));
+    }
+    Ok(value.to_ascii_lowercase())
 }
 
 fn parse_popularity(html: &str, limit: usize) -> Result<Vec<DistributionSummary>> {
@@ -644,7 +701,7 @@ fn parse_sourceforge_rss(xml: &str) -> Result<Vec<IsoRelease>> {
 
 #[cfg(test)]
 fn parse_iso_links(html: &str, base: &Url) -> Result<Vec<IsoRelease>> {
-    let (releases, _) = parse_download_page(html, base)?;
+    let (releases, _, _) = parse_download_page(html, base)?;
     if releases.is_empty() {
         return Err(Error::InvalidCatalog(
             "the ISO source returned no direct ISO links".into(),
@@ -657,6 +714,8 @@ fn crawl_iso_releases(source: Url) -> Result<Vec<IsoRelease>> {
     let mut queue = VecDeque::from([(source, 0_usize)]);
     let mut visited = HashSet::new();
     let mut releases = Vec::new();
+    let mut checksum_sources = Vec::new();
+    let mut checksum_directories = HashSet::new();
     let mut last_error = None;
     while let Some((page, depth)) = queue.pop_front() {
         if visited.len() >= MAX_CRAWL_PAGES || !visited.insert(page.to_string()) {
@@ -669,8 +728,24 @@ fn crawl_iso_releases(source: Url) -> Result<Vec<IsoRelease>> {
                 continue;
             }
         };
-        let (found, links) = parse_download_page(&html, &page)?;
+        let (found, links, checksums) = parse_download_page(&html, &page)?;
+        for directory in found
+            .iter()
+            .filter_map(|release| Url::parse(&release.url).ok())
+            .filter_map(|url| iso_directory_url(&url))
+        {
+            if checksum_directories.len() >= MAX_CHECKSUM_DIRECTORY_PAGES {
+                break;
+            }
+            if checksum_directories.insert(directory.to_string())
+                && let Ok(directory_html) = fetch_text(directory.as_str())
+                && let Ok((_, _, adjacent)) = parse_download_page(&directory_html, &directory)
+            {
+                checksum_sources.extend(adjacent);
+            }
+        }
         releases.extend(found);
+        checksum_sources.extend(checksums);
         if depth < MAX_CRAWL_DEPTH {
             for link in links {
                 if visited.len() + queue.len() >= MAX_CRAWL_PAGES {
@@ -683,6 +758,8 @@ fn crawl_iso_releases(source: Url) -> Result<Vec<IsoRelease>> {
         }
     }
     deduplicate_releases(&mut releases);
+    deduplicate_urls(&mut checksum_sources);
+    associate_checksum_sources(&mut releases, &checksum_sources);
     if releases.is_empty() {
         if let Some(error) = last_error {
             return Err(error);
@@ -694,12 +771,13 @@ fn crawl_iso_releases(source: Url) -> Result<Vec<IsoRelease>> {
     Ok(releases)
 }
 
-fn parse_download_page(html: &str, base: &Url) -> Result<(Vec<IsoRelease>, Vec<Url>)> {
+fn parse_download_page(html: &str, base: &Url) -> Result<(Vec<IsoRelease>, Vec<Url>, Vec<Url>)> {
     let document = Html::parse_document(html);
     let links = selector("a[href]")?;
     let elements = selector("*")?;
     let mut releases = Vec::new();
     let mut crawl_links = Vec::new();
+    let mut checksum_links = Vec::new();
     for link in document.select(&links) {
         let Some(href) = link.value().attr("href") else {
             continue;
@@ -712,6 +790,8 @@ fn parse_download_page(html: &str, base: &Url) -> Result<(Vec<IsoRelease>, Vec<U
         }
         if is_direct_iso(&url) {
             push_iso_release(&mut releases, url);
+        } else if is_checksum_url(&url) {
+            checksum_links.push(url);
         } else if same_origin(base, &url) && is_crawl_candidate(&url, &normalized_text(link)) {
             crawl_links.push(url);
         }
@@ -728,7 +808,186 @@ fn parse_download_page(html: &str, base: &Url) -> Result<(Vec<IsoRelease>, Vec<U
     deduplicate_releases(&mut releases);
     let mut seen = HashSet::new();
     crawl_links.retain(|url| seen.insert(url.to_string()));
-    Ok((releases, crawl_links))
+    deduplicate_urls(&mut checksum_links);
+    associate_checksum_sources(&mut releases, &checksum_links);
+    Ok((releases, crawl_links, checksum_links))
+}
+
+fn associate_checksum_sources(releases: &mut [IsoRelease], sources: &[Url]) {
+    for release in releases {
+        let release_name = release.name.to_ascii_lowercase();
+        let source = sources
+            .iter()
+            .filter_map(|source| {
+                let file_name = source.path_segments()?.next_back()?.to_ascii_lowercase();
+                let direct =
+                    checksum_target_name(&file_name).is_some_and(|target| target == release_name);
+                let generic = is_generic_checksum_name(&file_name);
+                (direct || generic).then_some((source, direct))
+            })
+            .max_by_key(|(source, direct)| {
+                (
+                    *direct,
+                    checksum_algorithm_from_url(source)
+                        .map(checksum_strength)
+                        .unwrap_or_default(),
+                )
+            });
+        if let Some((source, _)) = source {
+            release.checksum_url = Some(source.to_string());
+            if release.checksum.is_none() {
+                release.checksum_algorithm = checksum_algorithm_from_url(source);
+            }
+        }
+    }
+}
+
+fn is_checksum_url(url: &Url) -> bool {
+    let Some(name) = url.path_segments().and_then(Iterator::last) else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    checksum_target_name(&name).is_some() || is_generic_checksum_name(&name)
+}
+
+fn checksum_target_name(name: &str) -> Option<String> {
+    for suffix in [
+        ".sha512",
+        ".sha512sum",
+        ".sha512.txt",
+        ".sha256",
+        ".sha256sum",
+        ".sha256.txt",
+        ".sha1",
+        ".sha1sum",
+        ".sha1.txt",
+        ".md5",
+        ".md5sum",
+        ".md5.txt",
+    ] {
+        if let Some(target) = name.strip_suffix(suffix) {
+            return Some(target.to_owned());
+        }
+    }
+    None
+}
+
+fn is_generic_checksum_name(name: &str) -> bool {
+    matches!(
+        name,
+        "checksum"
+            | "checksums"
+            | "checksum.txt"
+            | "checksums.txt"
+            | "md5sums"
+            | "md5sums.txt"
+            | "sha1sums"
+            | "sha1sums.txt"
+            | "sha256sums"
+            | "sha256sums.txt"
+            | "sha512sums"
+            | "sha512sums.txt"
+    )
+}
+
+fn checksum_algorithm_from_url(url: &Url) -> Option<ChecksumAlgorithm> {
+    let name = url.path_segments()?.next_back()?.to_ascii_lowercase();
+    if name.contains("sha512") {
+        Some(ChecksumAlgorithm::Sha512)
+    } else if name.contains("sha256") {
+        Some(ChecksumAlgorithm::Sha256)
+    } else if name.contains("sha1") {
+        Some(ChecksumAlgorithm::Sha1)
+    } else if name.contains("md5") {
+        Some(ChecksumAlgorithm::Md5)
+    } else {
+        None
+    }
+}
+
+fn parse_publisher_checksum(
+    document: &str,
+    release_name: &str,
+    algorithm_hint: Option<ChecksumAlgorithm>,
+) -> Option<(ChecksumAlgorithm, String)> {
+    let release_name = release_name.trim_start_matches("./");
+    let mut candidates = Vec::new();
+    for line in document
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Some((left, value)) = line.split_once(" = ")
+            && let Some((_, file_name)) = left.split_once('(')
+            && file_name.trim_end_matches(')').trim_start_matches("./") == release_name
+        {
+            push_checksum_candidate(&mut candidates, value, algorithm_hint);
+            continue;
+        }
+        let mut fields = line.split_whitespace();
+        let Some(value) = fields.next() else { continue };
+        match fields.next() {
+            Some(file_name)
+                if file_name.trim_start_matches('*').trim_start_matches("./") == release_name =>
+            {
+                push_checksum_candidate(&mut candidates, value, algorithm_hint);
+            }
+            None if algorithm_hint.is_some()
+                && document
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .count()
+                    == 1 =>
+            {
+                push_checksum_candidate(&mut candidates, value, algorithm_hint);
+            }
+            _ => {}
+        }
+    }
+    candidates
+        .into_iter()
+        .max_by_key(|(algorithm, _)| checksum_strength(*algorithm))
+}
+
+fn push_checksum_candidate(
+    candidates: &mut Vec<(ChecksumAlgorithm, String)>,
+    value: &str,
+    algorithm_hint: Option<ChecksumAlgorithm>,
+) {
+    let value = value.trim();
+    let Some(algorithm) = checksum_algorithm_from_hex(value) else {
+        return;
+    };
+    if algorithm_hint.is_none_or(|hint| hint == algorithm) {
+        candidates.push((algorithm, value.to_ascii_lowercase()));
+    }
+}
+
+fn checksum_algorithm_from_hex(value: &str) -> Option<ChecksumAlgorithm> {
+    if !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    match value.len() {
+        32 => Some(ChecksumAlgorithm::Md5),
+        40 => Some(ChecksumAlgorithm::Sha1),
+        64 => Some(ChecksumAlgorithm::Sha256),
+        128 => Some(ChecksumAlgorithm::Sha512),
+        _ => None,
+    }
+}
+
+fn checksum_strength(algorithm: ChecksumAlgorithm) -> u8 {
+    match algorithm {
+        ChecksumAlgorithm::Md5 => 1,
+        ChecksumAlgorithm::Sha1 => 2,
+        ChecksumAlgorithm::Sha256 => 3,
+        ChecksumAlgorithm::Sha512 => 4,
+    }
+}
+
+fn deduplicate_urls(values: &mut Vec<Url>) {
+    let mut seen = HashSet::new();
+    values.retain(|value| seen.insert(value.to_string()));
 }
 
 fn push_iso_release(releases: &mut Vec<IsoRelease>, url: Url) {
@@ -786,8 +1045,46 @@ fn is_crawl_candidate(url: &Url, label: &str) -> bool {
 }
 
 fn deduplicate_releases(releases: &mut Vec<IsoRelease>) {
-    let mut seen = HashSet::new();
-    releases.retain(|release| seen.insert(release.name.to_ascii_lowercase()));
+    let mut merged: Vec<IsoRelease> = Vec::with_capacity(releases.len());
+    let mut positions = HashMap::new();
+    for release in releases.drain(..) {
+        let key = release.name.to_ascii_lowercase();
+        if let Some(position) = positions.get(&key).copied() {
+            merge_release_metadata(&mut merged[position], release);
+        } else {
+            positions.insert(key, merged.len());
+            merged.push(release);
+        }
+    }
+    *releases = merged;
+}
+
+fn merge_release_metadata(existing: &mut IsoRelease, candidate: IsoRelease) {
+    if existing.size.is_none() {
+        existing.size = candidate.size;
+    }
+    if existing.published.is_none() {
+        existing.published = candidate.published;
+    }
+    let existing_strength = existing
+        .checksum_algorithm
+        .filter(|_| existing.checksum.is_some() || existing.checksum_url.is_some())
+        .map(checksum_strength)
+        .unwrap_or_default();
+    let candidate_strength = candidate
+        .checksum_algorithm
+        .filter(|_| candidate.checksum.is_some() || candidate.checksum_url.is_some())
+        .map(checksum_strength)
+        .unwrap_or_default();
+    if candidate_strength > existing_strength
+        || (candidate_strength == existing_strength
+            && existing.checksum_url.is_none()
+            && candidate.checksum_url.is_some())
+    {
+        existing.checksum_algorithm = candidate.checksum_algorithm;
+        existing.checksum = candidate.checksum;
+        existing.checksum_url = candidate.checksum_url;
+    }
 }
 
 fn metadata_client() -> Result<Client> {
@@ -1014,6 +1311,26 @@ fn is_direct_iso(url: &Url) -> bool {
     path.ends_with(".iso") || path.ends_with(".iso/download")
 }
 
+fn iso_directory_url(url: &Url) -> Option<Url> {
+    is_direct_iso(url).then_some(())?;
+    let mut directory = url.clone();
+    let sourceforge_download = directory
+        .path()
+        .to_ascii_lowercase()
+        .ends_with(".iso/download");
+    {
+        let mut segments = directory.path_segments_mut().ok()?;
+        if sourceforge_download {
+            segments.pop();
+        }
+        segments.pop();
+        segments.push("");
+    }
+    directory.set_query(None);
+    directory.set_fragment(None);
+    Some(directory)
+}
+
 fn iso_name(url: &Url) -> Option<String> {
     let segments = url.path_segments()?.collect::<Vec<_>>();
     let candidate = if segments.last().copied() == Some("download") {
@@ -1196,6 +1513,61 @@ mod tests {
     }
 
     #[test]
+    fn iso_parent_directory_is_bounded_to_the_exact_https_path() {
+        let direct = Url::parse(
+            "https://cdimage.example.org/current/amd64/iso-cd/debian.iso?mirror=1#download",
+        )
+        .expect("URL");
+        assert_eq!(
+            iso_directory_url(&direct).expect("directory").as_str(),
+            "https://cdimage.example.org/current/amd64/iso-cd/"
+        );
+        let sourceforge =
+            Url::parse("https://example.org/releases/image.iso/download").expect("URL");
+        assert_eq!(
+            iso_directory_url(&sourceforge).expect("directory").as_str(),
+            "https://example.org/releases/"
+        );
+        assert!(
+            iso_directory_url(&Url::parse("https://example.org/releases/").expect("URL")).is_none()
+        );
+    }
+
+    #[test]
+    #[ignore = "live HTTPS validation for docs/validation.md"]
+    fn live_direct_debian_iso_discovers_publisher_manifest() {
+        let releases = iso_releases(
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
+        )
+        .expect("direct Debian release");
+        assert_eq!(releases.len(), 1);
+        assert_eq!(
+            releases[0].checksum_algorithm,
+            Some(ChecksumAlgorithm::Sha512)
+        );
+        assert!(
+            releases[0]
+                .checksum_url
+                .as_deref()
+                .is_some_and(|url| url.ends_with("/SHA512SUMS"))
+        );
+    }
+
+    #[test]
+    #[ignore = "live HTTPS validation for docs/validation.md"]
+    fn live_distrowatch_debian_bundle_preserves_publisher_manifest() {
+        let bundle = distribution_bundle("debian").expect("Debian bundle");
+        assert!(
+            bundle
+                .releases
+                .iter()
+                .all(|release| release.checksum_url.is_some()),
+            "bundle releases: {:?}",
+            bundle.releases
+        );
+    }
+
+    #[test]
     fn rejects_insecure_or_relative_download_urls() {
         for value in ["http://example.com/image.iso", "/image.iso", "image.iso"] {
             assert!(secure_url(value).is_err(), "accepted {value}");
@@ -1216,6 +1588,7 @@ mod tests {
         let html = r#"
           <a href="image.iso">current</a>
           <a href="https://cdn.example.com/other.iso">mirror</a>
+          <a href="SHA256SUMS">checksums</a>
           <a href="http://cdn.example.com/insecure.iso">insecure</a>
           <a href="notes.txt">notes</a>
         "#;
@@ -1230,6 +1603,57 @@ mod tests {
                 .iter()
                 .all(|release| release.url.starts_with("https://"))
         );
+        assert!(releases.iter().all(|release| {
+            release.checksum_url.as_deref()
+                == Some("https://downloads.example.com/releases/SHA256SUMS")
+        }));
+    }
+
+    #[test]
+    fn parses_gnu_bsd_and_direct_publisher_checksums() {
+        let sha256 = "a".repeat(64);
+        let sha512 = "b".repeat(128);
+        let document =
+            format!("{sha256} *other.iso\nSHA512 (image.iso) = {sha512}\n{sha256}  image.iso\n");
+        assert_eq!(
+            parse_publisher_checksum(&document, "image.iso", None),
+            Some((ChecksumAlgorithm::Sha512, sha512))
+        );
+        assert_eq!(
+            parse_publisher_checksum(
+                &format!("{sha256}\n"),
+                "image.iso",
+                Some(ChecksumAlgorithm::Sha256)
+            ),
+            Some((ChecksumAlgorithm::Sha256, sha256))
+        );
+        assert!(parse_publisher_checksum("not-a-digest image.iso", "image.iso", None).is_none());
+    }
+
+    #[test]
+    fn direct_sidecars_are_bound_to_only_their_iso() {
+        let base = Url::parse("https://downloads.example.com/releases/").expect("base URL");
+        let (releases, _, _) = parse_download_page(
+            r#"
+              <a href="one.iso">one</a><a href="two.iso">two</a>
+              <a href="one.iso.sha256">one checksum</a>
+            "#,
+            &base,
+        )
+        .expect("download page");
+        let one = releases
+            .iter()
+            .find(|release| release.name == "one.iso")
+            .expect("one");
+        let two = releases
+            .iter()
+            .find(|release| release.name == "two.iso")
+            .expect("two");
+        assert_eq!(
+            one.checksum_url.as_deref(),
+            Some("https://downloads.example.com/releases/one.iso.sha256")
+        );
+        assert!(two.checksum_url.is_none());
     }
 
     #[test]

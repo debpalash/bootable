@@ -29,6 +29,7 @@
 ## Later
 
 - [x] Streaming compressed raw/hybrid images (`.xz`, `.gz`, `.zst`, `.bz2`)
-- Download with checksum/signature verification
+- [x] Download with publisher checksum sidecar/manifest verification and truthful fallback states
+- OpenPGP/minisign signature verification where publishers provide signatures
 - Persistent multi-boot media as a separate, explicit strategy
 - BIOS compatibility helpers when an image cannot boot via UEFI

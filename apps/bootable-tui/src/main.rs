@@ -263,6 +263,16 @@ fn print_releases(engine: &Bootable, slug: &str, json: bool) -> Result<()> {
             (release.checksum_algorithm, release.checksum.as_deref())
         {
             println!("    {algorithm}: {checksum}");
+        } else if let Some(checksum_url) = release.checksum_url.as_deref() {
+            println!(
+                "    {} manifest: {checksum_url}",
+                release
+                    .checksum_algorithm
+                    .map(|algorithm| algorithm.to_string())
+                    .unwrap_or_else(|| "Checksum".into())
+            );
+        } else {
+            println!("    Publisher checksum unavailable");
         }
     }
     Ok(())
@@ -1324,7 +1334,7 @@ impl App {
             return;
         };
         if job.status != DownloadStatus::Completed {
-            self.status = "Only completed, verified downloads can be selected".into();
+            self.status = "Only completed downloads can be selected".into();
             return;
         }
         match self.engine.inspect_image(&job.destination) {
@@ -1333,7 +1343,7 @@ impl App {
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using verified download {}", job.destination.display());
+                self.status = format!("Using completed download {}", job.destination.display());
             }
             Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
         }
@@ -3872,10 +3882,16 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         app.catalog_releases
             .iter()
             .map(|release| {
+                let integrity = release
+                    .checksum_algorithm
+                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
+                    .map(|algorithm| format!("✓ {algorithm}"))
+                    .unwrap_or_else(|| "HTTPS only".into());
                 ListItem::new(format!(
-                    "{}  {}",
+                    "{}  {}  {}",
                     release.name,
-                    release.size.map(format_bytes).unwrap_or_default()
+                    release.size.map(format_bytes).unwrap_or_default(),
+                    integrity
                 ))
             })
             .collect::<Vec<_>>()

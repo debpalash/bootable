@@ -122,6 +122,15 @@ impl DownloadPayload {
             Self::RaspberryPi(image) => image.download_size,
         }
     }
+
+    fn has_publisher_checksum(&self) -> bool {
+        match self {
+            Self::Iso(release) => release.checksum.is_some() || release.checksum_url.is_some(),
+            Self::RaspberryPi(image) => {
+                image.download_sha256.is_some() || image.extracted_sha256.is_some()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,7 +271,12 @@ impl DownloadLedger {
                 Ok(()) => {
                     job.record.status = DownloadStatus::Completed;
                     job.record.completed = job.record.total.unwrap_or(job.record.completed);
-                    job.record.message = "Download verified and ready".into();
+                    job.record.message = if job.payload.has_publisher_checksum() {
+                        "Publisher checksum verified · ready".into()
+                    } else {
+                        "HTTPS transfer and boot structure checked · publisher checksum unavailable"
+                            .into()
+                    };
                     job.record.error = None;
                 }
                 Err(Error::OperationCancelled) => {

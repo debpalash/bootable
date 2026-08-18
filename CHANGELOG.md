@@ -14,6 +14,8 @@ Initial public alpha.
 - Popularity-ranked Arch and Debian quick views and terminal catalog artwork.
 - Persistent FIFO download history shared by GUI/TUI, validated HTTP Range resume, retry,
   pause/cancellation, owned-partial cleanup, free-space preflight, and detailed transfer stages.
+- Publisher checksum sidecar/manifest association, strongest-supported digest selection, persisted
+  verification across resume/restart, mismatch refusal, and truthful HTTPS-only states in both UIs.
 - Safe mid-write cancellation shared by GUI/TUI, including privileged-helper forwarding, chunk-level
   cancellation checks, controlled child-process termination, raw-write flushing, and explicit
   incomplete-media guidance.

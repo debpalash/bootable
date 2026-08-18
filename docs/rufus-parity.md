@@ -34,6 +34,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | DOS/FreeDOS media | not implemented | not implemented | not implemented | Planned |
 | Drive-to-image backup (DD/VHD/VHDX/FFU) | atomic raw IMG/RAW/DD backup | CLI + save dialog | background backup + save dialog | Partial: VHD/VHDX/FFU remain |
 | Official ISO/UEFI Shell downloads | not implemented | not implemented | not implemented | Planned |
+| Publisher download integrity | checksum sidecars/manifests, strongest digest, atomic mismatch refusal | integrity label + persistent result | integrity label + persistent result | Implemented for MD5/SHA-1/SHA-256/SHA-512; signatures planned |
 | Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Partial: already-elevated execution works; native privilege prompts and Windows FAT32 execution remain |
 | Localization | not implemented | not implemented | not implemented | Planned |
 
