@@ -2,260 +2,148 @@ Bootable: Cross-platform boot media writer
 ===========================================
 
 [![CI](https://img.shields.io/github/actions/workflow/status/debpalash/bootable/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/debpalash/bootable/actions/workflows/ci.yml)
-[![Alpha release](https://img.shields.io/github/v/release/debpalash/bootable?include_prereleases&style=flat-square&label=Alpha)](https://github.com/debpalash/bootable/releases)
+[![Alpha](https://img.shields.io/github/v/release/debpalash/bootable?include_prereleases&style=flat-square&label=Alpha)](https://github.com/debpalash/bootable/releases)
 [![Downloads](https://img.shields.io/github/downloads/debpalash/bootable/total.svg?style=flat-square&label=Downloads)](https://github.com/debpalash/bootable/releases)
-[![Contributors](https://img.shields.io/github/contributors/debpalash/bootable.svg?style=flat-square&label=Contributors)](https://github.com/debpalash/bootable/graphs/contributors)
-[![License](https://img.shields.io/badge/license-Apache--2.0-5bd7c0.svg?style=flat-square&label=License)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-5bd7c0.svg?style=flat-square)](LICENSE)
 
-<p align="center">
-  <img src="assets/bootable-logo.svg" width="360" alt="Bootable">
-</p>
+<p align="center"><img src="assets/bootable-logo.svg" width="360" alt="Bootable"></p>
 
-Bootable writes ISO, IMG, RAW, and compressed disk images to removable USB and SD media.
+Write ISO, IMG, RAW, and compressed disk images to removable USB and SD media.
 
 > [!CAUTION]
-> **Bootable 0.1.0-alpha.2 is prerelease software. Writing an image erases the selected device.**
-> Verify the physical target and keep backups. Do not use irreplaceable media.
+> **0.1.0-alpha.2 is prerelease software. Writing erases the selected device.**
+> Check the physical target and keep backups.
 
-Screenshots
------------
-
-<img width="1749" height="1948" alt="image" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff" />
-
-Features
---------
-
-* Write hybrid Linux and Unix ISOs, IMG files, and RAW disk images
-* Stream XZ, gzip, Zstandard, and bzip2 images without a decompressed staging file
-* Create GPT or MBR Windows installer media with FAT32 and split WIM payloads
-* Apply Windows 11 TPM/Secure Boot bypass, local-account, regional, privacy, BitLocker, QoL,
-  CA 2023, SkuSiPolicy, and S Mode options
-* Discover Linux distributions through DistroWatch
-* Filter popularity-ranked Arch, Debian, Omarchy, Windows, and Raspberry Pi images
-* Browse the official Raspberry Pi Imager catalog
-* Search, download, pause, resume, cancel, retry, and verify image downloads
-* Verify publisher MD5, SHA-1, SHA-256, and SHA-512 checksums when available
-* Read back and SHA-256 verify written image bytes
-* Detect removable media automatically and exclude fixed and system disks
-* Revalidate the target immediately before erasure
-* Run destructive bad-block and fake-capacity checks
-* Back up removable drives to RAW images
-* Review every operation and consequence before writing
-* Cancel active writes and mark interrupted media incomplete
-* Use the same workflow in the GPUI desktop app and mouse-enabled Ratatui app
-* Keep discovery, downloads, inspection, and planning unprivileged
-* Elevate only a fixed, protected write helper
-
-Comparison
+Screenshot
 ----------
 
-| | Bootable 0.1 alpha | Rufus | Etcher |
-| --- | --- | --- | --- |
-| Platforms | Linux, Windows, macOS | Windows | Linux, Windows, macOS |
-| Interface | Native GPUI desktop, mouse TUI, CLI | Native Windows GUI | Electron desktop |
-| Linux/Unix images | Raw and compressed writes | ISO and disk-image writes | Image writes |
-| Windows installers | GPT/MBR FAT32, split WIM, Windows 11/OOBE options | Broadest support, including UEFI:NTFS and Windows To Go | Raw-image workflow; no Windows installer conversion |
-| Image discovery | DistroWatch, Omarchy, Raspberry Pi | Microsoft Windows and UEFI Shell downloads | File, URL, and drive-cloning workflow; no built-in catalog |
-| Formatting and persistence | Not implemented | FAT/FAT32/NTFS/UDF/exFAT/ReFS/ext2/ext3, DOS, persistence | Not exposed as separate media-creation features |
-| Verification | SHA-256 read-back; Windows boot-tree audit | Checksums, bad-block tests, runtime UEFI validation | Validates written image data |
-| Privileged code | Protected narrow helper | Whole portable executable requests administrator access | Packaged `etcher-util` sidecar |
-| License | Apache-2.0 | GPL-3.0 | Apache-2.0 |
+<img width="1749" height="1948" alt="Bootable desktop app" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff">
 
-This is a scope comparison, not a compatibility claim. See the current
-[Rufus README](https://github.com/pbatard/rufus#features),
-[Rufus application manifest](https://github.com/pbatard/rufus/blob/master/src/rufus.manifest),
-[Etcher README](https://github.com/balena-io/etcher#etcher), and
-[Etcher sidecar build](https://github.com/balena-io/etcher/blob/master/forge.sidecar.ts).
-
-Supported media
----------------
-
-| Source | Write method | Verification |
-| --- | --- | --- |
-| Hybrid Linux/Unix ISO | Raw write | SHA-256 read-back |
-| IMG or RAW disk image | Raw write | SHA-256 read-back |
-| XZ, gzip, Zstandard, or bzip2 image | Streaming raw write | SHA-256 read-back |
-| Windows installer ISO | GPT/MBR + FAT32; split WIM when required | Boot-tree and FAT32 audit |
-| Optical-only ISO | Not supported | Refused before writing |
-
-Supported platforms
--------------------
-
-| Platform | Release target | Media support |
-| --- | --- | --- |
-| Linux | x86-64 | Raw, compressed, Windows installer, backup |
-| Windows 10 or later | x86-64 | Raw, compressed, Windows installer |
-| macOS | Apple Silicon | Raw, compressed, Windows installer, backup |
-
-Windows installers with a file larger than FAT32's 4 GiB limit require `wimlib` on Linux and
-macOS. The Windows build uses DISM. macOS uses `diskutil` and `hdiutil`.
-
-Executable layout
------------------
-
-| Executable | Role | Privilege |
-| --- | --- | --- |
-| `bootable` | TUI and CLI | Normal user; requests the helper only for protected operations |
-| `bootable-desktop` | GPUI desktop interface | Normal user; requests the helper only for protected operations |
-| `bootable-helper` | Revalidate, erase, write, verify, and back up removable media | Root/admin; installed in a protected system location |
-
-The two interfaces could be linked into one larger user-facing binary. They remain separate so a
-terminal-only installation does not include the GPUI graphics stack. Both use the same
-`bootable-core` plans, safety checks, state, and write protocol.
-
-The helper remains separate by design. Combining it with either interface would make catalog,
-networking, image-decoding, terminal, and graphics code part of the root/admin attack surface. The
-installer places the helper in `/usr/libexec` on Linux, `/Library/PrivilegedHelperTools` on macOS,
-or Program Files on Windows. Users never launch it directly. A future unified GUI/TUI launcher
-would still keep this helper separate.
-
-* **Rufus:** one portable Windows executable; its manifest requests administrator access for the
-  application.
-* **Etcher:** one installed desktop product; its package includes an `etcher-util` sidecar for
-  protected operations.
-* **Bootable:** two optional native interfaces plus one protected helper; only the helper elevates.
-
-Install
--------
+Download
+--------
 
 ### Linux and macOS
 
-The installer downloads the release archive, verifies its SHA-256 sidecar, and installs under
-`~/.local`. Review [`scripts/install.sh`](scripts/install.sh) before piping it into a shell.
-
-Desktop app:
-
 ```sh
+# Desktop
 curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --gui
-```
 
-Terminal app:
-
-```sh
+# TUI
 curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --tui
-```
 
-Both:
-
-```sh
+# Both
 curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --all
 ```
 
-The Linux installer requests administrator authentication once to install the root-owned helper
-and polkit policy. Set `BOOTABLE_SKIP_PRIVILEGED_HELPER=1` for a non-writing installation.
-
-Install `wimlib` for oversized Windows payloads or the CA 2023 option:
-
-```sh
-# Debian and Ubuntu
-sudo apt install wimtools
-
-# macOS
-brew install wimlib
-```
+The installer verifies the release checksum and installs the protected helper. Set
+`BOOTABLE_SKIP_PRIVILEGED_HELPER=1` for a non-writing install. Oversized Windows payloads and CA
+2023 require `wimtools` on Linux or `wimlib` on macOS.
 
 ### Windows
 
-Download the [Windows release ZIP](https://github.com/debpalash/bootable/releases), verify its
-adjacent SHA-256 file, extract it, and run:
+Download and verify the [release ZIP](https://github.com/debpalash/bootable/releases), extract it,
+then run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All
 ```
 
-The installer places the protected helper under Program Files. The app requests UAC only when a
-reviewed write begins.
+Features
+--------
 
-Usage
------
+* Raw-write Linux/Unix ISOs, IMG, RAW, XZ, gzip, Zstandard, and bzip2 images
+* Build GPT/MBR FAT32 Windows media; split oversized WIM payloads
+* Apply Windows 11 hardware, account, regional, privacy, BitLocker, QoL, CA 2023,
+  SkuSiPolicy, and S Mode options
+* Discover DistroWatch, Omarchy, and Raspberry Pi images
+* Search, queue, pause, resume, cancel, retry, and checksum downloads
+* Verify MD5, SHA-1, SHA-256, SHA-512, written bytes, and Windows boot trees
+* Auto-detect removable media; exclude fixed and system disks
+* Revalidate the target before erasure; review consequences before writing
+* Cancel writes; mark interrupted media incomplete
+* Run bad-block/fake-capacity checks and RAW backups
+* Use a native GPUI desktop app or mouse-enabled Ratatui app
+* Elevate only a protected write helper
 
-Launch the desktop app:
+Comparison
+----------
+
+| | Bootable alpha | [Rufus](https://github.com/pbatard/rufus#features) | [Etcher](https://github.com/balena-io/etcher#etcher) |
+| --- | --- | --- | --- |
+| Platforms | Linux, Windows, macOS | Windows | Linux, Windows, macOS |
+| UI | Native GUI, mouse TUI, CLI | Native Windows GUI | Electron GUI |
+| Windows media | FAT32, split WIM, Windows 11/OOBE options | UEFI:NTFS, Windows To Go, OOBE, broader format support | Raw-image writing |
+| Discovery | DistroWatch, Omarchy, Raspberry Pi | Microsoft Windows, UEFI Shell | File, URL, drive clone |
+| Verification | Checksums, read-back, boot-tree audit | Checksums, bad blocks, runtime UEFI validation | Written-data validation |
+| Privilege model | Protected narrow helper | Whole portable app requests administrator access | Packaged `etcher-util` sidecar |
+| License | Apache-2.0 | GPL-3.0 | Apache-2.0 |
+
+Sources: [Rufus manifest](https://github.com/pbatard/rufus/blob/master/src/rufus.manifest) ·
+[Etcher sidecar](https://github.com/balena-io/etcher/blob/master/forge.sidecar.ts) ·
+[Rufus parity tracker](docs/rufus-parity.md)
+
+Executables
+-----------
+
+| File | Role | Privilege |
+| --- | --- | --- |
+| `bootable` | TUI and CLI | Normal user |
+| `bootable-desktop` | GPUI desktop | Normal user |
+| `bootable-helper` | Revalidate, erase, write, verify, back up | Root/admin |
+
+The GUI and TUI could share one larger binary, but separate builds keep GPUI out of terminal-only
+installs. Both use `bootable-core`. The helper stays separate so networking, catalog, decoding,
+terminal, and graphics code never enter the root/admin process. Users do not launch it directly.
+
+Rufus chooses one elevated Windows executable. Etcher also packages a separate privileged sidecar.
+A future unified Bootable launcher would still keep `bootable-helper` separate.
+
+Run
+---
 
 ```sh
-bootable-desktop
+bootable-desktop       # GUI
+bootable               # TUI
+bootable --help        # CLI
 ```
 
-Launch the terminal app:
+Release targets
+---------------
 
-```sh
-bootable
-```
-
-Inspect and plan from the command line:
-
-```sh
-bootable devices
-bootable inspect ~/Downloads/linux.iso
-bootable plan ~/Downloads/linux.iso /dev/sdX
-```
-
-Catalog and downloads:
-
-```sh
-bootable catalog --limit 20
-bootable releases cachyos
-bootable download cachyos --index 0 --output ~/Downloads/cachyos.iso
-bootable pi-images --device pi5-64bit --limit 20
-bootable pi-download 0 --output ~/Downloads/raspberry-pi-os.img
-```
-
-Checksums and backups:
-
-```sh
-bootable checksum image.iso --algorithm sha256
-sudo bootable backup /dev/sdX usb-backup.img
-```
-
-Direct CLI writes require administrator/root privileges and the confirmation phrase printed by a
-fresh plan. The desktop and terminal interfaces use a confirmation dialog instead of phrase entry.
+| Platform | Architecture | Media |
+| --- | --- | --- |
+| Linux | x86-64 | Raw, compressed, Windows installer, backup |
+| Windows 10+ | x86-64 | Raw, compressed, Windows installer |
+| macOS | Apple Silicon | Raw, compressed, Windows installer, backup |
 
 Build
 -----
 
-Linux dependencies:
-
 ```sh
 sudo apt install build-essential pkg-config libxkbcommon-x11-dev \
   xorriso 7zip gdisk parted dosfstools wimtools
-```
 
-Build and test:
-
-```sh
 cargo build --release --workspace
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Binaries:
-
-```text
-target/release/bootable
-target/release/bootable-desktop
-target/release/bootable-helper
-```
-
 Documentation
 -------------
 
-* [Architecture](docs/architecture.md)
-* [Safety model](docs/safety.md)
-* [Validation guide](docs/validation.md)
-* [GUI/TUI parity contract](docs/ui-parity.md)
-* [Rufus feature parity](docs/rufus-parity.md)
-* [Roadmap](docs/roadmap.md)
-* [Changelog](CHANGELOG.md)
-* [Releases](https://github.com/debpalash/bootable/releases)
-* [Issues](https://github.com/debpalash/bootable/issues)
+[Architecture](docs/architecture.md) · [Safety](docs/safety.md) ·
+[Validation](docs/validation.md) · [GUI/TUI parity](docs/ui-parity.md) ·
+[Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md) ·
+[Releases](https://github.com/debpalash/bootable/releases) ·
+[Issues](https://github.com/debpalash/bootable/issues)
 
-Design references
------------------
+References
+----------
 
-Bootable is an original implementation informed by the product behavior of
-[Rufus](https://github.com/pbatard/rufus), [WoeUSB-ng](https://github.com/WoeUSB/WoeUSB-ng),
-[Etcher](https://github.com/balena-io/etcher), and [PyUSB](https://github.com/pyusb/pyusb).
-No source code was copied from those projects.
+Original Apache-2.0 implementation informed by [Rufus](https://github.com/pbatard/rufus),
+[WoeUSB-ng](https://github.com/WoeUSB/WoeUSB-ng), [Etcher](https://github.com/balena-io/etcher),
+and [PyUSB](https://github.com/pyusb/pyusb). No source code was copied.
 
 License
 -------
