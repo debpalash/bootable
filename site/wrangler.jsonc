@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "name": "bootable-site-router",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-19",
+  "routes": [
+    {
+      "pattern": "bootable.palash.dev",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

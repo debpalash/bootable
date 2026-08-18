@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir _site
-          cp site/index.html site/404.html site/styles.css site/CNAME site/robots.txt site/sitemap.xml _site/
+          cp site/index.html site/404.html site/styles.css site/robots.txt site/sitemap.xml _site/
           cp assets/bootable-logo.svg _site/bootable-logo.svg
           cp assets/bootable-mark.svg _site/favicon.svg
           cp docs/screenshots/gui-discover.png _site/gui-discover.png
