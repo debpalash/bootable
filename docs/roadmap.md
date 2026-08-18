@@ -24,7 +24,9 @@
 - [x] macOS whole-removable discovery, root-disk exclusion, stable revalidation, unmounting, and
   already-elevated `/dev/rdisk` raw writing/verification
 - [x] macOS administrator prompt with fixed root-owned helper and private socket protocol
-- Windows UAC privilege prompt and platform code signing
+- [x] Windows UAC privilege prompt with fixed protected helper, authenticated loopback protocol,
+  cancellation, and stable target revalidation
+- Platform code signing
 - Platform-native Windows FAT32/split-WIM execution
 
 ## Later

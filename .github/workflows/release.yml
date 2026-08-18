@@ -68,6 +68,9 @@ jobs:
           New-Item -ItemType Directory -Path stage
           Copy-Item "target/${{ matrix.target }}/release/bootable.exe" stage/
           Copy-Item "target/${{ matrix.target }}/release/bootable-desktop.exe" stage/
+          Copy-Item "target/${{ matrix.target }}/release/bootable-helper.exe" stage/
+          Copy-Item scripts/install.ps1 stage/
+          Copy-Item assets/bootable-mark.svg stage/bootable.svg
           Copy-Item README.md,LICENSE stage/
           Compress-Archive -Path stage/* -DestinationPath $asset
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
@@ -101,5 +104,5 @@ jobs:
           body: |
             ## Bootable alpha
 
-            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux and macOS use narrow root-owned helpers for authenticated raw writes; Windows currently requires an already elevated process. Windows and macOS do not yet create extracted Windows FAT32 media.
+            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux, macOS, and Windows keep the full interface unprivileged and authenticate only a fixed, protected narrow write helper. Windows and macOS do not yet create extracted Windows FAT32 media.
           files: dist/*

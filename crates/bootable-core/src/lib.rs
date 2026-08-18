@@ -14,6 +14,9 @@ mod privilege;
 #[cfg(any(target_os = "macos", test))]
 #[cfg_attr(test, allow(dead_code))]
 mod privilege_macos;
+#[cfg(any(target_os = "windows", test))]
+#[cfg_attr(test, allow(dead_code))]
+mod privilege_windows;
 mod windows;
 
 use std::path::Path;
@@ -462,7 +465,11 @@ impl Bootable {
                         &mut progress,
                     )
                 }
-                #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                #[cfg(target_os = "windows")]
+                {
+                    privilege_windows::write_via_uac(plan, confirmation, control, &mut progress)
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
                 {
                     Err(Error::NotPrivileged)
                 }

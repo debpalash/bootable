@@ -35,7 +35,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | Drive-to-image backup (DD/VHD/VHDX/FFU) | atomic raw IMG/RAW/DD backup | CLI + save dialog | background backup + save dialog | Partial: VHD/VHDX/FFU remain |
 | Official ISO/UEFI Shell downloads | not implemented | not implemented | not implemented | Planned |
 | Publisher download integrity | checksum sidecars/manifests, strongest digest, atomic mismatch refusal | integrity label + persistent result | integrity label + persistent result | Implemented for MD5/SHA-1/SHA-256/SHA-512; signatures planned |
-| Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Partial: macOS has narrow-helper authorization; Windows UAC and native Windows FAT32 execution remain |
+| Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Partial: both use narrow-helper authorization; native Windows FAT32 execution remains |
 | Localization | not implemented | not implemented | not implemented | Planned |
 
 ## Delivery order
@@ -44,7 +44,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 2. Windows To Go.
 3. Linux persistence, BIOS helpers, and DOS media.
 4. VHD/VHDX/FFU backup, verified downloads, and localization.
-5. Native Windows/macOS elevation and Windows FAT32 execution.
+5. Native Windows FAT32 execution and signed platform installers.
 
 Every capability is added to the core first. TUI and GPUI controls ship together and consume the
 same serialized option types so plans cannot differ by frontend.

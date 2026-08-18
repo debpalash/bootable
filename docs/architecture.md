@@ -19,7 +19,7 @@ Ratatui TUI ──┘                                          ├─ device dis
 - `write`
 
 The platform adapter owns device enumeration and destructive mechanics. On Linux the unprivileged
-GUI/TUI sends the reviewed serializable plan over stdin to a root-owned `bootable-helper` launched by
+GUI/TUI sends the reviewed serializable plan to a root-owned `bootable-helper` launched by
 `pkexec`. The helper exposes only the write/cancel protocol, emits JSON progress over stdout, and repeats
 device discovery, stable-identity checks, removable/system-disk policy, capacity checks, unmounting,
 writing, and verification. It never trusts a stale device path from the UI.
@@ -27,14 +27,17 @@ writing, and verification. It never trusts a stale device path from the UI.
 The native adapters use the same seam and repeat the same plan-bound checks:
 
 - Windows: USB-only PowerShell `Get-Disk` inventory, stable-ID refresh, volume detachment, and
-  already-elevated `PhysicalDrive` raw I/O.
+  `PhysicalDrive` raw I/O through a fixed helper under protected Program Files. The UI creates a
+  256-bit one-use token, accepts only an IPv4 loopback connection carrying that token, and invokes
+  the helper with `Start-Process -Verb RunAs`. The helper repeats the reviewed-plan checks and
+  returns progress/cancellation events without elevating the frontend.
 - macOS: I/O Registry whole-removable inventory, root-disk exclusion, stable-ID refresh,
   `diskutil` unmounting, and `/dev/rdisk` raw I/O through a fixed root-owned helper. The UI opens a
   private Unix socket, macOS presents its administrator prompt, and the helper carries the same
   reviewed-plan/cancel/progress protocol without elevating the frontend.
 
-Windows UAC elevation and platform-native Windows FAT32 creation are still open work. Linux and
-macOS launch narrow privileged helpers while the full UI remains unprivileged.
+Platform-native Windows FAT32 creation remains open work. Linux, macOS, and Windows launch narrow
+privileged helpers while the full UI remains unprivileged.
 
 Image classification and policy remain shared across all three operating systems.
 

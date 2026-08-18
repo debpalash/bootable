@@ -18,8 +18,8 @@
 > [!CAUTION]
 > **Bootable 0.1.0-alpha.1 is pre-release software that intentionally erases removable drives.**
 > Check the physical device, keep backups, and do not use it on irreplaceable media. Linux writing
-> is functional. macOS has conservative removable-device discovery and an authenticated narrow-helper
-> raw write/verification path. Windows has the same raw adapter but still requires an elevated process.
+> is functional. macOS and Windows have conservative removable-device discovery and authenticated
+> narrow-helper raw write/verification paths; the full applications stay unprivileged.
 > Platform-native Windows-media conversion paths are not complete.
 
 Stop bouncing between a distro website, a checksum tool, a decompressor, and a USB writer.
@@ -54,6 +54,15 @@ Install both:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --all
 ```
+
+On Windows, download the release ZIP, verify its adjacent SHA-256 file, extract it, and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All
+```
+
+The Windows installer requests UAC once to place the narrow helper under protected Program Files.
+Normal discovery and downloads remain unelevated; a later write prompts only for that helper.
 
 ## Two interfaces. One safety model.
 
@@ -250,8 +259,9 @@ for a catalog/inspection-only installation where device writing is intentionally
 - Linux: device discovery, image inspection, planning, raw writing and verification, and Windows
   FAT32 media creation are implemented.
 - Windows: USB-only `Get-Disk` discovery, stable identity revalidation, drive-letter detachment,
-  elevated `PhysicalDrive` raw writing, backup, cancellation, and verification are implemented.
-  Automatic UAC elevation and extracted Windows FAT32 creation remain unfinished.
+  UAC-authenticated `PhysicalDrive` raw writing, cancellation, and verification are implemented.
+  The app accepts only the fixed Program Files helper after owner and ACL validation. Extracted
+  Windows FAT32 creation remains unfinished; raw backup currently requires an elevated process.
 - macOS: whole removable/ejectable `IOMedia` discovery, root-disk exclusion, stable identity
   revalidation, `diskutil` unmounting, `/dev/rdisk` raw writing, backup, cancellation, and
   verification are implemented. The UI invokes a fixed root-owned helper through the macOS
@@ -259,8 +269,8 @@ for a catalog/inspection-only installation where device writing is intentionally
 - Desktop and TUI: on Linux, destructive execution uses the same consequence confirmation, a
   polkit/pkexec authentication prompt, cancellable write protocol, and root-owned narrow
   `bootable-helper`; the full interface is never elevated. macOS follows the same narrow-helper
-  design through `osascript` authorization. Windows currently requires the application process to
-  have administrator privileges before writing.
+  design through `osascript` authorization. Windows uses the same reviewed helper protocol over an
+  authenticated loopback-only channel and invokes the fixed helper through the native UAC prompt.
 
 See [architecture](docs/architecture.md), [safety model](docs/safety.md), and the
 [validation guide](docs/validation.md). The [roadmap](docs/roadmap.md) and

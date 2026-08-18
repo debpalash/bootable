@@ -38,3 +38,10 @@ safety checks immediately before erasure. Device-list mutation and window/back/q
 during an active write. A dedicated safe stop action cancels on a chunk boundary, terminates controlled
 media tools, and flushes completed raw writes; the result marks the media incomplete and requiring a
 full rewrite.
+
+macOS applies the same boundary with a fixed root-owned helper and private Unix socket. Windows
+accepts only `C:\Program Files\Bootable\bootable-helper.exe` after checking that it is a regular,
+non-reparse file owned by SYSTEM, Administrators, or TrustedInstaller and is not writable by the
+current user or broad user groups. Its UAC helper channel is IPv4 loopback-only and requires a fresh
+256-bit token before the reviewed request is sent. Both helpers rediscover and revalidate the target
+after elevation.
