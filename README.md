@@ -46,6 +46,27 @@ Features
 * Keep discovery, downloads, inspection, and planning unprivileged
 * Elevate only a fixed, protected write helper
 
+Comparison
+----------
+
+| | Bootable 0.1 alpha | Rufus | Etcher |
+| --- | --- | --- | --- |
+| Platforms | Linux, Windows, macOS | Windows | Linux, Windows, macOS |
+| Interface | Native GPUI desktop, mouse TUI, CLI | Native Windows GUI | Electron desktop |
+| Linux/Unix images | Raw and compressed writes | ISO and disk-image writes | Image writes |
+| Windows installers | GPT/MBR FAT32, split WIM, Windows 11/OOBE options | Broadest support, including UEFI:NTFS and Windows To Go | Raw-image workflow; no Windows installer conversion |
+| Image discovery | DistroWatch, Omarchy, Raspberry Pi | Microsoft Windows and UEFI Shell downloads | File, URL, and drive-cloning workflow; no built-in catalog |
+| Formatting and persistence | Not implemented | FAT/FAT32/NTFS/UDF/exFAT/ReFS/ext2/ext3, DOS, persistence | Not exposed as separate media-creation features |
+| Verification | SHA-256 read-back; Windows boot-tree audit | Checksums, bad-block tests, runtime UEFI validation | Validates written image data |
+| Privileged code | Protected narrow helper | Whole portable executable requests administrator access | Packaged `etcher-util` sidecar |
+| License | Apache-2.0 | GPL-3.0 | Apache-2.0 |
+
+This is a scope comparison, not a compatibility claim. See the current
+[Rufus README](https://github.com/pbatard/rufus#features),
+[Rufus application manifest](https://github.com/pbatard/rufus/blob/master/src/rufus.manifest),
+[Etcher README](https://github.com/balena-io/etcher#etcher), and
+[Etcher sidecar build](https://github.com/balena-io/etcher/blob/master/forge.sidecar.ts).
+
 Supported media
 ---------------
 
@@ -68,6 +89,31 @@ Supported platforms
 
 Windows installers with a file larger than FAT32's 4 GiB limit require `wimlib` on Linux and
 macOS. The Windows build uses DISM. macOS uses `diskutil` and `hdiutil`.
+
+Executable layout
+-----------------
+
+| Executable | Role | Privilege |
+| --- | --- | --- |
+| `bootable` | TUI and CLI | Normal user; requests the helper only for protected operations |
+| `bootable-desktop` | GPUI desktop interface | Normal user; requests the helper only for protected operations |
+| `bootable-helper` | Revalidate, erase, write, verify, and back up removable media | Root/admin; installed in a protected system location |
+
+The two interfaces could be linked into one larger user-facing binary. They remain separate so a
+terminal-only installation does not include the GPUI graphics stack. Both use the same
+`bootable-core` plans, safety checks, state, and write protocol.
+
+The helper remains separate by design. Combining it with either interface would make catalog,
+networking, image-decoding, terminal, and graphics code part of the root/admin attack surface. The
+installer places the helper in `/usr/libexec` on Linux, `/Library/PrivilegedHelperTools` on macOS,
+or Program Files on Windows. Users never launch it directly. A future unified GUI/TUI launcher
+would still keep this helper separate.
+
+* **Rufus:** one portable Windows executable; its manifest requests administrator access for the
+  application.
+* **Etcher:** one installed desktop product; its package includes an `etcher-util` sidecar for
+  protected operations.
+* **Bootable:** two optional native interfaces plus one protected helper; only the helper elevates.
 
 Install
 -------
