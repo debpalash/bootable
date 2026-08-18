@@ -1240,6 +1240,45 @@ mod tests {
         assert!(matches!(error, Error::UnsupportedImage(_)));
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_diskutil_inventory_matches_the_guarded_schema() {
+        let output = Command::new(DISKUTIL)
+            .args(["list", "-plist"])
+            .output()
+            .expect("diskutil list");
+        assert!(output.status.success(), "diskutil list failed");
+        let list: DiskList = plist_json(&output.stdout, "diskutil list").expect("disk list plist");
+        assert!(!list.all_disks_and_partitions.is_empty());
+        for disk in list.all_disks_and_partitions {
+            let identifier = disk.device_identifier.expect("whole disk identifier");
+            validate_whole_disk_identifier(&identifier).expect("guarded whole disk identifier");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_hdiutil_attach_schema_round_trips_a_temporary_image() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let image = workspace.path().join("fixture.dmg");
+        let output = Command::new(HDIUTIL)
+            .args(["create", "-size", "8m", "-fs", "MS-DOS", "-volname"])
+            .arg("BOOTABLE_TEST")
+            .arg("-ov")
+            .arg(&image)
+            .output()
+            .expect("hdiutil create");
+        assert!(
+            output.status.success(),
+            "hdiutil create failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let mounted = attach_iso(&image).expect("attach temporary image");
+        assert!(mounted.mount_point.starts_with("/Volumes"));
+        detach_iso(&mounted.device).expect("detach temporary image");
+    }
+
     #[test]
     fn io_registry_inventory_excludes_root_and_unstable_media() {
         let media: Vec<IoMedia> = serde_json::from_str(
