@@ -1,0 +1,49 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'site/**'
+      - 'assets/bootable-logo.svg'
+      - 'assets/bootable-mark.svg'
+      - 'docs/screenshots/gui-discover.png'
+      - 'docs/screenshots/tui-main.png'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
+      - name: Build static artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir _site
+          cp site/index.html site/404.html site/styles.css site/CNAME site/robots.txt site/sitemap.xml _site/
+          cp assets/bootable-logo.svg _site/bootable-logo.svg
+          cp assets/bootable-mark.svg _site/favicon.svg
+          cp docs/screenshots/gui-discover.png _site/gui-discover.png
+          cp docs/screenshots/tui-main.png _site/tui-main.png
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

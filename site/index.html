@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bootable — Cross-platform boot media writer</title>
+    <meta
+      name="description"
+      content="Discover, download, review, write, and verify bootable USB and SD media on Linux, Windows, and macOS."
+    >
+    <meta name="theme-color" content="#091019">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Bootable — Cross-platform boot media writer">
+    <meta
+      property="og:description"
+      content="A native GUI and mouse-friendly TUI for deliberate, verified boot media."
+    >
+    <meta property="og:url" content="https://bootable.palash.dev/">
+    <meta property="og:image" content="https://bootable.palash.dev/gui-discover.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Bootable home">
+        <img src="./bootable-logo.svg" alt="Bootable" width="250" height="64">
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/debpalash/bootable">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> 0.1 alpha</p>
+          <h1 id="hero-title">Boot media,<br>written deliberately.</h1>
+          <p class="lede">
+            Discover an image. Review the physical target. Write and verify it—from a native GUI
+            or mouse-friendly terminal app.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">
+              Download alpha
+            </a>
+            <a class="button secondary" href="https://github.com/debpalash/bootable">
+              View source
+            </a>
+          </div>
+          <p class="platforms">Linux x86-64 · Windows x86-64 · macOS Apple Silicon</p>
+        </div>
+        <div class="hero-visual">
+          <div class="window-bar" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <img
+            src="./gui-discover.png"
+            alt="Bootable desktop app showing its distribution catalog and removable-drive selector"
+            width="1749"
+            height="1948"
+          >
+        </div>
+      </section>
+
+      <aside class="alpha-note" aria-label="Alpha warning">
+        <strong>Alpha software.</strong>
+        Writing erases the selected device. Check the physical target and keep backups.
+      </aside>
+
+      <section class="feature-section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">One path</p>
+          <h2 id="features-title">Image to verified media.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <span class="feature-number">01</span>
+            <h3>Discover</h3>
+            <p>DistroWatch, Omarchy, Raspberry Pi, local files, and compressed images.</p>
+          </article>
+          <article>
+            <span class="feature-number">02</span>
+            <h3>Review</h3>
+            <p>Removable targets only. See the method, operations, and permanent consequences.</p>
+          </article>
+          <article>
+            <span class="feature-number">03</span>
+            <h3>Write + verify</h3>
+            <p>Read-back verification, publisher checksums, cancellation, and clear progress.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="interfaces" aria-labelledby="interfaces-title">
+        <div class="section-heading compact">
+          <p class="eyebrow">Two interfaces</p>
+          <h2 id="interfaces-title">One safety model.</h2>
+          <p>GPUI on the desktop. Ratatui in the terminal. Shared plans and write engine.</p>
+        </div>
+        <div class="interface-grid">
+          <figure class="screenshot-card large">
+            <img src="./gui-discover.png" alt="Bootable native desktop interface" loading="lazy">
+            <figcaption>Native desktop</figcaption>
+          </figure>
+          <figure class="screenshot-card">
+            <img src="./tui-main.png" alt="Bootable mouse-friendly terminal interface" loading="lazy">
+            <figcaption>Mouse-friendly TUI</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="capabilities" aria-labelledby="capabilities-title">
+        <div class="section-heading compact">
+          <p class="eyebrow">Media support</p>
+          <h2 id="capabilities-title">Raw images and Windows installers.</h2>
+        </div>
+        <ul>
+          <li><strong>Linux + Unix</strong><span>ISO, IMG, RAW, XZ, gzip, Zstandard, bzip2</span></li>
+          <li><strong>Windows</strong><span>GPT/MBR, FAT32, split WIM, Windows 11/OOBE options</span></li>
+          <li><strong>Integrity</strong><span>MD5, SHA-1, SHA-256, SHA-512, byte read-back</span></li>
+          <li><strong>Safety</strong><span>System-disk exclusion, target revalidation, narrow helper</span></li>
+        </ul>
+      </section>
+
+      <section class="install" id="install" aria-labelledby="install-title">
+        <div class="section-heading compact">
+          <p class="eyebrow">Install</p>
+          <h2 id="install-title">Choose your interface.</h2>
+        </div>
+        <div class="install-grid">
+          <article>
+            <div class="install-label"><span>GUI</span> Linux + macOS</div>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --gui</code></pre>
+          </article>
+          <article>
+            <div class="install-label"><span>TUI</span> Linux + macOS</div>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --tui</code></pre>
+          </article>
+        </div>
+        <p class="install-footnote">
+          Windows builds and SHA-256 files are on the
+          <a href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">release page</a>.
+          Review the installer before piping it into a shell.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <img src="./favicon.svg" width="30" height="30" alt="">
+      <span>Bootable · Apache-2.0</span>
+      <span class="footer-links">
+        <a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a>
+        <a href="https://github.com/debpalash/bootable/issues">Issues</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </span>
+    </footer>
+  </body>
+</html>
