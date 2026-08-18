@@ -95,6 +95,25 @@ if [ "$platform" = "unknown-linux-gnu" ] && [ -f "${temporary}/bootable-helper" 
   fi
 fi
 
+if [ "$platform" = "apple-darwin" ] && [ -f "${temporary}/bootable-helper" ]; then
+  if [ "${BOOTABLE_SKIP_PRIVILEGED_HELPER:-0}" = "1" ]; then
+    echo "Skipping the privileged helper; discovery and downloads work, but writing will require a separately installed helper."
+  else
+    echo "Installing the narrow, root-owned macOS write helper (administrator authentication required)…"
+    if [ "$(id -u)" -eq 0 ]; then
+      install -d -m 0755 /Library/PrivilegedHelperTools
+      install -m 0755 "${temporary}/bootable-helper" \
+        /Library/PrivilegedHelperTools/app.bootable.helper
+      chown root:wheel /Library/PrivilegedHelperTools/app.bootable.helper
+    else
+      sudo install -d -m 0755 /Library/PrivilegedHelperTools
+      sudo install -m 0755 "${temporary}/bootable-helper" \
+        /Library/PrivilegedHelperTools/app.bootable.helper
+      sudo chown root:wheel /Library/PrivilegedHelperTools/app.bootable.helper
+    fi
+  fi
+fi
+
 echo "Installed ${VARIANT#--} variant under ${INSTALL_ROOT}."
 case ":${PATH}:" in
   *":${INSTALL_ROOT}/bin:"*) ;;

@@ -18,9 +18,9 @@
 > [!CAUTION]
 > **Bootable 0.1.0-alpha.1 is pre-release software that intentionally erases removable drives.**
 > Check the physical device, keep backups, and do not use it on irreplaceable media. Linux writing
-> is functional. Windows and macOS now have conservative native removable-device discovery and raw
-> write/verification adapters, but their automatic privilege prompts and Windows-media conversion
-> paths are not complete.
+> is functional. macOS has conservative removable-device discovery and an authenticated narrow-helper
+> raw write/verification path. Windows has the same raw adapter but still requires an elevated process.
+> Platform-native Windows-media conversion paths are not complete.
 
 Stop bouncing between a distro website, a checksum tool, a decompressor, and a USB writer.
 Bootable discovers images, downloads and verifies them, identifies removable media, explains the
@@ -253,13 +253,14 @@ for a catalog/inspection-only installation where device writing is intentionally
   elevated `PhysicalDrive` raw writing, backup, cancellation, and verification are implemented.
   Automatic UAC elevation and extracted Windows FAT32 creation remain unfinished.
 - macOS: whole removable/ejectable `IOMedia` discovery, root-disk exclusion, stable identity
-  revalidation, `diskutil` unmounting, elevated `/dev/rdisk` raw writing, backup, cancellation, and
-  verification are implemented. Automatic Authorization Services elevation and extracted Windows
-  FAT32 creation remain unfinished.
+  revalidation, `diskutil` unmounting, `/dev/rdisk` raw writing, backup, cancellation, and
+  verification are implemented. The UI invokes a fixed root-owned helper through the macOS
+  administrator prompt and a private Unix socket; extracted Windows FAT32 creation remains unfinished.
 - Desktop and TUI: on Linux, destructive execution uses the same consequence confirmation, a
   polkit/pkexec authentication prompt, cancellable write protocol, and root-owned narrow
-  `bootable-helper`; the full interface is never elevated. Windows and macOS currently require the
-  application process to have administrator/root privileges before writing.
+  `bootable-helper`; the full interface is never elevated. macOS follows the same narrow-helper
+  design through `osascript` authorization. Windows currently requires the application process to
+  have administrator privileges before writing.
 
 See [architecture](docs/architecture.md), [safety model](docs/safety.md), and the
 [validation guide](docs/validation.md). The [roadmap](docs/roadmap.md) and

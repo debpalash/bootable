@@ -1,32 +1,22 @@
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 
 use bootable_core::{
     Bootable, OperationControl, PrivilegedWriteCommand, PrivilegedWriteEvent,
     PrivilegedWriteRequest,
 };
 
-fn emit(writer: &mut BufWriter<io::StdoutLock<'_>>, event: &PrivilegedWriteEvent) -> bool {
+fn emit(writer: &mut impl Write, event: &PrivilegedWriteEvent) -> bool {
     serde_json::to_writer(&mut *writer, event).is_ok()
         && writer.write_all(b"\n").is_ok()
         && writer.flush().is_ok()
 }
 
-fn main() {
-    let input = match File::open("/dev/stdin") {
-        Ok(input) => input,
-        Err(error) => {
-            let mut stdout = BufWriter::new(io::stdout().lock());
-            let _ = emit(
-                &mut stdout,
-                &PrivilegedWriteEvent::Failed {
-                    message: format!("could not open privileged request pipe: {error}"),
-                },
-            );
-            std::process::exit(2);
-        }
-    };
-    let mut reader = BufReader::new(input);
+fn serve<R, W>(mut reader: BufReader<R>, mut writer: BufWriter<W>) -> i32
+where
+    R: Read + Send + 'static,
+    W: Write,
+{
     let mut request_line = String::new();
     let request = match reader
         .read_line(&mut request_line)
@@ -35,14 +25,13 @@ fn main() {
     {
         Ok(request) => request,
         Err(error) => {
-            let mut stdout = BufWriter::new(io::stdout().lock());
             let _ = emit(
-                &mut stdout,
+                &mut writer,
                 &PrivilegedWriteEvent::Failed {
                     message: format!("invalid privileged write request: {error}"),
                 },
             );
-            std::process::exit(2);
+            return 2;
         }
     };
 
@@ -60,8 +49,6 @@ fn main() {
         }
     });
 
-    let stdout = io::stdout();
-    let mut writer = BufWriter::new(stdout.lock());
     let result = Bootable::native().write_controlled(
         &request.plan,
         &request.confirmation,
@@ -71,11 +58,8 @@ fn main() {
         },
     );
     match result {
-        Ok(()) => {
-            if !emit(&mut writer, &PrivilegedWriteEvent::Finished) {
-                std::process::exit(3);
-            }
-        }
+        Ok(()) if emit(&mut writer, &PrivilegedWriteEvent::Finished) => 0,
+        Ok(()) => 3,
         Err(error) => {
             let _ = emit(
                 &mut writer,
@@ -83,7 +67,55 @@ fn main() {
                     message: error.to_string(),
                 },
             );
-            std::process::exit(1);
+            1
+        }
+    }
+}
+
+#[cfg(unix)]
+fn unix_socket_path() -> Option<std::path::PathBuf> {
+    let mut arguments = std::env::args_os().skip(1);
+    match (arguments.next(), arguments.next(), arguments.next()) {
+        (Some(flag), Some(path), None) if flag == "--unix-socket" => Some(path.into()),
+        _ => None,
+    }
+}
+
+#[cfg(unix)]
+fn serve_unix_socket(path: &std::path::Path) -> io::Result<i32> {
+    use std::os::unix::net::UnixStream;
+
+    let stream = UnixStream::connect(path)?;
+    let reader = BufReader::new(stream.try_clone()?);
+    let writer = BufWriter::new(stream);
+    Ok(serve(reader, writer))
+}
+
+fn serve_standard_io() -> io::Result<i32> {
+    let input = File::open("/dev/stdin")?;
+    Ok(serve(BufReader::new(input), BufWriter::new(io::stdout())))
+}
+
+fn main() {
+    #[cfg(unix)]
+    let result = match unix_socket_path() {
+        Some(path) => serve_unix_socket(&path),
+        None => serve_standard_io(),
+    };
+    #[cfg(not(unix))]
+    let result = serve_standard_io();
+
+    match result {
+        Ok(code) => std::process::exit(code),
+        Err(error) => {
+            let mut writer = BufWriter::new(io::stdout());
+            let _ = emit(
+                &mut writer,
+                &PrivilegedWriteEvent::Failed {
+                    message: format!("could not open privileged request channel: {error}"),
+                },
+            );
+            std::process::exit(2);
         }
     }
 }

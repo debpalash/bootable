@@ -30,5 +30,7 @@ Initial public alpha.
   and already-elevated raw write/backup/verification.
 - Conservative native macOS whole-removable inventory, root-disk exclusion, stable `/dev/rdisk`
   revalidation, unmounting, and already-elevated raw write/backup/verification.
+- macOS administrator authentication through a fixed root-owned helper and private Unix-socket
+  reviewed-plan/cancel/progress protocol; the GUI/TUI process remains unprivileged.
 
-Native Windows/macOS privilege prompts and extracted Windows FAT32 creation remain unfinished.
+Windows UAC elevation and native Windows/macOS extracted FAT32 creation remain unfinished.

@@ -11,6 +11,9 @@ mod plan;
 mod platform;
 #[cfg(target_os = "linux")]
 mod privilege;
+#[cfg(any(target_os = "macos", test))]
+#[cfg_attr(test, allow(dead_code))]
+mod privilege_macos;
 mod windows;
 
 use std::path::Path;
@@ -450,7 +453,16 @@ impl Bootable {
                 {
                     privilege::write_via_pkexec(plan, confirmation, control, &mut progress)
                 }
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(target_os = "macos")]
+                {
+                    privilege_macos::write_via_authorization(
+                        plan,
+                        confirmation,
+                        control,
+                        &mut progress,
+                    )
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "macos")))]
                 {
                     Err(Error::NotPrivileged)
                 }

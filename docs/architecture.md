@@ -29,11 +29,12 @@ The native adapters use the same seam and repeat the same plan-bound checks:
 - Windows: USB-only PowerShell `Get-Disk` inventory, stable-ID refresh, volume detachment, and
   already-elevated `PhysicalDrive` raw I/O.
 - macOS: I/O Registry whole-removable inventory, root-disk exclusion, stable-ID refresh,
-  `diskutil` unmounting, and already-elevated `/dev/rdisk` raw I/O.
+  `diskutil` unmounting, and `/dev/rdisk` raw I/O through a fixed root-owned helper. The UI opens a
+  private Unix socket, macOS presents its administrator prompt, and the helper carries the same
+  reviewed-plan/cancel/progress protocol without elevating the frontend.
 
-Their automatic UAC/Authorization Services elevation paths and platform-native Windows FAT32
-creation are still open work. Linux alone currently launches a narrow privileged helper while the
-full UI remains unprivileged.
+Windows UAC elevation and platform-native Windows FAT32 creation are still open work. Linux and
+macOS launch narrow privileged helpers while the full UI remains unprivileged.
 
 Image classification and policy remain shared across all three operating systems.
 

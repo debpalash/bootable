@@ -50,9 +50,9 @@ jobs:
           stage="$(mktemp -d)"
           cp "target/${{ matrix.target }}/release/bootable" "$stage/"
           cp "target/${{ matrix.target }}/release/bootable-desktop" "$stage/"
+          cp "target/${{ matrix.target }}/release/bootable-helper" "$stage/"
           cp assets/bootable-mark.svg "$stage/bootable.svg"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            cp "target/${{ matrix.target }}/release/bootable-helper" "$stage/"
             cp packaging/app.bootable.Bootable.desktop "$stage/"
             cp packaging/app.bootable.write-media.policy "$stage/"
           fi
@@ -101,5 +101,5 @@ jobs:
           body: |
             ## Bootable alpha
 
-            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux has the complete authenticated write path. Windows and macOS include conservative removable-device discovery and raw write/verification adapters, but still require an already elevated process and do not yet create extracted Windows FAT32 media.
+            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux and macOS use narrow root-owned helpers for authenticated raw writes; Windows currently requires an already elevated process. Windows and macOS do not yet create extracted Windows FAT32 media.
           files: dist/*
