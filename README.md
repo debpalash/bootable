@@ -1,23 +1,18 @@
-Bootable: Cross-platform boot media writer
-===========================================
-
-[![CI](https://img.shields.io/github/actions/workflow/status/debpalash/bootable/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/debpalash/bootable/actions/workflows/ci.yml)
-[![Alpha](https://img.shields.io/github/v/release/debpalash/bootable?include_prereleases&style=flat-square&label=Alpha)](https://github.com/debpalash/bootable/releases)
-[![Downloads](https://img.shields.io/github/downloads/debpalash/bootable/total.svg?style=flat-square&label=Downloads)](https://github.com/debpalash/bootable/releases)
-[![License](https://img.shields.io/badge/license-Apache--2.0-5bd7c0.svg?style=flat-square)](LICENSE)
-
 <p align="center"><img src="assets/bootable-logo.svg" width="360" alt="Bootable"></p>
 
-Write ISO, IMG, RAW, and compressed disk images to removable USB and SD media.
+<p align="center"><strong>Cross-platform boot media writer for ISO, IMG, RAW, and compressed images.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/debpalash/bootable/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/debpalash/bootable/ci.yml?branch=main&amp;style=flat-square&amp;label=CI"></a>
+  <a href="https://github.com/debpalash/bootable/releases"><img alt="Alpha" src="https://img.shields.io/github/v/release/debpalash/bootable?include_prereleases&amp;style=flat-square&amp;label=Alpha"></a>
+  <a href="https://github.com/debpalash/bootable/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/debpalash/bootable/total.svg?style=flat-square&amp;label=Downloads"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-5bd7c0.svg?style=flat-square"></a>
+</p>
 
 > [!CAUTION]
-> **0.1.0-alpha.2 is prerelease software. Writing erases the selected device.**
-> Check the physical target and keep backups.
+> **Alpha software:** writing erases the selected device. Check the physical target and keep backups.
 
-Screenshot
-----------
-
-<img width="1749" height="1948" alt="Bootable desktop app" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff">
+<p align="center"><img width="100%" alt="Bootable desktop app" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff"></p>
 
 Download
 --------
