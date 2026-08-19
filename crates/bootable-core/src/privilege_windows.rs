@@ -1,19 +1,16 @@
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
 use crate::error::{Error, Result, io_error};
-use crate::model::{
-    PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest, Progress, WritePlan,
-};
+use crate::model::{Progress, WritePlan};
 use crate::operation::{OperationControl, OperationState};
+use crate::privileged_protocol::run_privileged_client;
 
 const SYSTEM_HELPER: &str = r"C:\Program Files\Bootable\bootable-helper.exe";
 const POWERSHELL: &str = "powershell.exe";
@@ -51,7 +48,7 @@ pub(crate) fn write_via_uac(
     let mut authorization = launch_uac_helper(&helper, endpoint, &token)?;
     let started = Instant::now();
 
-    let mut stream = loop {
+    let stream = loop {
         if control.state() == OperationState::Cancelled {
             let _ = authorization.kill();
             let _ = authorization.wait();
@@ -91,84 +88,31 @@ pub(crate) fn write_via_uac(
         thread::sleep(Duration::from_millis(50));
     };
 
-    let request = PrivilegedWriteRequest {
-        plan: plan.clone(),
-        confirmation: confirmation.to_owned(),
-    };
-    serde_json::to_writer(&mut stream, &request).map_err(|error| {
-        Error::PrivilegedWriterUnavailable(format!("could not encode reviewed plan: {error}"))
-    })?;
-    stream
-        .write_all(b"\n")
-        .and_then(|()| stream.flush())
-        .map_err(|error| io_error("Windows privileged request channel", error))?;
-
-    let mut command_stream = stream
+    let command_stream = stream
         .try_clone()
         .map_err(|error| io_error("Windows privileged command channel", error))?;
-    let writer_control = control.clone();
-    let writer_finished = Arc::new(AtomicBool::new(false));
-    let writer_done = Arc::clone(&writer_finished);
-    let control_writer = thread::spawn(move || {
-        while !writer_done.load(Ordering::Acquire) {
-            if writer_control.state() == OperationState::Cancelled {
-                if serde_json::to_writer(&mut command_stream, &PrivilegedWriteCommand::Cancel)
-                    .is_ok()
-                {
-                    let _ = command_stream.write_all(b"\n");
-                    let _ = command_stream.flush();
-                }
-                break;
-            }
-            thread::sleep(Duration::from_millis(50));
-        }
-    });
-
-    let mut finished = false;
-    let mut failure = None;
-    let mut protocol_failure = None;
-    for line in BufReader::new(stream).lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(error) => {
-                protocol_failure = Some(format!("could not read helper progress: {error}"));
-                break;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<PrivilegedWriteEvent>(&line) {
-            Ok(PrivilegedWriteEvent::Progress(update)) => progress(update),
-            Ok(PrivilegedWriteEvent::Finished) => finished = true,
-            Ok(PrivilegedWriteEvent::Failed { message }) => failure = Some(message),
-            Err(error) => protocol_failure = Some(format!("invalid helper response: {error}")),
-        }
-    }
-    writer_finished.store(true, Ordering::Release);
-    let _ = control_writer.join();
+    let protocol = run_privileged_client(
+        stream,
+        command_stream,
+        plan,
+        confirmation,
+        control,
+        progress,
+        "Windows privileged channel",
+    )?;
     let output = authorization
         .wait_with_output()
         .map_err(|error| io_error(POWERSHELL, error))?;
 
-    if let Some(message) = failure {
-        return Err(Error::PrivilegedWriteFailed(message));
-    }
-    if let Some(message) = protocol_failure {
-        return Err(Error::PrivilegedWriteFailed(message));
-    }
-    if output.status.success() && finished {
-        return Ok(());
-    }
     let detail = String::from_utf8_lossy(&output.stderr);
-    if uac_was_cancelled(&detail) {
-        return Err(Error::PrivilegeDenied);
-    }
-    Err(Error::PrivilegedWriteFailed(if detail.trim().is_empty() {
-        format!("Windows helper exited with {}", output.status)
+    let fallback = if uac_was_cancelled(&detail) {
+        Error::PrivilegeDenied
+    } else if detail.trim().is_empty() {
+        Error::PrivilegedWriteFailed(format!("Windows helper exited with {}", output.status))
     } else {
-        detail.trim().to_owned()
-    }))
+        Error::PrivilegedWriteFailed(detail.trim().to_owned())
+    };
+    protocol.complete(output.status.success(), fallback)
 }
 
 fn authorization_token() -> Result<String> {

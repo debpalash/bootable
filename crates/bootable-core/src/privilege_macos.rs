@@ -1,19 +1,16 @@
 use std::env;
-use std::io::{BufRead, BufReader, Write};
+use std::io::BufReader;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
 use crate::error::{Error, Result, io_error};
-use crate::model::{
-    PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest, Progress, WritePlan,
-};
+use crate::model::{Progress, WritePlan};
 use crate::operation::{OperationControl, OperationState};
+use crate::privileged_protocol::run_privileged_client;
 
 const SYSTEM_HELPER: &str = "/Library/PrivilegedHelperTools/app.bootable.helper";
 
@@ -53,7 +50,7 @@ pub(crate) fn write_via_authorization(
         .spawn()
         .map_err(|error| io_error("/usr/bin/osascript", error))?;
 
-    let mut stream = loop {
+    let stream = loop {
         if control.state() == OperationState::Cancelled {
             let _ = authorization.kill();
             let _ = authorization.wait();
@@ -89,74 +86,30 @@ pub(crate) fn write_via_authorization(
         thread::sleep(Duration::from_millis(50));
     };
 
-    let request = PrivilegedWriteRequest {
-        plan: plan.clone(),
-        confirmation: confirmation.to_owned(),
-    };
-    serde_json::to_writer(&mut stream, &request).map_err(|error| {
-        Error::PrivilegedWriterUnavailable(format!("could not encode reviewed plan: {error}"))
-    })?;
-    stream
-        .write_all(b"\n")
-        .and_then(|()| stream.flush())
-        .map_err(|error| io_error("macOS privileged request channel", error))?;
-
-    let mut command_stream = stream
+    let command_stream = stream
         .try_clone()
         .map_err(|error| io_error("macOS privileged command channel", error))?;
-    let writer_control = control.clone();
-    let writer_finished = Arc::new(AtomicBool::new(false));
-    let writer_done = Arc::clone(&writer_finished);
-    let control_writer = thread::spawn(move || {
-        while !writer_done.load(Ordering::Acquire) {
-            if writer_control.state() == OperationState::Cancelled {
-                if serde_json::to_writer(&mut command_stream, &PrivilegedWriteCommand::Cancel)
-                    .is_ok()
-                {
-                    let _ = command_stream.write_all(b"\n");
-                    let _ = command_stream.flush();
-                }
-                break;
-            }
-            thread::sleep(Duration::from_millis(50));
-        }
-    });
-
-    let mut finished = false;
-    let mut failure = None;
-    for line in BufReader::new(stream).lines() {
-        let line = line.map_err(|error| io_error("macOS privileged progress channel", error))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<PrivilegedWriteEvent>(&line).map_err(|error| {
-            Error::PrivilegedWriteFailed(format!("invalid helper response: {error}"))
-        })? {
-            PrivilegedWriteEvent::Progress(update) => progress(update),
-            PrivilegedWriteEvent::Finished => finished = true,
-            PrivilegedWriteEvent::Failed { message } => failure = Some(message),
-        }
-    }
-    writer_finished.store(true, Ordering::Release);
-    let _ = control_writer.join();
+    let protocol = run_privileged_client(
+        stream,
+        command_stream,
+        plan,
+        confirmation,
+        control,
+        progress,
+        "macOS privileged channel",
+    )?;
     let output = authorization
         .wait_with_output()
         .map_err(|error| io_error("/usr/bin/osascript", error))?;
-    if let Some(message) = failure {
-        return Err(Error::PrivilegedWriteFailed(message));
-    }
-    if output.status.success() && finished {
-        return Ok(());
-    }
     let detail = String::from_utf8_lossy(&output.stderr);
-    if detail.to_ascii_lowercase().contains("user canceled") {
-        return Err(Error::PrivilegeDenied);
-    }
-    Err(Error::PrivilegedWriteFailed(if detail.trim().is_empty() {
-        format!("macOS helper exited with {}", output.status)
+    let fallback = if detail.to_ascii_lowercase().contains("user canceled") {
+        Error::PrivilegeDenied
+    } else if detail.trim().is_empty() {
+        Error::PrivilegedWriteFailed(format!("macOS helper exited with {}", output.status))
     } else {
-        detail.trim().to_owned()
-    }))
+        Error::PrivilegedWriteFailed(detail.trim().to_owned())
+    };
+    protocol.complete(output.status.success(), fallback)
 }
 
 fn validate_helper(helper: &Path) -> Result<()> {

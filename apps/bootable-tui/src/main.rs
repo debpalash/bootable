@@ -5,11 +5,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use bootable_core::{
-    BadBlockCheck, Bootable, CacheMode, CatalogFetch, CatalogState, ChecksumAlgorithm, Device,
-    DistributionBundle, DistributionDetails, DistributionSummary, DownloadJob, DownloadStatus,
-    ImageReport, IsoRelease, OperationControl, OperationState, PiCatalog, Progress, ProgressPhase,
-    ReviewReadiness, WriteOptions, WritePlan, destructive_confirmation_ready, format_bytes,
-    review_readiness,
+    BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogFetch, CatalogState,
+    ChecksumAlgorithm, Device, DiscoverySession, DiscoverySource, DistributionBundle,
+    DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
+    DownloadStatus, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog,
+    Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession, WriteCompletion,
+    WriteOptions, WritePlan, format_bytes, review_readiness,
 };
 use clap::{Args, Parser, Subcommand};
 use crossterm::event::{
@@ -544,8 +545,7 @@ struct App {
     checksum_algorithm: ChecksumAlgorithm,
     browse_directory: Option<PathBuf>,
     catalog_open: bool,
-    discovery_source: DiscoverySource,
-    quick_access: QuickAccess,
+    discovery_session: DiscoverySession,
     distributions: Vec<DistributionSummary>,
     popular_distributions: Vec<DistributionSummary>,
     distribution_directory: Vec<DistributionSummary>,
@@ -562,46 +562,30 @@ struct App {
     catalog_searching: bool,
     catalog_visible: usize,
     pi_visible: usize,
-    active_download: Option<Progress>,
-    download_control: Option<OperationControl>,
-    active_download_job: Option<String>,
-    download_jobs: Vec<DownloadJob>,
+    download_session: ManagedDownloadSession,
     downloads_open: bool,
     download_selected: usize,
     download_receiver: Option<Receiver<DownloadUpdate>>,
     catalog_sender: mpsc::Sender<CatalogUpdate>,
     catalog_receiver: Receiver<CatalogUpdate>,
-    popular_state: CatalogState,
-    directory_state: CatalogState,
-    pi_state: CatalogState,
-    arch_state: CatalogState,
-    debian_state: CatalogState,
-    details_state: CatalogState,
     catalog_focus: CatalogFocus,
     artwork_picker: Picker,
     artwork_key: Option<String>,
     artwork_protocol: Option<StatefulProtocol>,
     artwork_error: Option<String>,
-    review_plan: Option<WritePlan>,
-    confirm_modal: bool,
-    confirm_acknowledged: bool,
-    active_write: bool,
-    write_control: Option<OperationControl>,
-    write_progress: Option<Progress>,
-    write_started_at: Option<Instant>,
-    write_result: Option<std::result::Result<(), String>>,
+    write_session: ReviewedWriteSession,
     write_receiver: Option<Receiver<WriteUpdate>>,
     hit_regions: HitRegions,
 }
 
 enum DownloadUpdate {
     Progress(Progress),
-    Finished(Result<(ImageReport, PathBuf), String>),
+    Finished(DownloadCompletion),
 }
 
 enum WriteUpdate {
     Progress(Progress),
-    Finished(std::result::Result<(), String>),
+    Finished(WriteCompletion),
 }
 
 enum CatalogUpdate {
@@ -628,23 +612,6 @@ enum CatalogFocus {
     #[default]
     Distributions,
     Releases,
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum DiscoverySource {
-    #[default]
-    DistroWatch,
-    RaspberryPi,
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum QuickAccess {
-    #[default]
-    All,
-    Arch,
-    Debian,
-    Omarchy,
-    Windows,
 }
 
 #[derive(Default)]
@@ -739,8 +706,7 @@ impl App {
             checksum_algorithm: ChecksumAlgorithm::Sha256,
             browse_directory: None,
             catalog_open: true,
-            discovery_source: DiscoverySource::DistroWatch,
-            quick_access: QuickAccess::All,
+            discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
             popular_distributions: Vec::new(),
             distribution_directory: Vec::new(),
@@ -757,34 +723,18 @@ impl App {
             catalog_searching: false,
             catalog_visible: 20,
             pi_visible: 20,
-            active_download: None,
-            download_control: None,
-            active_download_job: None,
-            download_jobs: Vec::new(),
+            download_session: ManagedDownloadSession::default(),
             downloads_open: false,
             download_selected: 0,
             download_receiver: None,
             catalog_sender,
             catalog_receiver,
-            popular_state: CatalogState::Idle,
-            directory_state: CatalogState::Idle,
-            pi_state: CatalogState::Idle,
-            arch_state: CatalogState::Idle,
-            debian_state: CatalogState::Idle,
-            details_state: CatalogState::Idle,
             catalog_focus: CatalogFocus::Distributions,
             artwork_picker,
             artwork_key: None,
             artwork_protocol: None,
             artwork_error: None,
-            review_plan: None,
-            confirm_modal: false,
-            confirm_acknowledged: false,
-            active_write: false,
-            write_control: None,
-            write_progress: None,
-            write_started_at: None,
-            write_result: None,
+            write_session: ReviewedWriteSession::default(),
             write_receiver: None,
             hit_regions: HitRegions::default(),
         }
@@ -795,14 +745,12 @@ impl App {
     }
 
     fn load_distrowatch_with(&mut self, mode: CacheMode) {
-        self.discovery_source = DiscoverySource::DistroWatch;
-        self.quick_access = QuickAccess::All;
+        self.discovery_session.show_distrowatch(QuickAccess::All);
         self.catalog_focus = CatalogFocus::Distributions;
         if !self.popular_distributions.is_empty() && mode == CacheMode::PreferCache {
             self.distributions = self.popular_distributions.clone();
             self.status = "DistroWatch discovery selected".into();
-        } else if !self.popular_state.is_loading() {
-            self.popular_state = CatalogState::Loading;
+        } else if self.discovery_session.begin(CatalogFacet::Popular) {
             self.status = "Loading distributions…".into();
             let sender = self.catalog_sender.clone();
             std::thread::spawn(move || {
@@ -813,17 +761,19 @@ impl App {
             });
         }
         if (self.distribution_directory.is_empty() || mode == CacheMode::Refresh)
-            && !self.directory_state.is_loading()
+            && !self
+                .discovery_session
+                .state(CatalogFacet::Directory)
+                .is_loading()
         {
             self.load_directory(mode);
         }
     }
 
     fn load_directory(&mut self, mode: CacheMode) {
-        if self.directory_state.is_loading() {
+        if !self.discovery_session.begin(CatalogFacet::Directory) {
             return;
         }
-        self.directory_state = CatalogState::Loading;
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
             let result = Bootable::native()
@@ -838,17 +788,15 @@ impl App {
     }
 
     fn load_raspberry_pi_with(&mut self, mode: CacheMode) {
-        self.discovery_source = DiscoverySource::RaspberryPi;
-        self.quick_access = QuickAccess::All;
+        self.discovery_session.show_raspberry_pi();
         self.catalog_focus = CatalogFocus::Distributions;
         if self.pi_catalog.is_some() && mode == CacheMode::PreferCache {
             self.status = "Raspberry Pi image discovery selected".into();
             return;
         }
-        if self.pi_state.is_loading() {
+        if !self.discovery_session.begin(CatalogFacet::RaspberryPi) {
             return;
         }
-        self.pi_state = CatalogState::Loading;
         self.status = "Loading Raspberry Pi images…".into();
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
@@ -860,15 +808,14 @@ impl App {
     }
 
     fn show_quick_access(&mut self, preset: QuickAccess) {
-        self.discovery_source = DiscoverySource::DistroWatch;
-        self.quick_access = preset;
+        self.discovery_session.show_distrowatch(preset);
         self.catalog_query.clear();
         self.catalog_searching = false;
         self.catalog_visible = 20;
         self.selected_details = None;
         self.catalog_releases.clear();
         self.release_selected = 0;
-        self.details_state = CatalogState::Idle;
+        self.discovery_session.clear_details();
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
@@ -916,18 +863,13 @@ impl App {
         } else {
             "Debian"
         };
-        let already_loading = if preset == QuickAccess::Arch {
-            self.arch_state.is_loading()
+        let facet = if preset == QuickAccess::Arch {
+            CatalogFacet::Arch
         } else {
-            self.debian_state.is_loading()
+            CatalogFacet::Debian
         };
-        if already_loading {
+        if !self.discovery_session.begin(facet) {
             return;
-        }
-        if preset == QuickAccess::Arch {
-            self.arch_state = CatalogState::Loading;
-        } else {
-            self.debian_state = CatalogState::Loading;
         }
         self.status = format!("Loading {base}-based distributions…");
         let sender = self.catalog_sender.clone();
@@ -950,7 +892,7 @@ impl App {
             return;
         }
         self.catalog_open = true;
-        match self.discovery_source {
+        match self.discovery_session.source() {
             DiscoverySource::DistroWatch => self.load_distrowatch(),
             DiscoverySource::RaspberryPi => self.load_raspberry_pi(),
         }
@@ -968,7 +910,8 @@ impl App {
         self.release_selected = 0;
         self.selected_details = None;
         self.catalog_releases.clear();
-        self.details_state = CatalogState::Loading;
+        self.discovery_session
+            .expect_details(distribution.slug.clone());
         self.status = format!("Loading {} releases…", distribution.name);
         let slug = distribution.slug;
         let request_slug = slug.clone();
@@ -985,14 +928,16 @@ impl App {
     }
 
     fn retry_catalog(&mut self) {
-        if self.discovery_source == DiscoverySource::RaspberryPi {
+        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
             self.load_raspberry_pi_with(CacheMode::Refresh);
             return;
         }
-        match self.quick_access {
+        match self.discovery_session.quick_access() {
             QuickAccess::All | QuickAccess::Omarchy => {
-                if !matches!(self.details_state, CatalogState::Idle)
-                    && self.distributions.get(self.catalog_selected).is_some()
+                if !matches!(
+                    self.discovery_session.state(CatalogFacet::Details),
+                    CatalogState::Idle
+                ) && self.distributions.get(self.catalog_selected).is_some()
                 {
                     self.select_catalog_distribution_with(
                         self.catalog_selected,
@@ -1003,7 +948,7 @@ impl App {
                 }
             }
             QuickAccess::Arch | QuickAccess::Debian => {
-                self.load_quick_base(self.quick_access, CacheMode::Refresh);
+                self.load_quick_base(self.discovery_session.quick_access(), CacheMode::Refresh);
             }
             QuickAccess::Windows => {
                 self.status = "Windows tools use the selected local ISO".into();
@@ -1012,10 +957,10 @@ impl App {
     }
 
     fn desired_catalog_artwork(&self) -> Option<String> {
-        if !self.catalog_open || self.quick_access == QuickAccess::Windows {
+        if !self.catalog_open || self.discovery_session.quick_access() == QuickAccess::Windows {
             return None;
         }
-        match self.discovery_source {
+        match self.discovery_session.source() {
             DiscoverySource::DistroWatch => self
                 .selected_details
                 .as_ref()
@@ -1072,14 +1017,17 @@ impl App {
             match update {
                 CatalogUpdate::Popular(result) => match result {
                     Ok(fetch) => {
-                        self.popular_state =
-                            CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                        self.discovery_session.complete(
+                            CatalogFacet::Popular,
+                            &fetch,
+                            fetch.value.is_empty(),
+                        );
                         let source = fetch.status_suffix();
                         let distributions = fetch.value;
                         let count = distributions.len();
                         self.popular_distributions = distributions.clone();
-                        if self.discovery_source == DiscoverySource::DistroWatch
-                            && self.quick_access == QuickAccess::All
+                        if self.discovery_session.source() == DiscoverySource::DistroWatch
+                            && self.discovery_session.quick_access() == QuickAccess::All
                             && self.catalog_query.is_empty()
                         {
                             self.distributions = distributions;
@@ -1091,14 +1039,21 @@ impl App {
                         }
                     }
                     Err(error) => {
-                        self.popular_state = CatalogState::Failed(error.clone());
-                        self.status = self.popular_state.short_label("distributions");
+                        self.discovery_session
+                            .fail(CatalogFacet::Popular, error.clone());
+                        self.status = self
+                            .discovery_session
+                            .state(CatalogFacet::Popular)
+                            .short_label("distributions");
                     }
                 },
                 CatalogUpdate::Directory(result) => match result {
                     Ok(fetch) => {
-                        self.directory_state =
-                            CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                        self.discovery_session.complete(
+                            CatalogFacet::Directory,
+                            &fetch,
+                            fetch.value.is_empty(),
+                        );
                         let directory = fetch.value;
                         self.distribution_directory = directory.clone();
                         if !self.catalog_query.is_empty() {
@@ -1108,31 +1063,46 @@ impl App {
                         }
                     }
                     Err(error) => {
-                        self.directory_state = CatalogState::Failed(error.clone());
+                        self.discovery_session
+                            .fail(CatalogFacet::Directory, error.clone());
                         if !self.catalog_query.is_empty() {
-                            self.status = self.directory_state.short_label("search catalog");
+                            self.status = self
+                                .discovery_session
+                                .state(CatalogFacet::Directory)
+                                .short_label("search catalog");
                         }
                     }
                 },
                 CatalogUpdate::RaspberryPi(result) => match result {
                     Ok(fetch) => {
-                        self.pi_state =
-                            CatalogState::from_fetch(&fetch, fetch.value.images.is_empty());
+                        self.discovery_session.complete(
+                            CatalogFacet::RaspberryPi,
+                            &fetch,
+                            fetch.value.images.is_empty(),
+                        );
                         let source = fetch.status_suffix();
                         let catalog = fetch.value;
                         let count = catalog.images.len();
                         self.pi_catalog = Some(catalog);
                         self.pi_device_selected = 0;
                         self.pi_image_selected = 0;
-                        if self.discovery_source == DiscoverySource::RaspberryPi {
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
                             self.status = format!("{count} Raspberry Pi images · {source}");
                         }
                     }
-                    Err(error) if self.discovery_source == DiscoverySource::RaspberryPi => {
-                        self.pi_state = CatalogState::Failed(error);
-                        self.status = self.pi_state.short_label("Raspberry Pi images");
+                    Err(error)
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi =>
+                    {
+                        self.discovery_session
+                            .fail(CatalogFacet::RaspberryPi, error);
+                        self.status = self
+                            .discovery_session
+                            .state(CatalogFacet::RaspberryPi)
+                            .short_label("Raspberry Pi images");
                     }
-                    Err(error) => self.pi_state = CatalogState::Failed(error),
+                    Err(error) => self
+                        .discovery_session
+                        .fail(CatalogFacet::RaspberryPi, error),
                 },
                 CatalogUpdate::QuickBase {
                     preset,
@@ -1140,47 +1110,53 @@ impl App {
                     result,
                 } => match result {
                     Ok(fetch) => {
-                        let state = CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                        let facet = if preset == QuickAccess::Arch {
+                            CatalogFacet::Arch
+                        } else {
+                            CatalogFacet::Debian
+                        };
+                        self.discovery_session
+                            .complete(facet, &fetch, fetch.value.is_empty());
                         let source = fetch.status_suffix();
                         let distributions = fetch.value;
                         let count = distributions.len();
                         if preset == QuickAccess::Arch {
                             self.arch_distributions = distributions.clone();
-                            self.arch_state = state;
                         } else {
                             self.debian_distributions = distributions.clone();
-                            self.debian_state = state;
                         }
-                        if self.quick_access == preset {
+                        if self.discovery_session.quick_access() == preset {
                             self.distributions = distributions;
                             self.catalog_selected = 0;
                             self.status = format!("{count} {base}-based distributions · {source}");
                         }
                     }
                     Err(error) => {
-                        if preset == QuickAccess::Arch {
-                            self.arch_state = CatalogState::Failed(error.clone());
+                        let facet = if preset == QuickAccess::Arch {
+                            CatalogFacet::Arch
                         } else {
-                            self.debian_state = CatalogState::Failed(error.clone());
-                        }
-                        if self.quick_access == preset {
-                            self.status = CatalogState::Failed(error)
+                            CatalogFacet::Debian
+                        };
+                        self.discovery_session.fail(facet, error);
+                        if self.discovery_session.quick_access() == preset {
+                            self.status = self
+                                .discovery_session
+                                .state(facet)
                                 .short_label(&format!("{base}-based distributions"));
                         }
                     }
                 },
                 CatalogUpdate::Distribution { slug, result } => {
-                    let selected_slug = self
-                        .distributions
-                        .get(self.catalog_selected)
-                        .map(|distribution| distribution.slug.as_str());
-                    if !is_current_catalog_selection(selected_slug, &slug) {
+                    if !self.discovery_session.accepts_details(&slug) {
                         continue;
                     }
                     match *result {
                         Ok(fetch) => {
-                            self.details_state =
-                                CatalogState::from_fetch(&fetch, fetch.value.releases.is_empty());
+                            self.discovery_session.complete(
+                                CatalogFacet::Details,
+                                &fetch,
+                                fetch.value.releases.is_empty(),
+                            );
                             let source = fetch.status_suffix();
                             let DistributionBundle {
                                 details,
@@ -1209,8 +1185,11 @@ impl App {
                             };
                         }
                         Err(error) => {
-                            self.details_state = CatalogState::Failed(error);
-                            self.status = self.details_state.short_label("ISO releases");
+                            self.discovery_session.fail(CatalogFacet::Details, error);
+                            self.status = self
+                                .discovery_session
+                                .state(CatalogFacet::Details)
+                                .short_label("ISO releases");
                         }
                     }
                 }
@@ -1238,12 +1217,9 @@ impl App {
     }
 
     fn refresh_download_jobs(&mut self) {
-        match self.engine.download_jobs() {
+        match self.download_session.refresh(&self.engine) {
             Ok(jobs) => {
-                self.download_jobs = jobs;
-                self.download_selected = self
-                    .download_selected
-                    .min(self.download_jobs.len().saturating_sub(1));
+                self.download_selected = self.download_selected.min(jobs.len().saturating_sub(1));
             }
             Err(error) => self.status = format!("Download history unavailable · {error}"),
         }
@@ -1253,25 +1229,35 @@ impl App {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs();
-            self.status = format!("{} managed download job(s)", self.download_jobs.len());
+            self.status = format!(
+                "{} managed download job(s)",
+                self.download_session.jobs().len()
+            );
         }
     }
 
     fn launch_download_job(&mut self, id: String, destination: PathBuf, retry: bool) {
-        if self.download_receiver.is_some() {
+        let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
+        else {
             self.status = "Download queued · it starts when the active job finishes".into();
             self.refresh_download_jobs();
             return;
-        }
-        let control = OperationControl::new();
-        self.download_control = Some(control.clone());
-        self.active_download_job = Some(id.clone());
-        self.active_download = None;
-        self.status = if retry {
+        };
+        self.launch_download_worker(launch);
+    }
+
+    fn launch_download_worker(&mut self, launch: DownloadLaunch) {
+        self.status = if launch.retry {
             "Retrying download · preserved bytes resume when supported".into()
         } else {
             "Starting managed download…".into()
         };
+        let DownloadLaunch {
+            id,
+            destination,
+            retry,
+            control,
+        } = launch;
         let completed_destination = destination;
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
@@ -1286,75 +1272,63 @@ impl App {
                     let _ = progress_sender.send(DownloadUpdate::Progress(progress));
                 })
             }
-            .map(|report| (report, completed_destination))
-            .map_err(|error| error.to_string());
-            let _ = sender.send(DownloadUpdate::Finished(result));
+            .map(|report| (report, completed_destination));
+            let _ = sender.send(DownloadUpdate::Finished(DownloadCompletion::from_result(
+                result,
+            )));
         });
         self.download_receiver = Some(receiver);
     }
 
     fn retry_selected_download(&mut self) {
-        let Some(job) = self.download_jobs.get(self.download_selected) else {
+        let Some(job) = self.download_session.jobs().get(self.download_selected) else {
             self.status = "Choose a download job first".into();
             return;
         };
-        if !job.status.can_retry() {
-            self.status = format!("{} cannot be retried while it is {}", job.label, job.status);
-            return;
-        }
         let id = job.id.clone();
-        let destination = job.destination.clone();
-        if self.download_receiver.is_some() {
-            match self.engine.queue_download_retry(&id) {
-                Ok(()) => {
-                    self.status = "Retry queued · it starts after the active download".into();
-                    self.refresh_download_jobs();
-                }
-                Err(error) => self.status = error.to_string(),
+        match self.download_session.retry(&self.engine, &id) {
+            Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch),
+            Ok(DownloadRequest::Queued) => {
+                self.status = "Retry queued · it starts after the active download".into()
             }
-        } else {
-            self.launch_download_job(id, destination, true);
+            Err(error) => self.status = error.to_string(),
         }
     }
 
     fn start_next_queued_download(&mut self) {
-        if self.download_receiver.is_some() {
-            return;
-        }
-        match self.engine.next_queued_download() {
-            Ok(Some(job)) => self.launch_download_job(job.id, job.destination, false),
+        match self.download_session.next_queued(&self.engine) {
+            Ok(Some(launch)) => self.launch_download_worker(launch),
             Ok(None) => {}
             Err(error) => self.status = format!("Could not start queued download · {error}"),
         }
     }
 
     fn use_selected_download(&mut self) {
-        let Some(job) = self.download_jobs.get(self.download_selected) else {
+        let Some(job) = self.download_session.jobs().get(self.download_selected) else {
             self.status = "Choose a download job first".into();
             return;
         };
-        if job.status != DownloadStatus::Completed {
-            self.status = "Only completed downloads can be selected".into();
-            return;
-        }
-        match self.engine.inspect_image(&job.destination) {
+        let id = job.id.clone();
+        let destination = job.destination.clone();
+        match self.download_session.use_completed(&self.engine, &id) {
             Ok(report) => {
-                self.browse_directory = job.destination.parent().map(PathBuf::from);
+                self.browse_directory = destination.parent().map(PathBuf::from);
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", job.destination.display());
+                self.status = format!("Using completed download {}", destination.display());
             }
             Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
         }
     }
 
     fn remove_selected_download(&mut self) {
-        let Some(job) = self.download_jobs.get(self.download_selected) else {
+        let Some(job) = self.download_session.jobs().get(self.download_selected) else {
             self.status = "Choose a download job first".into();
             return;
         };
-        match self.engine.remove_download_job(&job.id) {
+        let id = job.id.clone();
+        match self.download_session.remove(&self.engine, &id) {
             Ok(()) => {
                 self.status = "History entry removed · completed image kept".into();
                 self.refresh_download_jobs();
@@ -1370,8 +1344,8 @@ impl App {
                 self.download_selected = self.download_selected.saturating_sub(1);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.download_selected =
-                    (self.download_selected + 1).min(self.download_jobs.len().saturating_sub(1));
+                self.download_selected = (self.download_selected + 1)
+                    .min(self.download_session.jobs().len().saturating_sub(1));
             }
             KeyCode::Char('r') => self.retry_selected_download(),
             KeyCode::Enter | KeyCode::Char('u') => self.use_selected_download(),
@@ -1449,28 +1423,31 @@ impl App {
             match update {
                 DownloadUpdate::Progress(progress) => {
                     self.status = progress.message.clone();
-                    self.active_download = Some(progress);
+                    self.download_session.apply_progress(progress);
                 }
-                DownloadUpdate::Finished(result) => {
-                    self.active_download = None;
-                    self.download_control = None;
-                    self.active_download_job = None;
+                DownloadUpdate::Finished(completion) => {
                     finished = true;
-                    match result {
-                        Ok((report, destination)) => {
+                    match &completion {
+                        DownloadCompletion::Ready {
+                            report,
+                            destination,
+                        } => {
                             self.browse_directory = destination.parent().map(PathBuf::from);
                             self.status = format!(
                                 "Ready · downloaded, verified, and inspected {} · discovery remains open",
                                 report.path.display()
                             );
-                            self.image = Some(report);
+                            self.image = Some(report.clone());
                             self.advanced = false;
                         }
-                        Err(error) if error.contains("cancelled safely") => {
+                        DownloadCompletion::Cancelled => {
                             self.status = "Download cancelled • temporary data cleaned up".into();
                         }
-                        Err(error) => self.status = format!("Download stopped · {error}"),
+                        DownloadCompletion::Failed(error) => {
+                            self.status = format!("Download stopped · {error}")
+                        }
                     }
+                    self.download_session.finish(completion);
                     self.refresh_download_jobs();
                     self.start_next_queued_download();
                 }
@@ -1482,38 +1459,24 @@ impl App {
     }
 
     fn toggle_download_pause(&mut self) {
-        let Some(control) = &self.download_control else {
-            return;
-        };
-        match control.state() {
-            OperationState::Running => {
-                control.pause();
-                if let Some(id) = self.active_download_job.as_deref() {
-                    let _ = self.engine.set_download_paused(id, true);
-                }
+        match self.download_session.toggle_pause(&self.engine) {
+            Ok(Some(OperationState::Paused)) => {
                 self.status = "Download paused • press p to resume or x to cancel".into();
             }
-            OperationState::Paused => {
-                control.resume();
-                if let Some(id) = self.active_download_job.as_deref() {
-                    let _ = self.engine.set_download_paused(id, false);
-                }
-                self.status = "Download resumed".into();
-            }
-            OperationState::Cancelled => {}
+            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Cancelled) | None) => {}
+            Err(error) => self.status = error.to_string(),
         }
     }
 
     fn cancel_download(&mut self) {
-        let Some(control) = &self.download_control else {
-            return;
-        };
-        control.cancel();
-        self.status = "Cancelling download safely • cleaning temporary data…".into();
+        if self.download_session.cancel() {
+            self.status = "Cancelling download safely • cleaning temporary data…".into();
+        }
     }
 
     fn handle_catalog_key(&mut self, code: KeyCode) {
-        if self.quick_access == QuickAccess::Windows {
+        if self.discovery_session.quick_access() == QuickAccess::Windows {
             match code {
                 KeyCode::Esc | KeyCode::Char('g') => self.toggle_catalog(),
                 KeyCode::Char('o') | KeyCode::Enter => self.choose_image(),
@@ -1569,7 +1532,7 @@ impl App {
             return;
         }
         if code == KeyCode::Char('b')
-            && self.discovery_source == DiscoverySource::DistroWatch
+            && self.discovery_session.source() == DiscoverySource::DistroWatch
             && self.catalog_releases.is_empty()
         {
             self.open_selected_distrowatch_page();
@@ -1599,7 +1562,7 @@ impl App {
             self.load_raspberry_pi();
             return;
         }
-        if self.discovery_source == DiscoverySource::RaspberryPi {
+        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
             self.handle_pi_catalog_key(code);
             return;
         }
@@ -1786,13 +1749,12 @@ impl App {
         self.catalog_visible = 20;
         self.pi_visible = 20;
         if !self.catalog_query.is_empty() {
-            self.quick_access = QuickAccess::All;
-            self.discovery_source = DiscoverySource::DistroWatch;
+            self.discovery_session.show_distrowatch(QuickAccess::All);
         }
         self.selected_details = None;
         self.catalog_releases.clear();
         self.release_selected = 0;
-        self.details_state = CatalogState::Idle;
+        self.discovery_session.clear_details();
         self.distributions = if self.catalog_query.is_empty() {
             self.popular_distributions.clone()
         } else {
@@ -1888,7 +1850,7 @@ impl App {
     }
 
     fn refresh(&mut self, manual: bool) {
-        if self.active_write {
+        if self.write_session.active() {
             if manual {
                 self.status =
                     "Drive refresh is paused while writing • do not unplug the target".into();
@@ -1943,17 +1905,11 @@ impl App {
             Ok(plan) => {
                 self.catalog_open = false;
                 self.status = "Reviewing the write plan • nothing has been written".into();
-                self.review_plan = Some(plan);
-                self.confirm_modal = false;
-                self.confirm_acknowledged = false;
-                self.active_write = false;
-                self.write_progress = None;
-                self.write_started_at = None;
-                self.write_result = None;
+                self.write_session.open(plan);
                 self.write_receiver = None;
             }
             Err(error) => {
-                self.review_plan = None;
+                self.write_session.close();
                 self.status = error.to_string();
             }
         }
@@ -1964,79 +1920,47 @@ impl App {
     }
 
     fn close_review(&mut self) {
-        if self.active_write {
+        if !self.write_session.close() {
             self.status = "Writing is active • do not close the app or unplug the target".into();
             return;
         }
-        self.review_plan = None;
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
-        self.write_progress = None;
-        self.write_started_at = None;
-        self.write_result = None;
         self.status = self.review_readiness().guidance().into();
     }
 
     fn open_write_confirmation(&mut self) {
-        if self.active_write || matches!(self.write_result, Some(Ok(()))) {
-            return;
+        if self.write_session.open_confirmation() {
+            self.status = "Review the target changes and consequences before writing".into();
         }
-        self.confirm_modal = true;
-        self.confirm_acknowledged = false;
-        self.status = "Review the target changes and consequences before writing".into();
     }
 
     fn close_write_confirmation(&mut self) {
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
+        self.write_session.close_confirmation();
         self.status = "Write cancelled before erasure • the target is unchanged".into();
     }
 
     fn start_write(&mut self) {
-        if self.active_write || matches!(self.write_result, Some(Ok(()))) {
-            return;
-        }
-        let Some(plan) = self.review_plan.clone() else {
-            self.status = "Review the write plan before writing".into();
-            return;
+        let launch = match self.write_session.begin() {
+            Ok(launch) => launch,
+            Err(message) => {
+                self.status = message.into();
+                return;
+            }
         };
-        if !self.confirm_modal
-            || !destructive_confirmation_ready(
-                self.confirm_acknowledged,
-                self.active_write,
-                matches!(self.write_result, Some(Ok(()))),
-            )
-        {
-            self.status = "Acknowledge the consequences before confirming the write".into();
-            return;
-        }
-
-        let control = OperationControl::new();
-        self.active_write = true;
-        self.write_control = Some(control.clone());
-        self.write_progress = Some(Progress {
-            phase: ProgressPhase::Preparing,
-            completed: 0,
-            total: Some(plan.image.size),
-            message: "Waiting for administrator authentication, then revalidating the target"
-                .into(),
-        });
-        self.write_started_at = Some(Instant::now());
-        self.write_result = None;
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
         self.status = "Write started • do not unplug the target".into();
 
-        let confirmation = plan.confirmation_phrase.clone();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             let progress_sender = sender.clone();
-            let result = Bootable::native()
-                .write_with_privilege_controlled(&plan, &confirmation, &control, move |progress| {
-                    let _ = progress_sender.send(WriteUpdate::Progress(progress));
-                })
-                .map_err(|error| error.to_string());
-            let _ = sender.send(WriteUpdate::Finished(result));
+            let completion =
+                WriteCompletion::from_result(Bootable::native().write_with_privilege_controlled(
+                    &launch.plan,
+                    &launch.confirmation,
+                    &launch.control,
+                    move |progress| {
+                        let _ = progress_sender.send(WriteUpdate::Progress(progress));
+                    },
+                ));
+            let _ = sender.send(WriteUpdate::Finished(completion));
         });
         self.write_receiver = Some(receiver);
     }
@@ -2049,32 +1973,11 @@ impl App {
         while let Ok(update) = receiver.try_recv() {
             match update {
                 WriteUpdate::Progress(progress) => {
-                    self.status = format!("{} • {}", progress.phase, progress.message);
-                    self.write_progress = Some(progress);
+                    self.status = self.write_session.apply_progress(progress);
                 }
-                WriteUpdate::Finished(result) => {
+                WriteUpdate::Finished(completion) => {
                     finished = true;
-                    self.active_write = false;
-                    self.write_control = None;
-                    if result.is_err() {
-                        self.write_progress = None;
-                        self.write_started_at = None;
-                    }
-                    self.write_result = Some(result.clone());
-                    self.status = match result {
-                        Ok(()) => {
-                            "Complete • image written and verified • target can be safely removed"
-                                .into()
-                        }
-                        Err(error) if error.contains("authentication") => {
-                            format!("Write cancelled before erasure • {error}")
-                        }
-                        Err(error) if error.contains("cancelled safely") => {
-                            "Write stopped safely • media is incomplete and must be rewritten before use"
-                                .into()
-                        }
-                        Err(error) => format!("Write failed • {error}"),
-                    };
+                    self.status = self.write_session.finish(completion);
                 }
             }
         }
@@ -2084,12 +1987,10 @@ impl App {
     }
 
     fn cancel_write(&mut self) {
-        let Some(control) = &self.write_control else {
-            return;
-        };
-        control.cancel();
-        self.status =
-            "Stopping safely • flushing completed writes; media will remain incomplete".into();
+        if self.write_session.cancel() {
+            self.status =
+                "Stopping safely • flushing completed writes; media will remain incomplete".into();
+        }
     }
 
     fn toggle_windows_requirements(&mut self) {
@@ -2383,11 +2284,11 @@ impl App {
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
-        if self.confirm_modal {
+        if self.write_session.confirmation_open() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let point = (mouse.column, mouse.row);
                 if contains(self.hit_regions.confirm_acknowledge, point) {
-                    self.confirm_acknowledged = !self.confirm_acknowledged;
+                    self.write_session.toggle_acknowledged();
                 } else if contains(self.hit_regions.confirm_cancel, point) {
                     self.close_write_confirmation();
                 } else if contains(self.hit_regions.confirm_write, point) {
@@ -2396,19 +2297,19 @@ impl App {
             }
             return false;
         }
-        if self.review_plan.is_some() {
+        if self.write_session.is_reviewing() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let point = (mouse.column, mouse.row);
                 if contains(self.hit_regions.review_back, point) {
                     self.close_review();
                 } else if contains(self.hit_regions.review_write, point) {
-                    if self.active_write {
+                    if self.write_session.active() {
                         self.cancel_write();
                     } else {
                         self.open_write_confirmation();
                     }
                 } else if contains(self.hit_regions.quit, point) {
-                    if self.active_write {
+                    if self.write_session.active() {
                         self.status =
                             "Writing is active • do not close the app or unplug the target".into();
                     } else {
@@ -2432,7 +2333,7 @@ impl App {
                 }
                 MouseEventKind::ScrollDown => {
                     self.download_selected = (self.download_selected + 1)
-                        .min(self.download_jobs.len().saturating_sub(1));
+                        .min(self.download_session.jobs().len().saturating_sub(1));
                 }
                 MouseEventKind::Down(MouseButton::Left) => {
                     let point = (mouse.column, mouse.row);
@@ -2459,14 +2360,14 @@ impl App {
             match mouse.kind {
                 MouseEventKind::ScrollUp => match self.catalog_focus {
                     CatalogFocus::Distributions => {
-                        if self.discovery_source == DiscoverySource::RaspberryPi {
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
                             self.pi_device_selected = self.pi_device_selected.saturating_sub(1);
                         } else {
                             self.move_distribution(-1);
                         }
                     }
                     CatalogFocus::Releases => {
-                        if self.discovery_source == DiscoverySource::RaspberryPi {
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
                             self.move_pi_image(-1);
                         } else {
                             self.release_selected = self.release_selected.saturating_sub(1);
@@ -2475,7 +2376,7 @@ impl App {
                 },
                 MouseEventKind::ScrollDown => match self.catalog_focus {
                     CatalogFocus::Distributions => {
-                        if self.discovery_source == DiscoverySource::RaspberryPi {
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
                             let count = self
                                 .pi_catalog
                                 .as_ref()
@@ -2488,7 +2389,7 @@ impl App {
                         }
                     }
                     CatalogFocus::Releases => {
-                        if self.discovery_source == DiscoverySource::RaspberryPi {
+                        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
                             self.move_pi_image(1);
                         } else {
                             self.release_selected = (self.release_selected + 1)
@@ -2508,7 +2409,7 @@ impl App {
                         self.toggle_catalog();
                     } else if contains(self.hit_regions.catalog_retry, point) {
                         self.retry_catalog();
-                    } else if self.quick_access != QuickAccess::Windows
+                    } else if self.discovery_session.quick_access() != QuickAccess::Windows
                         && contains(self.hit_regions.catalog_search, point)
                     {
                         self.catalog_searching = true;
@@ -2526,10 +2427,10 @@ impl App {
                     } else if contains(self.hit_regions.source_raspberry_pi, point) {
                         self.load_raspberry_pi();
                     } else if contains(self.hit_regions.catalog_download, point) {
-                        if self.quick_access == QuickAccess::Windows {
+                        if self.discovery_session.quick_access() == QuickAccess::Windows {
                             self.choose_image();
                         } else {
-                            match self.discovery_source {
+                            match self.discovery_session.source() {
                                 DiscoverySource::DistroWatch
                                     if self.catalog_releases.is_empty() =>
                                 {
@@ -2654,7 +2555,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
         if event::poll(Duration::from_millis(250))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    if app.download_control.is_some() {
+                    if app.download_session.is_active() {
                         match key.code {
                             KeyCode::Char('p') => {
                                 app.toggle_download_pause();
@@ -2667,14 +2568,16 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                             _ => {}
                         }
                     }
-                    if app.review_plan.is_some() {
-                        if app.confirm_modal {
+                    if app.write_session.is_reviewing() {
+                        if app.write_session.confirmation_open() {
                             match key.code {
                                 KeyCode::Esc => app.close_write_confirmation(),
                                 KeyCode::Char(' ') => {
-                                    app.confirm_acknowledged = !app.confirm_acknowledged;
+                                    app.write_session.toggle_acknowledged();
                                 }
-                                KeyCode::Enter if app.confirm_acknowledged => app.start_write(),
+                                KeyCode::Enter if app.write_session.acknowledged() => {
+                                    app.start_write()
+                                }
                                 KeyCode::Enter => {
                                     app.status =
                                         "Acknowledge the consequences before confirming the write"
@@ -2687,21 +2590,21 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                         match key.code {
                             KeyCode::Char('q' | 'c')
                                 if key.modifiers.contains(KeyModifiers::CONTROL)
-                                    && !app.active_write =>
+                                    && !app.write_session.active() =>
                             {
                                 return Ok(());
                             }
-                            KeyCode::Esc if !app.active_write => app.close_review(),
-                            KeyCode::Char('x' | 'c') if app.active_write => {
+                            KeyCode::Esc if !app.write_session.active() => app.close_review(),
+                            KeyCode::Char('x' | 'c') if app.write_session.active() => {
                                 app.cancel_write();
                             }
                             KeyCode::Enter
-                                if !app.active_write
-                                    && !matches!(app.write_result, Some(Ok(()))) =>
+                                if !app.write_session.active()
+                                    && !app.write_session.succeeded() =>
                             {
                                 app.open_write_confirmation();
                             }
-                            _ if app.active_write => {
+                            _ if app.write_session.active() => {
                                 app.status = "Writing is active • press x to stop safely; do not unplug the target".into();
                             }
                             _ => {}
@@ -2774,7 +2677,7 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         draw_terminal_too_small(frame, canvas);
         return;
     }
-    if app.review_plan.is_some() {
+    if app.write_session.is_reviewing() {
         draw_review(frame, app, canvas);
         return;
     }
@@ -2835,15 +2738,15 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
 }
 
 fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let Some(plan) = app.review_plan.as_ref() else {
+    let Some(plan) = app.write_session.plan() else {
         return;
     };
     let compact = area.height < 30;
     let show_steps = !compact;
-    let show_result = app.write_result.is_some();
-    let show_progress = app.write_progress.is_some() && (!compact || !show_result);
-    let show_confirmation = !compact || (!app.active_write && !show_result);
-    let write_succeeded = matches!(app.write_result, Some(Ok(())));
+    let show_result = app.write_session.completion().is_some();
+    let show_progress = app.write_session.progress().is_some() && (!compact || !show_result);
+    let show_confirmation = !compact || (!app.write_session.active() && !show_result);
+    let write_succeeded = app.write_session.succeeded();
     let source = format!(
         "{} • {} • {}",
         plan.image.path.display(),
@@ -2902,7 +2805,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         Paragraph::new(brand_lockup(
             area.width >= 60,
             "Review write plan",
-            if app.active_write {
+            if app.write_session.active() {
                 "Writing and verification are active • do not unplug the target."
             } else {
                 "Nothing is written until the consequences are reviewed and acknowledged."
@@ -2959,9 +2862,10 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         );
         row += 1;
     }
-    if let Some(progress) = app.write_progress.as_ref() {
+    if let Some(progress) = app.write_session.progress() {
         let elapsed = app
-            .write_started_at
+            .write_session
+            .started_at()
             .map(|started| started.elapsed())
             .unwrap_or_default();
         let progress_title = format!(" {} · {} ", progress.phase, progress.message);
@@ -2983,14 +2887,25 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         );
         row += 1;
     }
-    if let Some(result) = app.write_result.as_ref() {
-        let (title, message, color) = match result {
-            Ok(()) => (
+    if let Some(completion) = app.write_session.completion() {
+        let (title, message, color) = match completion {
+            WriteCompletion::Succeeded => (
                 " Write complete ",
-                "Image written and verified. The removable drive can now be safely removed.",
+                "Image written and verified. The removable drive can now be safely removed."
+                    .to_string(),
                 ACCENT,
             ),
-            Err(error) => (" Write stopped safely ", error.as_str(), Color::LightRed),
+            WriteCompletion::AuthenticationDenied => (
+                " Write cancelled before erasure ",
+                "Administrator authentication was cancelled or denied.".into(),
+                Color::Yellow,
+            ),
+            WriteCompletion::Cancelled => (
+                " Write stopped safely ",
+                "The media is incomplete and must be rewritten before use.".into(),
+                Color::LightRed,
+            ),
+            WriteCompletion::Failed(error) => (" Write failed ", error.clone(), Color::LightRed),
         };
         frame.render_widget(
             Paragraph::new(message)
@@ -3008,17 +2923,17 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     ])
     .spacing(1)
     .split(rows[row]);
-    if app.active_write {
+    if app.write_session.active() {
         render_disabled_button(frame, actions[0], "←  Back locked");
     } else {
         render_button(frame, actions[0], "←  Back to selection", false);
     }
     let write_enabled = !write_succeeded;
-    let write_label = if app.active_write {
+    let write_label = if app.write_session.active() {
         "■  Stop safely"
     } else if write_succeeded {
         "✓  Written & verified"
-    } else if app.write_result.is_some() {
+    } else if app.write_session.completion().is_some() {
         "!  Review & retry"
     } else {
         "!  Review consequences"
@@ -3028,21 +2943,21 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     } else {
         render_disabled_button(frame, actions[1], write_label);
     }
-    if app.active_write {
+    if app.write_session.active() {
         render_disabled_button(frame, actions[2], "×  Quit locked");
     } else {
         render_button(frame, actions[2], "×  Quit", false);
     }
-    app.hit_regions.review_back = (!app.active_write).then_some(actions[0]);
+    app.hit_regions.review_back = (!app.write_session.active()).then_some(actions[0]);
     app.hit_regions.review_write = write_enabled.then_some(actions[1]);
-    app.hit_regions.quit = (!app.active_write).then_some(actions[2]);
-    if app.confirm_modal {
+    app.hit_regions.quit = (!app.write_session.active()).then_some(actions[2]);
+    if app.write_session.confirmation_open() {
         draw_write_confirmation_modal(frame, app, area);
     }
 }
 
 fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let Some(plan) = app.review_plan.as_ref() else {
+    let Some(plan) = app.write_session.plan() else {
         return;
     };
     let width = area.width.saturating_sub(4).min(100);
@@ -3177,14 +3092,14 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
     }
     let acknowledgment_row = if compact { rows[2] } else { rows[3] };
     let actions_row = if compact { rows[3] } else { rows[4] };
-    let acknowledgment = if app.confirm_acknowledged {
+    let acknowledgment = if app.write_session.acknowledged() {
         "■ I checked the physical target and understand its existing data will be permanently erased."
     } else {
         "□ I checked the physical target and understand its existing data will be permanently erased."
     };
     frame.render_widget(
         Paragraph::new(acknowledgment)
-            .style(Style::default().fg(if app.confirm_acknowledged {
+            .style(Style::default().fg(if app.write_session.acknowledged() {
                 ACCENT
             } else {
                 Color::White
@@ -3197,11 +3112,7 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         .spacing(1)
         .split(actions_row);
     render_button(frame, actions[0], "←  Cancel · target unchanged", false);
-    let confirm_ready = destructive_confirmation_ready(
-        app.confirm_acknowledged,
-        app.active_write,
-        matches!(app.write_result, Some(Ok(()))),
-    );
+    let confirm_ready = app.write_session.can_confirm();
     if confirm_ready {
         render_danger_button(frame, actions[1], "!  Confirm erase & write");
     } else {
@@ -3393,13 +3304,14 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     ])
     .spacing(1)
     .split(area);
-    let items = if app.download_jobs.is_empty() {
+    let items = if app.download_session.jobs().is_empty() {
         vec![
             ListItem::new("No managed downloads yet · choose an image from Discover to begin")
                 .style(Style::default().fg(MUTED)),
         ]
     } else {
-        app.download_jobs
+        app.download_session
+            .jobs()
             .iter()
             .map(|job| {
                 let progress = job
@@ -3423,7 +3335,7 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
             .collect::<Vec<_>>()
     };
     let mut state = ListState::default()
-        .with_selected((!app.download_jobs.is_empty()).then_some(app.download_selected));
+        .with_selected((!app.download_session.jobs().is_empty()).then_some(app.download_selected));
     frame.render_stateful_widget(
         List::new(items)
             .block(panel_block(
@@ -3439,7 +3351,11 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
         rows[0],
         &mut state,
     );
-    let details = app.download_jobs.get(app.download_selected).map_or_else(
+    let details = app
+        .download_session
+        .jobs()
+        .get(app.download_selected)
+        .map_or_else(
         || "Interrupted transfers retain only owned partial files; explicit cancellation removes them.".into(),
         |job| {
             format!(
@@ -3464,7 +3380,7 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     ])
     .spacing(1)
     .split(rows[2]);
-    let selected = app.download_jobs.get(app.download_selected);
+    let selected = app.download_session.jobs().get(app.download_selected);
     let can_retry = selected.is_some_and(|job| job.status.can_retry());
     let can_use = selected.is_some_and(|job| job.status == DownloadStatus::Completed);
     let can_remove = selected
@@ -3484,7 +3400,7 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     } else {
         render_disabled_button(frame, actions[2], "×  Remove entry");
     }
-    app.hit_regions.download_rows = catalog_row_regions(rows[0], app.download_jobs.len());
+    app.hit_regions.download_rows = catalog_row_regions(rows[0], app.download_session.jobs().len());
     app.hit_regions.download_retry = can_retry.then_some(actions[0]);
     app.hit_regions.download_use = can_use.then_some(actions[1]);
     app.hit_regions.download_remove = can_remove.then_some(actions[2]);
@@ -3555,38 +3471,38 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         frame,
         sources[0],
         "1  All",
-        app.quick_access == QuickAccess::All
-            && app.discovery_source == DiscoverySource::DistroWatch,
+        app.discovery_session.quick_access() == QuickAccess::All
+            && app.discovery_session.source() == DiscoverySource::DistroWatch,
     );
     render_button(
         frame,
         sources[1],
         "2  Arch",
-        app.quick_access == QuickAccess::Arch,
+        app.discovery_session.quick_access() == QuickAccess::Arch,
     );
     render_button(
         frame,
         sources[2],
         "3  Debian",
-        app.quick_access == QuickAccess::Debian,
+        app.discovery_session.quick_access() == QuickAccess::Debian,
     );
     render_button(
         frame,
         sources[3],
         "4  Omarchy",
-        app.quick_access == QuickAccess::Omarchy,
+        app.discovery_session.quick_access() == QuickAccess::Omarchy,
     );
     render_button(
         frame,
         sources[4],
         "5  Windows",
-        app.quick_access == QuickAccess::Windows,
+        app.discovery_session.quick_access() == QuickAccess::Windows,
     );
     render_button(
         frame,
         sources[5],
         "6  Raspberry Pi",
-        app.discovery_source == DiscoverySource::RaspberryPi,
+        app.discovery_session.source() == DiscoverySource::RaspberryPi,
     );
     app.hit_regions.source_distrowatch = Some(sources[0]);
     app.hit_regions.source_arch = Some(sources[1]);
@@ -3600,7 +3516,7 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     } else {
         Style::default().fg(MUTED)
     };
-    let search_value = if app.quick_access == QuickAccess::Windows {
+    let search_value = if app.discovery_session.quick_access() == QuickAccess::Windows {
         "Windows installer workflow · select an ISO to unlock every setup checkbox".into()
     } else if app.catalog_query.is_empty() {
         "Search distributions…  / to type".into()
@@ -3619,10 +3535,10 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     app.hit_regions.catalog_search = Some(search_area);
 
-    if app.quick_access == QuickAccess::Windows {
+    if app.discovery_session.quick_access() == QuickAccess::Windows {
         draw_windows_catalog(frame, app, rows[1]);
     } else {
-        match app.discovery_source {
+        match app.discovery_session.source() {
             DiscoverySource::DistroWatch => draw_distrowatch_catalog(frame, app, rows[1]),
             DiscoverySource::RaspberryPi => draw_pi_catalog(frame, app, rows[1]),
         }
@@ -3632,15 +3548,18 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .spacing(1)
         .split(rows[2]);
     render_button(frame, actions[0], "↻  Retry", false);
-    let open_page_fallback = app.discovery_source == DiscoverySource::DistroWatch
-        && app.quick_access != QuickAccess::Windows
+    let open_page_fallback = app.discovery_session.source() == DiscoverySource::DistroWatch
+        && app.discovery_session.quick_access() != QuickAccess::Windows
         && app.catalog_releases.is_empty()
         && !app.distributions.is_empty()
-        && !app.details_state.is_loading();
-    let can_download = if app.quick_access == QuickAccess::Windows {
+        && !app
+            .discovery_session
+            .state(CatalogFacet::Details)
+            .is_loading();
+    let can_download = if app.discovery_session.quick_access() == QuickAccess::Windows {
         true
     } else {
-        match app.discovery_source {
+        match app.discovery_session.source() {
             DiscoverySource::DistroWatch => !app.catalog_releases.is_empty(),
             DiscoverySource::RaspberryPi => app.pi_catalog.is_some(),
         }
@@ -3648,9 +3567,9 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[1],
-        if app.quick_access == QuickAccess::Windows {
+        if app.discovery_session.quick_access() == QuickAccess::Windows {
             "▣  Choose Windows ISO"
-        } else if app.discovery_source == DiscoverySource::RaspberryPi {
+        } else if app.discovery_session.source() == DiscoverySource::RaspberryPi {
             "⇩  Download, verify & use"
         } else if open_page_fallback {
             "↗  Open DistroWatch download page  [b]"
@@ -3884,12 +3803,14 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     let distributions = if matching_indices.is_empty() {
         let message = if !app.catalog_query.is_empty()
             && matches!(
-                app.directory_state,
+                app.discovery_session.state(CatalogFacet::Directory),
                 CatalogState::Ready { .. } | CatalogState::Empty
             ) {
             "No matching distributions".into()
         } else if !app.catalog_query.is_empty() {
-            app.directory_state.short_label("search catalog")
+            app.discovery_session
+                .state(CatalogFacet::Directory)
+                .short_label("search catalog")
         } else {
             current_distribution_state(app).short_label("distributions")
         };
@@ -3912,8 +3833,12 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     };
     let releases = if app.catalog_releases.is_empty() {
         vec![
-            ListItem::new(app.details_state.short_label("ISO releases"))
-                .style(Style::default().fg(MUTED)),
+            ListItem::new(
+                app.discovery_session
+                    .state(CatalogFacet::Details)
+                    .short_label("ISO releases"),
+            )
+            .style(Style::default().fg(MUTED)),
         ]
     } else {
         app.catalog_releases
@@ -3957,9 +3882,13 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         .spacing(1)
         .split(columns[1]);
     let profile = if app.selected_details.is_none()
-        && !matches!(app.details_state, CatalogState::Idle)
-    {
-        app.details_state.short_label("distribution profile")
+        && !matches!(
+            app.discovery_session.state(CatalogFacet::Details),
+            CatalogState::Idle
+        ) {
+        app.discovery_session
+            .state(CatalogFacet::Details)
+            .short_label("distribution profile")
     } else {
         app.selected_details.as_ref().map_or_else(
             || "Choose a distribution to load its profile and ISO files".into(),
@@ -4018,8 +3947,12 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let devices = app.pi_catalog.as_ref().map_or_else(
         || {
             vec![
-                ListItem::new(app.pi_state.short_label("Raspberry Pi boards"))
-                    .style(Style::default().fg(MUTED)),
+                ListItem::new(
+                    app.discovery_session
+                        .state(CatalogFacet::RaspberryPi)
+                        .short_label("Raspberry Pi boards"),
+                )
+                .style(Style::default().fg(MUTED)),
             ]
         },
         |catalog| {
@@ -4055,7 +3988,9 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         let message = if app.pi_catalog.is_some() {
             "No compatible images".into()
         } else {
-            app.pi_state.short_label("Raspberry Pi images")
+            app.discovery_session
+                .state(CatalogFacet::RaspberryPi)
+                .short_label("Raspberry Pi images")
         };
         vec![ListItem::new(message).style(Style::default().fg(MUTED))]
     } else {
@@ -4216,10 +4151,12 @@ fn compact_text_list(values: &[String], limit: usize) -> String {
 }
 
 fn current_distribution_state(app: &App) -> &CatalogState {
-    match app.quick_access {
-        QuickAccess::Arch => &app.arch_state,
-        QuickAccess::Debian => &app.debian_state,
-        QuickAccess::All | QuickAccess::Omarchy | QuickAccess::Windows => &app.popular_state,
+    match app.discovery_session.quick_access() {
+        QuickAccess::Arch => app.discovery_session.state(CatalogFacet::Arch),
+        QuickAccess::Debian => app.discovery_session.state(CatalogFacet::Debian),
+        QuickAccess::All | QuickAccess::Omarchy | QuickAccess::Windows => {
+            app.discovery_session.state(CatalogFacet::Popular)
+        }
     }
 }
 
@@ -4430,18 +4367,19 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(status_block, area);
     let status_rows =
         Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).split(status_inner);
-    let progress_rows = if app.active_download.is_some() && status_rows[0].height >= 2 {
-        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(status_rows[0])
-    } else {
-        Layout::vertical([Constraint::Min(1), Constraint::Length(0)]).split(status_rows[0])
-    };
+    let progress_rows =
+        if app.download_session.active_progress().is_some() && status_rows[0].height >= 2 {
+            Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(status_rows[0])
+        } else {
+            Layout::vertical([Constraint::Min(1), Constraint::Length(0)]).split(status_rows[0])
+        };
     frame.render_widget(
         Paragraph::new(app.status.as_str())
             .style(Style::default().fg(MUTED))
             .wrap(Wrap { trim: true }),
         progress_rows[0],
     );
-    if let Some(progress) = &app.active_download {
+    if let Some(progress) = app.download_session.active_progress() {
         let ratio = progress
             .total
             .filter(|total| *total > 0)
@@ -4457,7 +4395,7 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         );
     }
     let compact = status_inner.width < 62;
-    if let Some(control) = &app.download_control {
+    if let Some(control) = app.download_session.active_control() {
         let actions = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
             .spacing(1)
             .split(status_rows[1]);
@@ -4694,10 +4632,6 @@ fn contains(area: Option<Rect>, point: (u16, u16)) -> bool {
     area.is_some_and(|area| area.contains(point.into()))
 }
 
-fn is_current_catalog_selection(selected_slug: Option<&str>, response_slug: &str) -> bool {
-    selected_slug == Some(response_slug)
-}
-
 fn device_flags(device: &Device) -> String {
     let mut flags = Vec::new();
     if device.removable {
@@ -4731,7 +4665,7 @@ fn device_change_message(added: usize, removed: usize) -> String {
 mod layout_tests {
     use super::{
         advanced_height, application_area, brand_lockup, centered_button_area, grid_areas,
-        is_current_catalog_selection, main_shell_layout, windows_option_columns, workspace_height,
+        main_shell_layout, windows_option_columns, workspace_height,
     };
     use ratatui::layout::Rect;
 
@@ -4773,13 +4707,6 @@ mod layout_tests {
         assert_eq!(windows_option_columns(44), 2);
         assert_eq!(advanced_height(100), 9);
         assert_eq!(advanced_height(60), 17);
-    }
-
-    #[test]
-    fn stale_background_catalog_results_are_ignored() {
-        assert!(is_current_catalog_selection(Some("omarchy"), "omarchy"));
-        assert!(!is_current_catalog_selection(Some("arch"), "omarchy"));
-        assert!(!is_current_catalog_selection(None, "omarchy"));
     }
 
     #[test]

@@ -1,17 +1,15 @@
 use std::env;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Once};
+use std::sync::Once;
 use std::thread;
 use std::time::Duration;
 
 use crate::error::{Error, Result, io_error};
-use crate::model::{
-    PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest, Progress, WritePlan,
-};
+use crate::model::{Progress, WritePlan};
 use crate::operation::OperationControl;
+use crate::privileged_protocol::run_privileged_client;
 
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_NAME: &str = "bootable-helper";
@@ -39,14 +37,6 @@ pub(crate) fn write_via_pkexec(
     }
     let helper = helper_path()?;
     ensure_authentication_agent();
-    let request = PrivilegedWriteRequest {
-        plan: plan.clone(),
-        confirmation: confirmation.to_string(),
-    };
-    let mut request = serde_json::to_vec(&request).map_err(|error| {
-        Error::PrivilegedWriterUnavailable(format!("could not encode reviewed plan: {error}"))
-    })?;
-    request.push(b'\n');
     let mut child = Command::new(PKEXEC)
         .arg("--disable-internal-agent")
         .arg(&helper)
@@ -56,32 +46,9 @@ pub(crate) fn write_via_pkexec(
         .spawn()
         .map_err(|error| io_error(PKEXEC, error))?;
 
-    let mut stdin = child.stdin.take().ok_or_else(|| {
+    let stdin = child.stdin.take().ok_or_else(|| {
         Error::PrivilegedWriterUnavailable("pkexec did not provide a request pipe".into())
     })?;
-    stdin
-        .write_all(&request)
-        .map_err(|error| io_error("pkexec request pipe", error))?;
-    stdin
-        .flush()
-        .map_err(|error| io_error("pkexec request pipe", error))?;
-
-    let writer_control = control.clone();
-    let writer_finished = Arc::new(AtomicBool::new(false));
-    let writer_done = Arc::clone(&writer_finished);
-    let control_writer = thread::spawn(move || {
-        while !writer_done.load(Ordering::Acquire) {
-            if writer_control.state() == crate::operation::OperationState::Cancelled {
-                if serde_json::to_writer(&mut stdin, &PrivilegedWriteCommand::Cancel).is_ok() {
-                    let _ = stdin.write_all(b"\n");
-                    let _ = stdin.flush();
-                }
-                break;
-            }
-            thread::sleep(Duration::from_millis(50));
-        }
-    });
-
     let stderr = child.stderr.take().ok_or_else(|| {
         Error::PrivilegedWriterUnavailable("pkexec did not provide an error pipe".into())
     })?;
@@ -93,57 +60,28 @@ pub(crate) fn write_via_pkexec(
     let stdout = child.stdout.take().ok_or_else(|| {
         Error::PrivilegedWriterUnavailable("pkexec did not provide a progress pipe".into())
     })?;
-    let mut finished = false;
-    let mut failure = None;
-    let mut protocol_failure = None;
-    for line in BufReader::new(stdout).lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(error) => {
-                protocol_failure = Some(format!("could not read helper progress: {error}"));
-                break;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        let event: PrivilegedWriteEvent = match serde_json::from_str(&line) {
-            Ok(event) => event,
-            Err(error) => {
-                protocol_failure = Some(format!("invalid helper response: {error}"));
-                continue;
-            }
-        };
-        match event {
-            PrivilegedWriteEvent::Progress(update) => progress(update),
-            PrivilegedWriteEvent::Finished => finished = true,
-            PrivilegedWriteEvent::Failed { message } => failure = Some(message),
-        }
-    }
+    let protocol = run_privileged_client(
+        stdout,
+        stdin,
+        plan,
+        confirmation,
+        control,
+        progress,
+        "pkexec privileged channel",
+    )?;
     let status = child.wait();
-    writer_finished.store(true, Ordering::Release);
-    let _ = control_writer.join();
     let status = status.map_err(|error| io_error("bootable-helper", error))?;
     let stderr = stderr_reader.join().unwrap_or_default();
 
-    if let Some(message) = failure {
-        return Err(Error::PrivilegedWriteFailed(message));
-    }
-    if let Some(message) = protocol_failure {
-        return Err(Error::PrivilegedWriteFailed(message));
-    }
-    if status.success() && finished {
-        return Ok(());
-    }
-    if matches!(status.code(), Some(126 | 127)) {
-        return Err(Error::PrivilegeDenied);
-    }
     let detail = stderr.trim();
-    Err(Error::PrivilegedWriteFailed(if detail.is_empty() {
-        format!("helper exited with {status}")
+    let fallback = if matches!(status.code(), Some(126 | 127)) {
+        Error::PrivilegeDenied
+    } else if detail.is_empty() {
+        Error::PrivilegedWriteFailed(format!("helper exited with {status}"))
     } else {
-        detail.to_string()
-    }))
+        Error::PrivilegedWriteFailed(detail.to_string())
+    };
+    protocol.complete(status.success(), fallback)
 }
 
 fn ensure_authentication_agent() {

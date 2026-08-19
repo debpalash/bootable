@@ -1,51 +1,62 @@
 # Architecture
 
-The UI applications know about images, devices, plans, and progress. They do not know how a GPT is
-created, how WIM parts are named, or how a raw target is verified.
+Bootable has two presentation adapters over shared product sessions. GPUI and Ratatui translate
+input and render state; they do not schedule catalog requests, classify worker outcomes, authorize a
+write, interpret the privileged protocol, or define Windows-media validity.
 
 ```text
 GPUI desktop ─┐
-              ├─ Bootable API ─ inspection + policy + plan ─ native platform adapter
-Ratatui TUI ──┘                                          ├─ device discovery
-                                                        ├─ privileged operations
-                                                        └─ verification
+              ├─ DiscoverySession ─ catalog cache + DistroWatch/Raspberry Pi adapters
+Ratatui TUI ──┤
+              ├─ ManagedDownloadSession ─ durable DownloadLedger + verified transfer
+              ├─ ReviewedWriteSession ─ plan + acknowledgment + progress + terminal outcome
+              └─ Bootable ─ inspection + policy + plan ─ native platform adapter
+                                                   ├─ device discovery
+                                                   ├─ privileged launch adapter
+                                                   └─ write + verification
+
+native launch adapters ─ Privileged protocol ─ bootable-helper
+native media adapters  ─ Windows media rules ─ mounted installer tree
 ```
 
-`bootable-core` is the deep module. Its public surface is intentionally small:
+## Product sessions
 
-- `discover_devices`
-- `inspect_image`
-- `plan` / `prepare`
-- `write`
+- `DiscoverySession` owns source/preset selection, the six catalog loading states, duplicate-load
+  suppression, and the expected distribution slug. A response for an older selection cannot alter
+  the active profile.
+- `ManagedDownloadSession` owns the one-active-worker rule, retry queuing, FIFO continuation,
+  progress, pause/cancel control, and typed completion. `DownloadLedger` remains the durable seam for
+  crash recovery and partial-download ownership.
+- `ReviewedWriteSession` owns the immutable reviewed plan, consequence modal, acknowledgment,
+  active-operation lock, progress, cancellation, and typed terminal result. A frontend cannot obtain
+  a write launch before review and acknowledgment.
 
-The platform adapter owns device enumeration and destructive mechanics. On Linux the unprivileged
-GUI/TUI sends the reviewed serializable plan to a root-owned `bootable-helper` launched by
-`pkexec`. The helper exposes only the write/cancel protocol, emits JSON progress over stdout, and repeats
-device discovery, stable-identity checks, removable/system-disk policy, capacity checks, unmounting,
-writing, and verification. It never trusts a stale device path from the UI.
+These sessions expose state for rendering and worker launches for adapter-specific execution. The
+frontends do not own the transition invariants.
 
-The native adapters use the same seam and repeat the same plan-bound checks:
+## Privileged writes
 
-- Windows: USB-only PowerShell `Get-Disk` inventory, stable-ID refresh, volume detachment, and
-  `PhysicalDrive` raw I/O through a fixed helper under protected Program Files. The UI creates a
-  256-bit one-use token, accepts only an IPv4 loopback connection carrying that token, and invokes
-  the helper with `Start-Process -Verb RunAs`. The helper repeats the reviewed-plan checks and
-  returns progress/cancellation events without elevating the frontend.
-- macOS: I/O Registry whole-removable inventory, root-disk exclusion, stable-ID refresh,
-  `diskutil` unmounting, and `/dev/rdisk` raw I/O through a fixed root-owned helper. The UI opens a
-  private Unix socket, macOS presents its administrator prompt, and the helper carries the same
-  reviewed-plan/cancel/progress protocol without elevating the frontend.
+The unprivileged GUI/TUI sends the reviewed serializable plan to a narrowly elevated
+`bootable-helper`. The shared privileged-protocol module serializes the request, transports
+cancellation, accepts progress, requires exactly one terminal event, and resolves helper/protocol/
+process failures in one order. OS adapters only establish the secure transport and authorization:
 
-Windows also mounts installer ISOs with the native storage cmdlets, preflights the complete source
-before clearing the target, creates a bounded FAT32 partition, splits oversized WIMs with DISM,
-applies the shared answer-file model, and verifies the copied boot tree. macOS follows the same
-reviewed strategy with read-only `hdiutil` mounting, strict `diskutil` whole-disk formatting, and
-`wimlib` split-WIM/CA-2023 operations when required. All platforms launch narrow privileged helpers
-while the full UI remains unprivileged.
+- Linux launches the fixed helper through `pkexec`.
+- Windows uses a 256-bit one-use loopback handshake and a protected Program Files helper launched
+  with `Start-Process -Verb RunAs`.
+- macOS uses a private Unix socket and a fixed root-owned helper launched through the system
+  authorization prompt.
 
-Image classification and policy remain shared across all three operating systems.
+The helper repeats device discovery, stable-identity checks, removable/system-disk policy, capacity
+checks, unmounting, writing, and verification. It never trusts a stale device path from the UI.
+
+## Media construction
+
+The shared Windows-media module owns answer-file application, case-insensitive payload lookup,
+FAT32 size policy, and post-copy boot-tree verification. Native adapters retain mounting,
+partitioning, file copying, WIM splitting, CA-2023 tool invocation, and teardown because those are OS
+mechanics.
 
 Compressed raw images and hybrid ISOs remain a raw-write strategy. Inspection measures the expanded
 stream off the UI thread; execution selects the decoder from the serialized image kind, hashes bytes
-while writing, and verifies that exact expanded hash from the target. Neither frontend handles archive
-formats or estimates target capacity independently.
+while writing, and verifies that exact expanded hash from the target.

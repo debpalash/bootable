@@ -28,8 +28,9 @@ unused space may separate those regions but must not appear after an arbitrary d
 | Empty | Name what was searched and say that no matching item was found. |
 | Failed | Keep cached data when available, show the failure, and expose Retry. |
 
-Both adapters use `CatalogState`, `CatalogFetch`, and `CacheMode` from `bootable-core`. Requests use
-generation/selection checks so a late response cannot overwrite a newer selection.
+Both adapters use `DiscoverySession`, `CatalogState`, `CatalogFetch`, and `CacheMode` from
+`bootable-core`. The session suppresses duplicate loads and rejects a response whose distribution
+slug is no longer selected.
 
 ## Cache rules
 
@@ -41,7 +42,7 @@ generation/selection checks so a late response cannot overwrite a newer selectio
 
 ## Review rule
 
-Both adapters consume the shared `ReviewReadiness` state. Review remains disabled and names the
+Both adapters consume the shared `ReviewReadiness` state and `ReviewedWriteSession`. Review remains disabled and names the
 missing prerequisite until an inspected image and eligible removable target exist. A successful
 Review opens the same plan hierarchy in both adapters: source, target, strategy, ordered operations,
 and destructive markers. Opening Review never writes media. **Review consequences** opens a blocking
@@ -50,6 +51,10 @@ and interruption risk. One explicit acknowledgment unlocks **Confirm erase & wri
 then show the same phase, message, percentage, transferred bytes, throughput, ETA, elapsed time,
 verification outcome, and safe-removal result. Drive refresh and app exit are locked while the write
 is active.
+
+Managed transfers follow the same rule through `ManagedDownloadSession`: one active worker, queued
+retry, FIFO continuation, pause/resume persistence, cancellation cleanup, and typed terminal
+outcomes are shared. GPUI async tasks and TUI threads are execution adapters only.
 
 Any GUI or TUI change must answer these questions before merge:
 

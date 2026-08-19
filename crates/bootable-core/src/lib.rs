@@ -1,7 +1,9 @@
 mod catalog;
 mod catalog_cache;
 mod checksum;
+mod discovery_session;
 mod download;
+mod download_session;
 mod error;
 mod inspect;
 mod model;
@@ -17,14 +19,21 @@ mod privilege_macos;
 #[cfg(any(target_os = "windows", test))]
 #[cfg_attr(test, allow(dead_code))]
 mod privilege_windows;
+mod privileged_protocol;
 mod windows;
+mod windows_media;
+mod write_session;
 
 use std::path::Path;
 
 pub use catalog::{DistributionBundle, DistributionDetails, DistributionSummary, IsoRelease};
 pub use catalog_cache::{CacheMode, CatalogFetch, CatalogOrigin, CatalogState};
 pub use checksum::{Checksum, ChecksumAlgorithm};
+pub use discovery_session::{CatalogFacet, DiscoverySession, DiscoverySource, QuickAccess};
 pub use download::{DownloadJob, DownloadKind, DownloadStatus};
+pub use download_session::{
+    DownloadCompletion, DownloadLaunch, DownloadRequest, ManagedDownloadSession,
+};
 pub use error::{Error, Result};
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
@@ -35,7 +44,9 @@ pub use model::{
 };
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};
+pub use privileged_protocol::serve_privileged_writer;
 pub use windows::{host_regional_options, suggested_account_name};
+pub use write_session::{ReviewedWriteSession, WriteCompletion, WriteLaunch};
 
 use platform::NativePlatform;
 

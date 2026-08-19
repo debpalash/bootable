@@ -1,76 +1,7 @@
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 
-use bootable_core::{
-    Bootable, OperationControl, PrivilegedWriteCommand, PrivilegedWriteEvent,
-    PrivilegedWriteRequest,
-};
-
-fn emit(writer: &mut impl Write, event: &PrivilegedWriteEvent) -> bool {
-    serde_json::to_writer(&mut *writer, event).is_ok()
-        && writer.write_all(b"\n").is_ok()
-        && writer.flush().is_ok()
-}
-
-fn serve<R, W>(mut reader: BufReader<R>, mut writer: BufWriter<W>) -> i32
-where
-    R: Read + Send + 'static,
-    W: Write,
-{
-    let mut request_line = String::new();
-    let request = match reader
-        .read_line(&mut request_line)
-        .map_err(serde_json::Error::io)
-        .and_then(|_| serde_json::from_str::<PrivilegedWriteRequest>(&request_line))
-    {
-        Ok(request) => request,
-        Err(error) => {
-            let _ = emit(
-                &mut writer,
-                &PrivilegedWriteEvent::Failed {
-                    message: format!("invalid privileged write request: {error}"),
-                },
-            );
-            return 2;
-        }
-    };
-
-    let control = OperationControl::new();
-    let command_control = control.clone();
-    std::thread::spawn(move || {
-        for line in reader.lines().map_while(Result::ok) {
-            if matches!(
-                serde_json::from_str::<PrivilegedWriteCommand>(&line),
-                Ok(PrivilegedWriteCommand::Cancel)
-            ) {
-                command_control.cancel();
-                break;
-            }
-        }
-    });
-
-    let result = Bootable::native().write_controlled(
-        &request.plan,
-        &request.confirmation,
-        &control,
-        |progress| {
-            let _ = emit(&mut writer, &PrivilegedWriteEvent::Progress(progress));
-        },
-    );
-    match result {
-        Ok(()) if emit(&mut writer, &PrivilegedWriteEvent::Finished) => 0,
-        Ok(()) => 3,
-        Err(error) => {
-            let _ = emit(
-                &mut writer,
-                &PrivilegedWriteEvent::Failed {
-                    message: error.to_string(),
-                },
-            );
-            1
-        }
-    }
-}
+use bootable_core::{PrivilegedWriteEvent, serve_privileged_writer};
 
 #[cfg(unix)]
 fn unix_socket_path() -> Option<std::path::PathBuf> {
@@ -86,16 +17,11 @@ fn serve_unix_socket(path: &std::path::Path) -> io::Result<i32> {
     use std::os::unix::net::UnixStream;
 
     let stream = UnixStream::connect(path)?;
-    let reader = BufReader::new(stream.try_clone()?);
-    let writer = BufWriter::new(stream);
-    Ok(serve(reader, writer))
+    Ok(serve_privileged_writer(stream.try_clone()?, stream))
 }
 
 fn serve_standard_io() -> io::Result<i32> {
-    Ok(serve(
-        BufReader::new(io::stdin()),
-        BufWriter::new(io::stdout()),
-    ))
+    Ok(serve_privileged_writer(io::stdin(), io::stdout()))
 }
 
 fn tcp_channel() -> io::Result<Option<(SocketAddr, String)>> {
@@ -137,9 +63,7 @@ fn serve_tcp(endpoint: SocketAddr, token: &str) -> io::Result<i32> {
     stream.write_all(token.as_bytes())?;
     stream.write_all(b"\n")?;
     stream.flush()?;
-    let reader = BufReader::new(stream.try_clone()?);
-    let writer = BufWriter::new(stream);
-    Ok(serve(reader, writer))
+    Ok(serve_privileged_writer(stream.try_clone()?, stream))
 }
 
 fn main() {
@@ -170,12 +94,12 @@ fn main() {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             let mut writer = BufWriter::new(io::stdout());
-            let _ = emit(
-                &mut writer,
-                &PrivilegedWriteEvent::Failed {
-                    message: format!("could not open privileged request channel: {error}"),
-                },
-            );
+            let event = PrivilegedWriteEvent::Failed {
+                message: format!("could not open privileged request channel: {error}"),
+            };
+            let _ = serde_json::to_writer(&mut writer, &event);
+            let _ = writer.write_all(b"\n");
+            let _ = writer.flush();
             std::process::exit(2);
         }
     }

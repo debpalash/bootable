@@ -1,14 +1,15 @@
 use std::borrow::Cow;
 use std::io::Read;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bootable_core::{
-    BadBlockCheck, Bootable, CacheMode, CatalogState, ChecksumAlgorithm, Device,
-    DistributionBundle, DistributionDetails, DistributionSummary, DownloadJob, DownloadStatus,
-    ImageKind, ImageReport, IsoRelease, OperationControl, OperationState, PiCatalog, PiImage,
-    Progress, ReviewReadiness, WindowsPartitionScheme, WriteOptions, WritePlan,
-    destructive_confirmation_ready, format_bytes, review_readiness,
+    BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device,
+    DiscoverySession, DiscoverySource, DistributionBundle, DistributionDetails,
+    DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
+    ImageKind, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog, PiImage,
+    Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, WindowsPartitionScheme,
+    WriteCompletion, WriteOptions, format_bytes, review_readiness,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -220,15 +221,7 @@ struct BootableView {
     advanced: bool,
     checksum_algorithm: ChecksumAlgorithm,
     catalog_open: bool,
-    distro_loading: bool,
-    pi_loading: bool,
-    directory_loading: bool,
-    catalog_state: CatalogState,
-    directory_state: CatalogState,
-    pi_state: CatalogState,
-    arch_state: CatalogState,
-    debian_state: CatalogState,
-    details_state: CatalogState,
+    discovery_session: DiscoverySession,
     distributions: Vec<DistributionSummary>,
     popular_distributions: Vec<DistributionSummary>,
     distribution_directory: Vec<DistributionSummary>,
@@ -236,12 +229,8 @@ struct BootableView {
     selected_details: Option<DistributionDetails>,
     catalog_releases: Vec<IsoRelease>,
     selected_release: Option<usize>,
-    discovery_source: DiscoverySource,
-    quick_access: QuickAccess,
     arch_distributions: Vec<DistributionSummary>,
     debian_distributions: Vec<DistributionSummary>,
-    arch_loading: bool,
-    debian_loading: bool,
     pi_catalog: Option<PiCatalog>,
     selected_pi_device: Option<usize>,
     selected_pi_image: Option<usize>,
@@ -251,35 +240,10 @@ struct BootableView {
     pi_visible: usize,
     _catalog_search_subscription: Subscription,
     _windows_partition_subscription: Subscription,
-    active_download: Option<Progress>,
-    download_control: Option<OperationControl>,
-    active_download_job: Option<String>,
-    download_jobs: Vec<DownloadJob>,
+    download_session: ManagedDownloadSession,
     downloads_open: bool,
-    review_plan: Option<WritePlan>,
-    active_write: bool,
-    write_control: Option<OperationControl>,
-    write_progress: Option<Progress>,
-    write_started_at: Option<Instant>,
-    write_result: Option<Result<(), String>>,
-    confirm_modal: bool,
-    confirm_acknowledged: bool,
+    write_session: ReviewedWriteSession,
     status: String,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum DiscoverySource {
-    DistroWatch,
-    RaspberryPi,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum QuickAccess {
-    All,
-    Arch,
-    Debian,
-    Omarchy,
-    Windows,
 }
 
 #[derive(Clone, Copy)]
@@ -320,12 +284,12 @@ impl ViewportLayout {
 
 enum DownloadUpdate {
     Progress(Progress),
-    Finished(Result<(ImageReport, std::path::PathBuf), String>),
+    Finished(DownloadCompletion),
 }
 
 enum WriteUpdate {
     Progress(Progress),
-    Finished(Result<(), String>),
+    Finished(WriteCompletion),
 }
 
 impl BootableView {
@@ -395,15 +359,7 @@ impl BootableView {
             advanced: false,
             checksum_algorithm: ChecksumAlgorithm::Sha256,
             catalog_open: true,
-            distro_loading: false,
-            pi_loading: false,
-            directory_loading: false,
-            catalog_state: CatalogState::Idle,
-            directory_state: CatalogState::Idle,
-            pi_state: CatalogState::Idle,
-            arch_state: CatalogState::Idle,
-            debian_state: CatalogState::Idle,
-            details_state: CatalogState::Idle,
+            discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
             popular_distributions: Vec::new(),
             distribution_directory: Vec::new(),
@@ -411,12 +367,8 @@ impl BootableView {
             selected_details: None,
             catalog_releases: Vec::new(),
             selected_release: None,
-            discovery_source: DiscoverySource::DistroWatch,
-            quick_access: QuickAccess::All,
             arch_distributions: Vec::new(),
             debian_distributions: Vec::new(),
-            arch_loading: false,
-            debian_loading: false,
             pi_catalog: None,
             selected_pi_device: None,
             selected_pi_image: None,
@@ -426,19 +378,9 @@ impl BootableView {
             pi_visible: 20,
             _catalog_search_subscription: search_subscription,
             _windows_partition_subscription: windows_partition_subscription,
-            active_download: None,
-            download_control: None,
-            active_download_job: None,
-            download_jobs: Vec::new(),
+            download_session: ManagedDownloadSession::default(),
             downloads_open: false,
-            review_plan: None,
-            active_write: false,
-            write_control: None,
-            write_progress: None,
-            write_started_at: None,
-            write_result: None,
-            confirm_modal: false,
-            confirm_acknowledged: false,
+            write_session: ReviewedWriteSession::default(),
             status,
         };
         Self::schedule_initial_catalog_load(cx);
@@ -482,11 +424,9 @@ impl BootableView {
     }
 
     fn load_catalog_with(&mut self, mode: CacheMode, cx: &mut Context<Self>) {
-        if self.distro_loading {
+        if !self.discovery_session.begin(CatalogFacet::Popular) {
             return;
         }
-        self.distro_loading = true;
-        self.catalog_state = CatalogState::Loading;
         self.status = "Loading DistroWatch six-month popularity…".into();
         cx.notify();
         let task = cx
@@ -496,18 +436,20 @@ impl BootableView {
             let result = task.await;
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
-                    view.distro_loading = false;
                     match result {
                         Ok(fetch) => {
-                            view.catalog_state =
-                                CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                            view.discovery_session.complete(
+                                CatalogFacet::Popular,
+                                &fetch,
+                                fetch.value.is_empty(),
+                            );
                             let source = fetch.status_suffix();
                             let distributions = fetch.value;
                             let count = distributions.len();
                             view.popular_distributions = distributions.clone();
                             let showing_popular = view.catalog_search_query(cx).is_empty()
-                                && view.quick_access == QuickAccess::All
-                                && view.discovery_source == DiscoverySource::DistroWatch;
+                                && view.discovery_session.quick_access() == QuickAccess::All
+                                && view.discovery_session.source() == DiscoverySource::DistroWatch;
                             if showing_popular {
                                 view.distributions = distributions;
                             }
@@ -517,8 +459,12 @@ impl BootableView {
                             }
                         }
                         Err(error) => {
-                            view.catalog_state = CatalogState::Failed(error.to_string());
-                            view.status = view.catalog_state.short_label("distributions");
+                            view.discovery_session
+                                .fail(CatalogFacet::Popular, error.to_string());
+                            view.status = view
+                                .discovery_session
+                                .state(CatalogFacet::Popular)
+                                .short_label("distributions");
                         }
                     }
                     cx.notify();
@@ -534,7 +480,7 @@ impl BootableView {
         self.selected_details = None;
         self.selected_release = None;
         self.catalog_releases.clear();
-        self.details_state = CatalogState::Idle;
+        self.discovery_session.clear_details();
         self.catalog_visible = 20;
         if query.trim().is_empty() {
             self.distributions = self.popular_distributions.clone();
@@ -542,8 +488,7 @@ impl BootableView {
             cx.notify();
             return;
         }
-        self.quick_access = QuickAccess::All;
-        self.discovery_source = DiscoverySource::DistroWatch;
+        self.discovery_session.show_distrowatch(QuickAccess::All);
         if self.distribution_directory.is_empty() {
             self.load_distribution_directory(cx);
         } else {
@@ -557,11 +502,9 @@ impl BootableView {
     }
 
     fn load_distribution_directory(&mut self, cx: &mut Context<Self>) {
-        if self.directory_loading {
+        if !self.discovery_session.begin(CatalogFacet::Directory) {
             return;
         }
-        self.directory_loading = true;
-        self.directory_state = CatalogState::Loading;
         self.status = "Searching DistroWatch's full distribution directory…".into();
         cx.notify();
         let task = cx.background_executor().spawn(async move {
@@ -571,27 +514,33 @@ impl BootableView {
             let result = task.await;
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
-                    view.directory_loading = false;
                     match result {
                         Ok(fetch) => {
-                            view.directory_state =
-                                CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                            view.discovery_session.complete(
+                                CatalogFacet::Directory,
+                                &fetch,
+                                fetch.value.is_empty(),
+                            );
                             let directory = fetch.value;
                             let count = directory.len();
                             view.distribution_directory = directory.clone();
                             if !view.catalog_search_query(cx).is_empty()
-                                && view.discovery_source == DiscoverySource::DistroWatch
+                                && view.discovery_session.source() == DiscoverySource::DistroWatch
                             {
                                 view.distributions = directory;
                                 view.status = format!("Searching {count} distributions");
                             }
                         }
                         Err(error) => {
-                            view.directory_state = CatalogState::Failed(error.to_string());
-                            if view.discovery_source == DiscoverySource::DistroWatch
+                            view.discovery_session
+                                .fail(CatalogFacet::Directory, error.to_string());
+                            if view.discovery_session.source() == DiscoverySource::DistroWatch
                                 && !view.catalog_search_query(cx).is_empty()
                             {
-                                view.status = view.directory_state.short_label("search catalog");
+                                view.status = view
+                                    .discovery_session
+                                    .state(CatalogFacet::Directory)
+                                    .short_label("search catalog");
                             }
                         }
                     }
@@ -608,15 +557,14 @@ impl BootableView {
     }
 
     fn show_raspberry_pi_with(&mut self, mode: CacheMode, cx: &mut Context<Self>) {
-        self.discovery_source = DiscoverySource::RaspberryPi;
-        self.quick_access = QuickAccess::All;
-        if (self.pi_catalog.is_some() && mode == CacheMode::PreferCache) || self.pi_loading {
+        self.discovery_session.show_raspberry_pi();
+        if (self.pi_catalog.is_some() && mode == CacheMode::PreferCache)
+            || !self.discovery_session.begin(CatalogFacet::RaspberryPi)
+        {
             self.status = "Raspberry Pi image discovery selected".into();
             cx.notify();
             return;
         }
-        self.pi_loading = true;
-        self.pi_state = CatalogState::Loading;
         self.status = "Loading the official Raspberry Pi Imager catalog…".into();
         cx.notify();
         let task = cx
@@ -626,25 +574,31 @@ impl BootableView {
             let result = task.await;
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
-                    view.pi_loading = false;
                     match result {
                         Ok(fetch) => {
-                            view.pi_state =
-                                CatalogState::from_fetch(&fetch, fetch.value.images.is_empty());
+                            view.discovery_session.complete(
+                                CatalogFacet::RaspberryPi,
+                                &fetch,
+                                fetch.value.images.is_empty(),
+                            );
                             let source = fetch.status_suffix();
                             let catalog = fetch.value;
                             let count = catalog.images.len();
                             view.pi_catalog = Some(catalog);
                             view.selected_pi_device = None;
                             view.selected_pi_image = (count > 0).then_some(0);
-                            if view.discovery_source == DiscoverySource::RaspberryPi {
+                            if view.discovery_session.source() == DiscoverySource::RaspberryPi {
                                 view.status = format!("{count} Raspberry Pi images · {source}");
                             }
                         }
                         Err(error) => {
-                            view.pi_state = CatalogState::Failed(error.to_string());
-                            if view.discovery_source == DiscoverySource::RaspberryPi {
-                                view.status = view.pi_state.short_label("Raspberry Pi images");
+                            view.discovery_session
+                                .fail(CatalogFacet::RaspberryPi, error.to_string());
+                            if view.discovery_session.source() == DiscoverySource::RaspberryPi {
+                                view.status = view
+                                    .discovery_session
+                                    .state(CatalogFacet::RaspberryPi)
+                                    .short_label("Raspberry Pi images");
                             }
                         }
                     }
@@ -662,15 +616,14 @@ impl BootableView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.discovery_source = DiscoverySource::DistroWatch;
-        self.quick_access = preset;
+        self.discovery_session.show_distrowatch(preset);
         self.catalog_search.update(cx, |input, cx| {
             input.set_value("", window, cx);
         });
         self.selected_distribution = None;
         self.selected_details = None;
         self.catalog_releases.clear();
-        self.details_state = CatalogState::Idle;
+        self.discovery_session.clear_details();
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
@@ -735,12 +688,12 @@ impl BootableView {
         mode: CacheMode,
         cx: &mut Context<Self>,
     ) {
-        let loading = if preset == QuickAccess::Arch {
-            self.arch_loading
+        let facet = if preset == QuickAccess::Arch {
+            CatalogFacet::Arch
         } else {
-            self.debian_loading
+            CatalogFacet::Debian
         };
-        if loading {
+        if !self.discovery_session.begin(facet) {
             return;
         }
         let base = if preset == QuickAccess::Arch {
@@ -748,13 +701,6 @@ impl BootableView {
         } else {
             "Debian"
         };
-        if preset == QuickAccess::Arch {
-            self.arch_loading = true;
-            self.arch_state = CatalogState::Loading;
-        } else {
-            self.debian_loading = true;
-            self.debian_state = CatalogState::Loading;
-        }
         self.status = format!("Searching DistroWatch for active {base}-based distributions…");
         cx.notify();
         let task = cx
@@ -764,40 +710,31 @@ impl BootableView {
             let result = task.await;
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
-                    if preset == QuickAccess::Arch {
-                        view.arch_loading = false;
-                    } else {
-                        view.debian_loading = false;
-                    }
                     match result {
                         Ok(fetch) => {
-                            let state = CatalogState::from_fetch(&fetch, fetch.value.is_empty());
+                            view.discovery_session
+                                .complete(facet, &fetch, fetch.value.is_empty());
                             let source = fetch.status_suffix();
                             let distributions = fetch.value;
                             let count = distributions.len();
                             if preset == QuickAccess::Arch {
                                 view.arch_distributions = distributions.clone();
-                                view.arch_state = state;
                             } else {
                                 view.debian_distributions = distributions.clone();
-                                view.debian_state = state;
                             }
-                            if view.quick_access == preset {
+                            if view.discovery_session.quick_access() == preset {
                                 view.distributions = distributions;
                                 view.status =
                                     format!("{count} active {base}-based distributions · {source}");
                             }
                         }
                         Err(error) => {
-                            let state = CatalogState::Failed(error.to_string());
-                            if preset == QuickAccess::Arch {
-                                view.arch_state = state.clone();
-                            } else {
-                                view.debian_state = state.clone();
-                            }
-                            if view.quick_access == preset {
-                                view.status =
-                                    state.short_label(&format!("{base}-based distributions"));
+                            view.discovery_session.fail(facet, error.to_string());
+                            if view.discovery_session.quick_access() == preset {
+                                view.status = view
+                                    .discovery_session
+                                    .state(facet)
+                                    .short_label(&format!("{base}-based distributions"));
                             }
                         }
                     }
@@ -857,7 +794,7 @@ impl BootableView {
         if !scrolling_down {
             return;
         }
-        match self.discovery_source {
+        match self.discovery_session.source() {
             DiscoverySource::DistroWatch => {
                 self.catalog_visible = self.catalog_visible.saturating_add(20);
             }
@@ -882,14 +819,11 @@ impl BootableView {
                     match update {
                         DownloadUpdate::Progress(progress) => {
                             view.status = progress.message.clone();
-                            view.active_download = Some(progress);
+                            view.download_session.apply_progress(progress);
                         }
-                        DownloadUpdate::Finished(result) => {
-                            view.active_download = None;
-                            view.download_control = None;
-                            view.active_download_job = None;
-                            match result {
-                                Ok((report, destination)) => {
+                        DownloadUpdate::Finished(completion) => {
+                            match &completion {
+                                DownloadCompletion::Ready { report, destination } => {
                                     view.browse_directory = destination
                                         .parent()
                                         .map(std::path::PathBuf::from);
@@ -897,17 +831,18 @@ impl BootableView {
                                         "Ready · downloaded, verified, and inspected {} · discovery remains open",
                                         report.path.display()
                                     );
-                                    view.image = Some(report);
+                                    view.image = Some(report.clone());
                                     view.advanced = false;
                                 }
-                                Err(error) if error.contains("cancelled safely") => {
+                                DownloadCompletion::Cancelled => {
                                     view.status =
                                         "Download cancelled • temporary data cleaned up".into();
                                 }
-                                Err(error) => {
+                                DownloadCompletion::Failed(error) => {
                                     view.status = format!("Download stopped · {error}");
                                 }
                             }
+                            view.download_session.finish(completion);
                             view.refresh_download_jobs(cx);
                             view.start_next_queued_download(cx);
                         }
@@ -921,8 +856,8 @@ impl BootableView {
     }
 
     fn refresh_download_jobs(&mut self, cx: &mut Context<Self>) {
-        match self.engine.download_jobs() {
-            Ok(jobs) => self.download_jobs = jobs,
+        match self.download_session.refresh(&self.engine) {
+            Ok(_) => {}
             Err(error) => self.status = format!("Download history unavailable · {error}"),
         }
         cx.notify();
@@ -932,7 +867,10 @@ impl BootableView {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs(cx);
-            self.status = format!("{} download job(s) in history", self.download_jobs.len());
+            self.status = format!(
+                "{} download job(s) in history",
+                self.download_session.jobs().len()
+            );
         }
         cx.notify();
     }
@@ -944,22 +882,28 @@ impl BootableView {
         retry: bool,
         cx: &mut Context<Self>,
     ) {
-        if self.download_control.is_some() {
+        let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
+        else {
             self.status = "Download queued · it will start when the active job finishes".into();
             self.refresh_download_jobs(cx);
-            cx.notify();
             return;
-        }
-        let control = OperationControl::new();
-        self.download_control = Some(control.clone());
-        self.active_download_job = Some(id.clone());
-        self.active_download = None;
-        self.status = if retry {
+        };
+        self.launch_download_worker(launch, cx);
+    }
+
+    fn launch_download_worker(&mut self, launch: DownloadLaunch, cx: &mut Context<Self>) {
+        self.status = if launch.retry {
             "Retrying download · preserved bytes will be resumed when supported".into()
         } else {
             "Starting managed download…".into()
         };
-        let completed_destination = destination.clone();
+        let DownloadLaunch {
+            id,
+            destination,
+            retry,
+            control,
+        } = launch;
+        let completed_destination = destination;
         let (sender, receiver) = mpsc::unbounded();
         cx.background_executor()
             .spawn(async move {
@@ -974,9 +918,10 @@ impl BootableView {
                         let _ = progress_sender.unbounded_send(DownloadUpdate::Progress(progress));
                     })
                 }
-                .map(|report| (report, completed_destination))
-                .map_err(|error| error.to_string());
-                let _ = sender.unbounded_send(DownloadUpdate::Finished(result));
+                .map(|report| (report, completed_destination));
+                let _ = sender.unbounded_send(DownloadUpdate::Finished(
+                    DownloadCompletion::from_result(result),
+                ));
             })
             .detach();
         self.observe_download(receiver, cx);
@@ -984,39 +929,22 @@ impl BootableView {
     }
 
     fn retry_managed_download(&mut self, id: String, cx: &mut Context<Self>) {
-        let Some(job) = self.download_jobs.iter().find(|job| job.id == id) else {
-            self.status = "Download job no longer exists".into();
-            cx.notify();
-            return;
-        };
-        if !job.status.can_retry() {
-            self.status = format!("{} cannot be retried while it is {}", job.label, job.status);
-            cx.notify();
-            return;
-        }
-        let destination = job.destination.clone();
-        if self.download_control.is_some() {
-            match self.engine.queue_download_retry(&id) {
-                Ok(()) => {
-                    self.status = "Retry queued · it will start after the active download".into();
-                    self.refresh_download_jobs(cx);
-                }
-                Err(error) => {
-                    self.status = error.to_string();
-                    cx.notify();
-                }
+        match self.download_session.retry(&self.engine, &id) {
+            Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch, cx),
+            Ok(DownloadRequest::Queued) => {
+                self.status = "Retry queued · it will start after the active download".into();
+                cx.notify();
             }
-        } else {
-            self.launch_download_job(id, destination, true, cx);
+            Err(error) => {
+                self.status = error.to_string();
+                cx.notify();
+            }
         }
     }
 
     fn start_next_queued_download(&mut self, cx: &mut Context<Self>) {
-        if self.download_control.is_some() {
-            return;
-        }
-        match self.engine.next_queued_download() {
-            Ok(Some(job)) => self.launch_download_job(job.id, job.destination, false, cx),
+        match self.download_session.next_queued(&self.engine) {
+            Ok(Some(launch)) => self.launch_download_worker(launch, cx),
             Ok(None) => {}
             Err(error) => {
                 self.status = format!("Could not start queued download · {error}");
@@ -1026,23 +954,19 @@ impl BootableView {
     }
 
     fn use_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
-        let Some(job) = self.download_jobs.iter().find(|job| job.id == id) else {
+        let Some(job) = self.download_session.jobs().iter().find(|job| job.id == id) else {
             self.status = "Download job no longer exists".into();
             cx.notify();
             return;
         };
-        if job.status != DownloadStatus::Completed {
-            self.status = "Only completed downloads can be selected".into();
-            cx.notify();
-            return;
-        }
-        match self.engine.inspect_image(&job.destination) {
+        let destination = job.destination.clone();
+        match self.download_session.use_completed(&self.engine, id) {
             Ok(report) => {
-                self.browse_directory = job.destination.parent().map(std::path::PathBuf::from);
+                self.browse_directory = destination.parent().map(std::path::PathBuf::from);
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", job.destination.display());
+                self.status = format!("Using completed download {}", destination.display());
             }
             Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
         }
@@ -1050,7 +974,7 @@ impl BootableView {
     }
 
     fn remove_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
-        match self.engine.remove_download_job(id) {
+        match self.download_session.remove(&self.engine, id) {
             Ok(()) => {
                 self.status = "Download history entry removed · completed image kept".into();
                 self.refresh_download_jobs(cx);
@@ -1102,8 +1026,8 @@ impl BootableView {
         self.selected_details = None;
         self.selected_release = None;
         self.catalog_releases.clear();
-        self.distro_loading = true;
-        self.details_state = CatalogState::Loading;
+        self.discovery_session
+            .expect_details(distribution.slug.clone());
         self.status = format!("Resolving current {} ISO files…", distribution.name);
         cx.notify();
         let request_slug = distribution.slug.clone();
@@ -1115,18 +1039,16 @@ impl BootableView {
             let result = task.await;
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
-                    let selected_slug = view
-                        .selected_distribution
-                        .and_then(|index| view.distributions.get(index))
-                        .map(|distribution| distribution.slug.as_str());
-                    if selected_slug != Some(request_slug.as_str()) {
+                    if !view.discovery_session.accepts_details(&request_slug) {
                         return;
                     }
-                    view.distro_loading = false;
                     match result {
                         Ok(fetch) => {
-                            view.details_state =
-                                CatalogState::from_fetch(&fetch, fetch.value.releases.is_empty());
+                            view.discovery_session.complete(
+                                CatalogFacet::Details,
+                                &fetch,
+                                fetch.value.releases.is_empty(),
+                            );
                             let source = fetch.status_suffix();
                             let DistributionBundle {
                                 details,
@@ -1155,8 +1077,12 @@ impl BootableView {
                             };
                         }
                         Err(error) => {
-                            view.details_state = CatalogState::Failed(error.to_string());
-                            view.status = view.details_state.short_label("ISO releases");
+                            view.discovery_session
+                                .fail(CatalogFacet::Details, error.to_string());
+                            view.status = view
+                                .discovery_session
+                                .state(CatalogFacet::Details)
+                                .short_label("ISO releases");
                         }
                     }
                     cx.notify();
@@ -1185,11 +1111,11 @@ impl BootableView {
     }
 
     fn retry_discovery(&mut self, cx: &mut Context<Self>) {
-        if self.discovery_source == DiscoverySource::RaspberryPi {
+        if self.discovery_session.source() == DiscoverySource::RaspberryPi {
             self.show_raspberry_pi_with(CacheMode::Refresh, cx);
             return;
         }
-        match self.quick_access {
+        match self.discovery_session.quick_access() {
             QuickAccess::All | QuickAccess::Omarchy => {
                 if let Some(index) = self.selected_distribution {
                     self.select_distribution_with(index, CacheMode::Refresh, cx);
@@ -1198,7 +1124,11 @@ impl BootableView {
                 }
             }
             QuickAccess::Arch | QuickAccess::Debian => {
-                self.load_quick_base_with(self.quick_access, CacheMode::Refresh, cx);
+                self.load_quick_base_with(
+                    self.discovery_session.quick_access(),
+                    CacheMode::Refresh,
+                    cx,
+                );
             }
             QuickAccess::Windows => {
                 self.status = "Windows tools use the selected local ISO".into();
@@ -1236,36 +1166,22 @@ impl BootableView {
     }
 
     fn toggle_download_pause(&mut self, cx: &mut Context<Self>) {
-        let Some(control) = &self.download_control else {
-            return;
-        };
-        match control.state() {
-            OperationState::Running => {
-                control.pause();
-                if let Some(id) = self.active_download_job.as_deref() {
-                    let _ = self.engine.set_download_paused(id, true);
-                }
-                self.status = "Download paused • resume or cancel when ready".into();
+        match self.download_session.toggle_pause(&self.engine) {
+            Ok(Some(OperationState::Paused)) => {
+                self.status = "Download paused • resume or cancel when ready".into()
             }
-            OperationState::Paused => {
-                control.resume();
-                if let Some(id) = self.active_download_job.as_deref() {
-                    let _ = self.engine.set_download_paused(id, false);
-                }
-                self.status = "Download resumed".into();
-            }
-            OperationState::Cancelled => {}
+            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Cancelled) | None) => {}
+            Err(error) => self.status = error.to_string(),
         }
         cx.notify();
     }
 
     fn cancel_download(&mut self, cx: &mut Context<Self>) {
-        let Some(control) = &self.download_control else {
-            return;
-        };
-        control.cancel();
-        self.status = "Cancelling download safely • cleaning temporary data…".into();
-        cx.notify();
+        if self.download_session.cancel() {
+            self.status = "Cancelling download safely • cleaning temporary data…".into();
+            cx.notify();
+        }
     }
 
     fn schedule_device_scan(cx: &mut Context<Self>) {
@@ -1288,8 +1204,8 @@ impl BootableView {
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
                     if view.downloads_open
-                        || view.download_control.is_some()
-                        || view.download_jobs.iter().any(|job| {
+                        || view.download_session.is_active()
+                        || view.download_session.jobs().iter().any(|job| {
                             matches!(
                                 job.status,
                                 DownloadStatus::Queued
@@ -1482,7 +1398,7 @@ impl BootableView {
     }
 
     fn scan_devices(&mut self, manual: bool, cx: &mut Context<Self>) {
-        if self.active_write {
+        if self.write_session.active() {
             if manual {
                 self.status =
                     "Drive refresh is paused while writing • do not unplug the target".into();
@@ -1543,13 +1459,7 @@ impl BootableView {
         {
             Ok(plan) => {
                 self.catalog_open = false;
-                self.review_plan = Some(plan);
-                self.active_write = false;
-                self.write_progress = None;
-                self.write_started_at = None;
-                self.write_result = None;
-                self.confirm_modal = false;
-                self.confirm_acknowledged = false;
+                self.write_session.open(plan);
                 "Reviewing the write plan • nothing has been written".into()
             }
             Err(error) => error.to_string(),
@@ -1566,74 +1476,37 @@ impl BootableView {
     }
 
     fn close_review(&mut self, cx: &mut Context<Self>) {
-        if self.active_write {
+        if !self.write_session.close() {
             self.status = "Writing is active • do not close the app or unplug the target".into();
             cx.notify();
             return;
         }
-        self.review_plan = None;
-        self.write_progress = None;
-        self.write_started_at = None;
-        self.write_result = None;
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
         self.status = self.review_readiness().guidance().into();
         cx.notify();
     }
 
     fn open_write_confirmation(&mut self, cx: &mut Context<Self>) {
-        if self.active_write || matches!(self.write_result, Some(Ok(()))) {
-            return;
+        if self.write_session.open_confirmation() {
+            self.status = "Review the target changes and consequences before writing".into();
+            cx.notify();
         }
-        self.confirm_modal = true;
-        self.confirm_acknowledged = false;
-        self.status = "Review the target changes and consequences before writing".into();
-        cx.notify();
     }
 
     fn close_write_confirmation(&mut self, cx: &mut Context<Self>) {
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
+        self.write_session.close_confirmation();
         self.status = "Write cancelled before erasure • the target is unchanged".into();
         cx.notify();
     }
 
     fn start_write(&mut self, cx: &mut Context<Self>) {
-        if self.active_write || matches!(self.write_result, Some(Ok(()))) {
-            return;
-        }
-        let Some(plan) = self.review_plan.clone() else {
-            self.status = "Review the write plan before writing".into();
-            cx.notify();
-            return;
+        let launch = match self.write_session.begin() {
+            Ok(launch) => launch,
+            Err(message) => {
+                self.status = message.into();
+                cx.notify();
+                return;
+            }
         };
-        if !self.confirm_modal
-            || !destructive_confirmation_ready(
-                self.confirm_acknowledged,
-                self.active_write,
-                matches!(self.write_result, Some(Ok(()))),
-            )
-        {
-            self.status = "Acknowledge the consequences before confirming the write".into();
-            cx.notify();
-            return;
-        }
-        let confirmation = plan.confirmation_phrase.clone();
-
-        let control = OperationControl::new();
-        self.active_write = true;
-        self.write_control = Some(control.clone());
-        self.confirm_modal = false;
-        self.confirm_acknowledged = false;
-        self.write_progress = Some(Progress {
-            phase: bootable_core::ProgressPhase::Preparing,
-            completed: 0,
-            total: Some(plan.image.size),
-            message: "Waiting for administrator authentication, then revalidating the target"
-                .into(),
-        });
-        self.write_started_at = Some(Instant::now());
-        self.write_result = None;
         self.status = "Write started • do not unplug the target".into();
         cx.notify();
 
@@ -1641,17 +1514,17 @@ impl BootableView {
         cx.background_executor()
             .spawn(async move {
                 let progress_sender = sender.clone();
-                let result = Bootable::native()
-                    .write_with_privilege_controlled(
-                        &plan,
-                        &confirmation,
-                        &control,
+                let completion = WriteCompletion::from_result(
+                    Bootable::native().write_with_privilege_controlled(
+                        &launch.plan,
+                        &launch.confirmation,
+                        &launch.control,
                         move |progress| {
                             let _ = progress_sender.unbounded_send(WriteUpdate::Progress(progress));
                         },
-                    )
-                    .map_err(|error| error.to_string());
-                let _ = sender.unbounded_send(WriteUpdate::Finished(result));
+                    ),
+                );
+                let _ = sender.unbounded_send(WriteUpdate::Finished(completion));
             })
             .detach();
         self.observe_write(receiver, cx);
@@ -1670,31 +1543,10 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     match update {
                         WriteUpdate::Progress(progress) => {
-                            view.status = format!("{} • {}", progress.phase, progress.message);
-                            view.write_progress = Some(progress);
+                            view.status = view.write_session.apply_progress(progress);
                         }
-                        WriteUpdate::Finished(result) => {
-                            view.active_write = false;
-                            view.write_control = None;
-                            if result.is_err() {
-                                view.write_progress = None;
-                                view.write_started_at = None;
-                            }
-                            view.write_result = Some(result.clone());
-                            view.status = match result {
-                                Ok(()) => {
-                                    "Complete • image written and verified • target can be safely removed"
-                                        .into()
-                                }
-                                Err(error) if error.contains("authentication") => {
-                                    format!("Write cancelled before erasure • {error}")
-                                }
-                                Err(error) if error.contains("cancelled safely") => {
-                                    "Write stopped safely • media is incomplete and must be rewritten before use"
-                                        .into()
-                                }
-                                Err(error) => format!("Write failed • {error}"),
-                            };
+                        WriteUpdate::Finished(completion) => {
+                            view.status = view.write_session.finish(completion);
                         }
                     }
                     cx.notify();
@@ -1706,23 +1558,23 @@ impl BootableView {
     }
 
     fn cancel_write(&mut self, cx: &mut Context<Self>) {
-        let Some(control) = &self.write_control else {
-            return;
-        };
-        control.cancel();
-        self.status =
-            "Stopping safely • flushing completed writes; the media will remain incomplete".into();
-        cx.notify();
+        if self.write_session.cancel() {
+            self.status =
+                "Stopping safely • flushing completed writes; the media will remain incomplete"
+                    .into();
+            cx.notify();
+        }
     }
 
     fn review_card(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let plan = self
-            .review_plan
-            .as_ref()
+            .write_session
+            .plan()
             .expect("review card is rendered only with a prepared plan");
-        let write_succeeded = matches!(self.write_result, Some(Ok(())));
+        let write_succeeded = self.write_session.succeeded();
         let elapsed = self
-            .write_started_at
+            .write_session
+            .started_at()
             .map(|started| started.elapsed())
             .unwrap_or_default();
         let step_rows = plan
@@ -1854,7 +1706,7 @@ impl BootableView {
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child(if self.active_write {
+                                    .child(if self.write_session.active() {
                                         "Writing and verification are active"
                                     } else {
                                         "One final confirmation is required"
@@ -1864,7 +1716,7 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0xb6a17a))
-                                    .child(if self.active_write {
+                                    .child(if self.write_session.active() {
                                         "Do not close the app, power off, or unplug the target drive."
                                     } else {
                                         "Review the exact target changes and irreversible consequences before writing."
@@ -1872,7 +1724,7 @@ impl BootableView {
                             ),
                     ),
             )
-            .when_some(self.write_progress.as_ref(), |panel, progress| {
+            .when_some(self.write_session.progress(), |panel, progress| {
                 let ratio = progress.ratio().unwrap_or_default() as f32;
                 panel.child(
                     div()
@@ -1918,16 +1770,26 @@ impl BootableView {
                         ),
                 )
             })
-            .when_some(self.write_result.as_ref(), |panel, result| {
-                let (title, message, color) = match result {
-                    Ok(()) => (
+            .when_some(self.write_session.completion(), |panel, completion| {
+                let (title, message, color) = match completion {
+                    WriteCompletion::Succeeded => (
                         "Write complete",
                         "The image was written and verified. The removable drive can now be safely removed."
                             .to_string(),
                         0x5bd7c0,
                     ),
-                    Err(error) => (
+                    WriteCompletion::AuthenticationDenied => (
+                        "Write cancelled before erasure",
+                        "Administrator authentication was cancelled or denied.".into(),
+                        0xf0cc7d,
+                    ),
+                    WriteCompletion::Cancelled => (
                         "Write stopped safely",
+                        "The media is incomplete and must be rewritten before use.".into(),
+                        0xf29a9a,
+                    ),
+                    WriteCompletion::Failed(error) => (
+                        "Write failed",
                         error.clone(),
                         0xf29a9a,
                     ),
@@ -1955,12 +1817,12 @@ impl BootableView {
     }
 
     fn review_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let write_succeeded = matches!(self.write_result, Some(Ok(())));
-        let action_label = if self.active_write {
+        let write_succeeded = self.write_session.succeeded();
+        let action_label = if self.write_session.active() {
             "Stop safely"
         } else if write_succeeded {
             "Written & verified"
-        } else if self.write_result.is_some() {
+        } else if self.write_session.completion().is_some() {
             "Review & retry"
         } else {
             "Review consequences"
@@ -1980,12 +1842,12 @@ impl BootableView {
                 div()
                     .flex_1()
                     .text_sm()
-                    .text_color(rgb(if self.active_write {
+                    .text_color(rgb(if self.write_session.active() {
                         0xe5b95f
                     } else {
                         0xa9b8c9
                     }))
-                    .child(if self.active_write {
+                    .child(if self.write_session.active() {
                         "Writing and verification are active · do not unplug the target"
                     } else if write_succeeded {
                         "Complete · the written media passed byte verification"
@@ -2001,7 +1863,7 @@ impl BootableView {
                     .child(
                         Button::new("review-back")
                             .label("Back")
-                            .disabled(self.active_write)
+                            .disabled(self.write_session.active())
                             .on_click(cx.listener(|this, _, _, cx| this.close_review(cx))),
                     )
                     .child(
@@ -2010,7 +1872,7 @@ impl BootableView {
                             .label(action_label)
                             .disabled(write_succeeded)
                             .on_click(cx.listener(|this, _, _, cx| {
-                                if this.active_write {
+                                if this.write_session.active() {
                                     this.cancel_write(cx);
                                 } else {
                                     this.open_write_confirmation(cx);
@@ -2022,8 +1884,8 @@ impl BootableView {
 
     fn write_confirmation_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let plan = self
-            .review_plan
-            .as_ref()
+            .write_session
+            .plan()
             .expect("confirmation modal requires a reviewed plan");
         let change_rows = plan
             .steps
@@ -2224,10 +2086,10 @@ impl BootableView {
                     )
                     .child(
                         Checkbox::new("acknowledge-write-consequences")
-                            .checked(self.confirm_acknowledged)
+                            .checked(self.write_session.acknowledged())
                             .label("I checked the physical target and understand that all of its existing data will be permanently erased.")
                             .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.confirm_acknowledged = *checked;
+                                this.write_session.set_acknowledged(*checked);
                                 cx.notify();
                             })),
                     )
@@ -2248,11 +2110,7 @@ impl BootableView {
                                 Button::new("confirm-write")
                                     .danger()
                                     .label("Confirm erase & write")
-                                    .disabled(!destructive_confirmation_ready(
-                                        self.confirm_acknowledged,
-                                        self.active_write,
-                                        matches!(self.write_result, Some(Ok(()))),
-                                    ))
+                                    .disabled(!self.write_session.can_confirm())
                                     .on_click(cx.listener(|this, _, _, cx| this.start_write(cx))),
                             ),
                     ),
@@ -2266,7 +2124,10 @@ impl BootableView {
     ) -> impl IntoElement {
         let show_page_fallback = self.selected_distribution.is_some()
             && self.catalog_releases.is_empty()
-            && !self.distro_loading;
+            && !self
+                .discovery_session
+                .state(CatalogFacet::Details)
+                .is_loading();
         let query = self.catalog_search_query(cx);
         let distributions = self
             .distributions
@@ -2420,13 +2281,13 @@ impl BootableView {
             })
             .collect::<Vec<_>>();
         let distribution_state = if !query.is_empty() {
-            &self.directory_state
-        } else if self.quick_access == QuickAccess::Arch {
-            &self.arch_state
-        } else if self.quick_access == QuickAccess::Debian {
-            &self.debian_state
+            self.discovery_session.state(CatalogFacet::Directory)
+        } else if self.discovery_session.quick_access() == QuickAccess::Arch {
+            self.discovery_session.state(CatalogFacet::Arch)
+        } else if self.discovery_session.quick_access() == QuickAccess::Debian {
+            self.discovery_session.state(CatalogFacet::Debian)
         } else {
-            &self.catalog_state
+            self.discovery_session.state(CatalogFacet::Popular)
         };
         let distribution_message = if !query.is_empty()
             && matches!(
@@ -2438,11 +2299,15 @@ impl BootableView {
             distribution_state.short_label("distributions")
         };
         let release_message = if self.selected_distribution.is_none()
-            && matches!(self.details_state, CatalogState::Idle)
-        {
+            && matches!(
+                self.discovery_session.state(CatalogFacet::Details),
+                CatalogState::Idle
+            ) {
             "Choose a distribution to resolve its current ISO files".into()
         } else {
-            self.details_state.short_label("ISO releases")
+            self.discovery_session
+                .state(CatalogFacet::Details)
+                .short_label("ISO releases")
         };
 
         div()
@@ -2686,7 +2551,11 @@ impl BootableView {
                                         div()
                                             .text_xs()
                                             .text_color(rgb(0x6f8299))
-                                            .child(if self.distro_loading {
+                                            .child(if self
+                                                .discovery_session
+                                                .state(CatalogFacet::Details)
+                                                .is_loading()
+                                            {
                                                 "Loading…".into()
                                             } else {
                                                 format!("{} found", self.catalog_releases.len())
@@ -2746,12 +2615,12 @@ impl BootableView {
         } else {
             "Setup options"
         };
-        let content = if self.quick_access == QuickAccess::Windows {
+        let content = if self.discovery_session.quick_access() == QuickAccess::Windows {
             self.windows_quick_card(cx).into_any_element()
-        } else if self.quick_access == QuickAccess::Omarchy {
+        } else if self.discovery_session.quick_access() == QuickAccess::Omarchy {
             self.omarchy_quick_card(cx, layout).into_any_element()
         } else {
-            match self.discovery_source {
+            match self.discovery_session.source() {
                 DiscoverySource::DistroWatch => {
                     self.distrowatch_catalog_card(cx, layout).into_any_element()
                 }
@@ -2791,8 +2660,8 @@ impl BootableView {
                                 Button::new("quick-all")
                                     .compact()
                                     .when(
-                                        self.quick_access == QuickAccess::All
-                                            && self.discovery_source
+                                        self.discovery_session.quick_access() == QuickAccess::All
+                                            && self.discovery_session.source()
                                                 == DiscoverySource::DistroWatch,
                                         |button| button.primary(),
                                     )
@@ -2804,9 +2673,10 @@ impl BootableView {
                             .child(
                                 Button::new("quick-arch")
                                     .compact()
-                                    .when(self.quick_access == QuickAccess::Arch, |button| {
-                                        button.primary()
-                                    })
+                                    .when(
+                                        self.discovery_session.quick_access() == QuickAccess::Arch,
+                                        |button| button.primary(),
+                                    )
                                     .label("Arch")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::Arch, window, cx)
@@ -2815,9 +2685,11 @@ impl BootableView {
                             .child(
                                 Button::new("quick-debian")
                                     .compact()
-                                    .when(self.quick_access == QuickAccess::Debian, |button| {
-                                        button.primary()
-                                    })
+                                    .when(
+                                        self.discovery_session.quick_access()
+                                            == QuickAccess::Debian,
+                                        |button| button.primary(),
+                                    )
                                     .label("Debian")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::Debian, window, cx)
@@ -2826,9 +2698,11 @@ impl BootableView {
                             .child(
                                 Button::new("quick-omarchy")
                                     .compact()
-                                    .when(self.quick_access == QuickAccess::Omarchy, |button| {
-                                        button.primary()
-                                    })
+                                    .when(
+                                        self.discovery_session.quick_access()
+                                            == QuickAccess::Omarchy,
+                                        |button| button.primary(),
+                                    )
                                     .label("Omarchy")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::Omarchy, window, cx)
@@ -2837,9 +2711,11 @@ impl BootableView {
                             .child(
                                 Button::new("quick-windows")
                                     .compact()
-                                    .when(self.quick_access == QuickAccess::Windows, |button| {
-                                        button.primary()
-                                    })
+                                    .when(
+                                        self.discovery_session.quick_access()
+                                            == QuickAccess::Windows,
+                                        |button| button.primary(),
+                                    )
                                     .label("Windows")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::Windows, window, cx)
@@ -2849,7 +2725,8 @@ impl BootableView {
                                 Button::new("quick-raspberry-pi")
                                     .compact()
                                     .when(
-                                        self.discovery_source == DiscoverySource::RaspberryPi,
+                                        self.discovery_session.source()
+                                            == DiscoverySource::RaspberryPi,
                                         |button| button.primary(),
                                     )
                                     .label("Raspberry Pi")
@@ -2858,15 +2735,18 @@ impl BootableView {
                                     ),
                             ),
                     )
-                    .when(self.quick_access != QuickAccess::Windows, |toolbar| {
-                        toolbar.child(
-                            div()
-                                .flex_1()
-                                .min_w(px(220.))
-                                .when(layout.compact, |search| search.w_full())
-                                .child(Input::new(&self.catalog_search).w_full()),
-                        )
-                    })
+                    .when(
+                        self.discovery_session.quick_access() != QuickAccess::Windows,
+                        |toolbar| {
+                            toolbar.child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(220.))
+                                    .when(layout.compact, |search| search.w_full())
+                                    .child(Input::new(&self.catalog_search).w_full()),
+                            )
+                        },
+                    )
                     .when(layout.wide, |toolbar| {
                         toolbar.child(
                             div()
@@ -2878,7 +2758,10 @@ impl BootableView {
                                     Button::new("downloads")
                                         .compact()
                                         .icon(Icon::empty().path("ui/download.svg"))
-                                        .label(format!("Downloads · {}", self.download_jobs.len()))
+                                        .label(format!(
+                                            "Downloads · {}",
+                                            self.download_session.jobs().len()
+                                        ))
                                         .when(self.downloads_open, |button| button.primary())
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.toggle_downloads(cx)),
@@ -3239,7 +3122,10 @@ impl BootableView {
         let selected = self
             .selected_pi_image
             .and_then(|index| self.pi_catalog.as_ref()?.images.get(index));
-        let pi_message = self.pi_state.short_label("Raspberry Pi images");
+        let pi_message = self
+            .discovery_session
+            .state(CatalogFacet::RaspberryPi)
+            .short_label("Raspberry Pi images");
         let image_message = if self.pi_catalog.is_some() {
             "No compatible image found".into()
         } else {
@@ -3887,7 +3773,8 @@ impl BootableView {
 
     fn download_history_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self
-            .download_jobs
+            .download_session
+            .jobs()
             .iter()
             .take(20)
             .enumerate()
@@ -4132,14 +4019,14 @@ impl BootableView {
                                     .flex_col()
                                     .gap_1()
                                     .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
-                                        if self.review_plan.is_some() {
+                                        if self.write_session.is_reviewing() {
                                             "Review write plan"
                                         } else {
                                             "Create boot media"
                                         },
                                     ))
                                     .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                                        if self.review_plan.is_some() {
+                                        if self.write_session.is_reviewing() {
                                             "Inspect every operation before confirmation."
                                         } else {
                                             "Image → removable drive → verified result"
@@ -4158,9 +4045,9 @@ impl BootableView {
                         Button::new("downloads")
                             .icon(Icon::empty().path("ui/download.svg"))
                             .label(if compact {
-                                format!("Jobs · {}", self.download_jobs.len())
+                                format!("Jobs · {}", self.download_session.jobs().len())
                             } else {
-                                format!("Downloads · {}", self.download_jobs.len())
+                                format!("Downloads · {}", self.download_session.jobs().len())
                             })
                             .when(self.downloads_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_downloads(cx))),
@@ -4261,7 +4148,10 @@ impl BootableView {
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let readiness = self.review_readiness();
-        let download_state = self.download_control.as_ref().map(OperationControl::state);
+        let download_state = self
+            .download_session
+            .active_control()
+            .map(|control| control.state());
         div()
             .flex()
             .items_center()
@@ -4303,28 +4193,31 @@ impl BootableView {
                             .text_sm()
                             .text_color(rgb(0xa9b8c9))
                             .child(self.status.clone())
-                            .when_some(self.active_download.as_ref(), |column, progress| {
-                                let ratio = progress
-                                    .total
-                                    .filter(|total| *total > 0)
-                                    .map(|total| progress.completed as f32 / total as f32)
-                                    .unwrap_or(0.)
-                                    .clamp(0., 1.);
-                                column.child(
-                                    div()
-                                        .w_full()
-                                        .h(px(4.))
-                                        .rounded_full()
-                                        .bg(rgb(0x243244))
-                                        .child(
-                                            div()
-                                                .h_full()
-                                                .w(relative(ratio))
-                                                .rounded_full()
-                                                .bg(rgb(0x5bd7c0)),
-                                        ),
-                                )
-                            }),
+                            .when_some(
+                                self.download_session.active_progress(),
+                                |column, progress| {
+                                    let ratio = progress
+                                        .total
+                                        .filter(|total| *total > 0)
+                                        .map(|total| progress.completed as f32 / total as f32)
+                                        .unwrap_or(0.)
+                                        .clamp(0., 1.);
+                                    column.child(
+                                        div()
+                                            .w_full()
+                                            .h(px(4.))
+                                            .rounded_full()
+                                            .bg(rgb(0x243244))
+                                            .child(
+                                                div()
+                                                    .h_full()
+                                                    .w(relative(ratio))
+                                                    .rounded_full()
+                                                    .bg(rgb(0x5bd7c0)),
+                                            ),
+                                    )
+                                },
+                            ),
                     ),
             )
             .child(
@@ -4427,7 +4320,9 @@ impl Render for BootableView {
                         .flex()
                         .flex_col()
                         .when(
-                            !(self.catalog_open && self.review_plan.is_none() && layout.wide),
+                            !(self.catalog_open
+                                && !self.write_session.is_reviewing()
+                                && layout.wide),
                             |shell| {
                                 shell.child(
                                     div()
@@ -4454,10 +4349,10 @@ impl Render for BootableView {
                                         .flex()
                                         .flex_col()
                                         .gap_3()
-                                        .when(self.review_plan.is_some(), |panel| {
+                                        .when(self.write_session.is_reviewing(), |panel| {
                                             panel.child(self.review_card(cx))
                                         })
-                                        .when(self.review_plan.is_none(), |panel| {
+                                        .when(!self.write_session.is_reviewing(), |panel| {
                                             panel
                                                 .when(self.downloads_open, |panel| {
                                                     panel.child(self.download_history_card(cx))
@@ -4489,16 +4384,16 @@ impl Render for BootableView {
                                 .pt_3()
                                 .pb_4()
                                 .when(layout.compact, |footer| footer.px_3().pt_2().pb_3())
-                                .when(self.review_plan.is_some(), |footer| {
+                                .when(self.write_session.is_reviewing(), |footer| {
                                     footer.child(self.review_footer(cx))
                                 })
-                                .when(self.review_plan.is_none(), |footer| {
+                                .when(!self.write_session.is_reviewing(), |footer| {
                                     footer.child(self.status_bar(cx))
                                 }),
                         ),
                 ),
             )
-            .when(self.confirm_modal, |root| {
+            .when(self.write_session.confirmation_open(), |root| {
                 root.child(self.write_confirmation_modal(cx))
             })
     }
@@ -4586,14 +4481,15 @@ fn main() {
                             return true;
                         };
                         let view_state = view.read(cx);
-                        if !view_state.active_write && view_state.download_control.is_none() {
+                        if !view_state.write_session.active()
+                            && !view_state.download_session.is_active()
+                        {
                             return true;
                         }
                         view.update(cx, |view, cx| {
-                            if let Some(control) = &view.download_control {
-                                control.cancel();
+                            if view.download_session.cancel() {
                                 view.status = "Cancelling download safely • close again after temporary data is cleaned".into();
-                            } else if let Some(control) = &view.write_control {
+                            } else if let Some(control) = view.write_session.control() {
                                 control.cancel();
                                 view.status = "Stopping write safely • close again after completed writes are flushed".into();
                             } else {

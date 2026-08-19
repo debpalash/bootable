@@ -8,15 +8,19 @@ use std::time::Duration;
 
 use crate::error::{Error, Result, io_error};
 use crate::model::{
-    Device, DeviceId, MountPoint, Progress, ProgressPhase, WindowsExperienceOptions,
-    WindowsPartitionScheme, WindowsPayload, WritePlan, WriteStrategy,
+    Device, DeviceId, MountPoint, Progress, ProgressPhase, WindowsPartitionScheme, WindowsPayload,
+    WritePlan, WriteStrategy,
 };
 use crate::operation::OperationControl;
-use crate::windows;
+use crate::windows_media::{
+    FAT32_MAX_FILE_SIZE, apply_setup_options as apply_windows_options, find_case_insensitive_child,
+    find_install_payload, verify_written_tree as verify_windows_tree,
+};
+#[cfg(test)]
+use crate::{WindowsExperienceOptions, windows};
 use serde::Deserialize;
 
 const BUFFER_SIZE: usize = 4 * 1024 * 1024;
-const FAT32_MAX_FILE_SIZE: u64 = u32::MAX as u64;
 const WIM_CHUNK_MIB: &str = "3800";
 const BASIC_DATA_GUID: &str = "0700";
 
@@ -524,20 +528,6 @@ fn windows_write(
     Ok(())
 }
 
-fn apply_windows_options(root: &Path, options: &WindowsExperienceOptions) -> Result<()> {
-    if !options.requires_answer_file() {
-        return Ok(());
-    }
-    let path = root.join("autounattend.xml");
-    if path.exists() {
-        return Err(Error::UnsupportedImage(
-            "the source already contains autounattend.xml; refusing to overwrite it".into(),
-        ));
-    }
-    let answer = windows::answer_file(options)?;
-    fs::write(&path, answer).map_err(|error| io_error(path, error))
-}
-
 fn apply_windows_ca_2023(root: &Path, control: &OperationControl) -> Result<()> {
     ensure_tool("wimlib-imagex")?;
     let boot_wim = root.join("sources/boot.wim");
@@ -783,85 +773,6 @@ fn copy_file(
     writer
         .flush()
         .map_err(|error| io_error(destination, error))?;
-    Ok(())
-}
-
-fn find_install_payload(root: &Path, payload: WindowsPayload) -> Result<PathBuf> {
-    let sources = find_case_insensitive_child(root, "sources")?;
-    let prefix = match payload {
-        WindowsPayload::Wim => "install.wim",
-        WindowsPayload::Esd => "install.esd",
-        WindowsPayload::SplitWim => "install.swm",
-    };
-    find_case_insensitive_child(&sources, prefix)
-}
-
-fn find_case_insensitive_child(parent: &Path, name: &str) -> Result<PathBuf> {
-    fs::read_dir(parent)
-        .map_err(|error| io_error(parent, error))?
-        .filter_map(std::result::Result::ok)
-        .find(|entry| {
-            entry
-                .file_name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(name)
-        })
-        .map(|entry| entry.path())
-        .ok_or_else(|| {
-            Error::UnsupportedImage(format!("missing {name} below {}", parent.display()))
-        })
-}
-
-fn verify_windows_tree(root: &Path) -> Result<()> {
-    let efi = find_case_insensitive_child(root, "efi")?;
-    let efi_boot = find_case_insensitive_child(&efi, "boot")?;
-    let has_efi_loader = fs::read_dir(&efi_boot)
-        .map_err(|error| io_error(&efi_boot, error))?
-        .filter_map(std::result::Result::ok)
-        .any(|entry| {
-            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-            name.starts_with("boot") && name.ends_with(".efi")
-        });
-    if !has_efi_loader {
-        return Err(Error::UnsupportedImage(
-            "written media is missing efi/boot/boot*.efi".into(),
-        ));
-    }
-    find_case_insensitive_child(root, "bootmgr")?;
-    let sources = find_case_insensitive_child(root, "sources")?;
-    find_case_insensitive_child(&sources, "boot.wim")?;
-    let has_install_payload = fs::read_dir(&sources)
-        .map_err(|error| io_error(&sources, error))?
-        .filter_map(std::result::Result::ok)
-        .any(|entry| {
-            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-            name == "install.wim"
-                || name == "install.esd"
-                || (name.starts_with("install") && name.ends_with(".swm"))
-        });
-    if !has_install_payload {
-        return Err(Error::UnsupportedImage(
-            "written media is missing its Windows install payload".into(),
-        ));
-    }
-    verify_fat_file_sizes(root)?;
-    Ok(())
-}
-
-fn verify_fat_file_sizes(path: &Path) -> Result<()> {
-    for entry in fs::read_dir(path).map_err(|error| io_error(path, error))? {
-        let entry = entry.map_err(|error| io_error(path, error))?;
-        let child = entry.path();
-        let metadata = entry.metadata().map_err(|error| io_error(&child, error))?;
-        if metadata.is_dir() {
-            verify_fat_file_sizes(&child)?;
-        } else if metadata.len() > FAT32_MAX_FILE_SIZE {
-            return Err(Error::UnsupportedImage(format!(
-                "{} exceeds FAT32's maximum file size",
-                child.display()
-            )));
-        }
-    }
     Ok(())
 }
 
