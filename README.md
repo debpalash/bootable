@@ -20,11 +20,7 @@ Bootable writes ISO, IMG, RAW, and compressed disk images to removable USB and S
 Screenshots
 -----------
 
-| Native desktop | Mouse-friendly terminal UI |
-| --- | --- |
-| ![Bootable desktop discovery](docs/screenshots/gui-discover.png) | ![Bootable terminal interface](docs/screenshots/tui-main.png) |
-
-<p align="center"><img src="docs/screenshots/gui-toolbar.png" alt="Compact discovery toolbar" width="900"></p>
+<img width="1749" height="1948" alt="image" src="https://github.com/user-attachments/assets/18a0ffcf-cedc-403b-b9d3-efb9d32f4bff" />
 
 Features
 --------
