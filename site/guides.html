@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bootable guides — USB, SD card, and Windows installer media</title>
+    <meta name="description" content="Practical guides for writing and verifying ISO, IMG, Raspberry Pi, compressed, and Windows installer media with Bootable.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Bootable guides">
+    <meta property="og:description" content="USB, SD card, Windows installer, safety, and verification guides.">
+    <meta property="og:url" content="https://bootable.palash.dev/guides.html">
+    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/guides.html">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Bootable home">
+        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="./">Home</a>
+        <a href="./features.html">Features</a>
+        <a href="./guides.html" aria-current="page">Guides</a>
+        <a href="./download.html">Download</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </nav>
+    </header>
+
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol><li><a href="./">Home</a></li><li aria-current="page">Guides</li></ol>
+      </nav>
+      <header class="guide-hero">
+        <p class="eyebrow">Guides</p>
+        <h1>Choose a task.</h1>
+        <p class="lede">Requirements, destructive steps, and verification limits.</p>
+      </header>
+
+      <section class="guide-index" aria-label="All guides">
+        <div class="guide-card-grid">
+          <a class="guide-card" href="./windows-11-usb-on-linux.html">
+            <span>Windows · Linux</span>
+            <h3>Create a Windows 11 USB on Linux</h3>
+            <p>Build FAT32 setup media, split oversized WIM files, and review Windows setup options.</p>
+          </a>
+          <a class="guide-card" href="./windows-11-usb-on-macos.html">
+            <span>Windows · macOS</span>
+            <h3>Create a Windows 11 USB on macOS</h3>
+            <p>Use the native macOS adapter, protected helper, and wimlib on Apple Silicon.</p>
+          </a>
+          <a class="guide-card" href="./write-iso-to-usb.html">
+            <span>ISO · USB</span>
+            <h3>Write an ISO to a USB drive</h3>
+            <p>Inspect the image, review the exact target, write, and read back the result.</p>
+          </a>
+          <a class="guide-card" href="./raspberry-pi-image-writer.html">
+            <span>IMG · SD</span>
+            <h3>Write a Raspberry Pi image</h3>
+            <p>Find Pi images, handle compressed downloads, and verify the expanded bytes.</p>
+          </a>
+          <a class="guide-card" href="./compressed-image-writer.html">
+            <span>XZ · GZ · ZST · BZ2</span>
+            <h3>Write compressed disk images</h3>
+            <p>Measure expanded size and stream an image without creating an unpacked copy.</p>
+          </a>
+          <a class="guide-card" href="./verify-bootable-usb.html">
+            <span>Integrity</span>
+            <h3>Verify bootable USB media</h3>
+            <p>Understand publisher checksums, byte read-back, and Windows boot-tree audits.</p>
+          </a>
+          <a class="guide-card" href="./safe-usb-writer.html">
+            <span>Safety</span>
+            <h3>How Bootable protects disks</h3>
+            <p>Target filtering, stable identity, consequence review, and narrow elevation.</p>
+          </a>
+          <a class="guide-card" href="./terminal-usb-writer.html">
+            <span>TUI · CLI</span>
+            <h3>Write boot media from a terminal</h3>
+            <p>Use the mouse-enabled TUI or inspect the available CLI commands.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <img src="./favicon.svg" width="30" height="30" alt="">
+      <span>Bootable · Apache-2.0</span>
+      <span class="footer-links">
+        <a href="./">Home</a>
+        <a href="./download.html">Download</a>
+        <a href="./faq.html">FAQ</a>
+        <a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </span>
+    </footer>
+  </body>
+</html>

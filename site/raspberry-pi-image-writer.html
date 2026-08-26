@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Write a Raspberry Pi image to an SD card — Bootable</title>
+    <meta name="description" content="Find, download, write, and verify Raspberry Pi IMG and compressed disk images on removable SD cards and USB media.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable"><meta property="og:title" content="Write a Raspberry Pi image to an SD card"><meta property="og:description" content="Catalog downloads, compressed images, expanded-size checks, and read-back verification."><meta property="og:url" content="https://bootable.palash.dev/raspberry-pi-image-writer.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png"><meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/raspberry-pi-image-writer.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Raspberry Pi image</li></ol></nav>
+      <article>
+        <header class="guide-hero"><p class="eyebrow">Raspberry Pi · IMG · SD</p><h1>Write a Raspberry Pi image to an SD card.</h1><p class="lede">Browse Pi images or open a local IMG, write the expanded bytes, and verify the target before removing it.</p></header>
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="source">Choose a Raspberry Pi image</h2>
+            <p>Open the Raspberry Pi catalog in Bootable, search the available images, and queue a download. You can pause, resume, cancel, or retry the job. A local <code>.img</code>, <code>.raw</code>, or supported compressed file works through the same inspection path.</p>
+            <p>When a publisher checksum file is available, Bootable verifies the downloaded file before allowing it into a write plan. The interface distinguishes a verified checksum from an HTTPS-only download.</p>
+
+            <h2 id="capacity">Check the real capacity</h2>
+            <p>Compressed files can be much smaller than the disk image they contain. Bootable measures the full expanded length before review and checks that the expanded image fits the card.</p>
+            <p>Bootable also provides destructive bad-block and fake-capacity tests. Run those only on expendable media; the test itself overwrites the selected device.</p>
+
+            <h2 id="steps">Write the card</h2>
+            <ol>
+              <li>Choose a catalog image or local file.</li>
+              <li>Insert the SD card through a removable or USB-attached reader.</li>
+              <li>Select the whole card, not a mounted partition.</li>
+              <li>Review the expanded size, physical target, and permanent erasure.</li>
+              <li>Write and wait for read-back verification.</li>
+            </ol>
+            <div class="guide-callout"><p><strong>Check the adapter and card.</strong> The selected target is the entire removable device. Existing partitions and files will be erased.</p></div>
+
+            <h2 id="verification">What gets compared</h2>
+            <p>For compressed media, Bootable hashes the expanded stream sent to the card. It then reads the same byte range back from the card and compares SHA-256. Verification covers the written bytes, not whether a specific Pi model supports the image.</p>
+
+            <h2 id="after">After the write</h2>
+            <p>Wait for the safe-removal result before disconnecting the reader. If the write was cancelled or the verification failed, rewrite the entire image. Do not treat an interrupted card as bootable.</p>
+
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./compressed-image-writer.html">How compressed image streaming works</a></li><li><a href="./verify-bootable-usb.html">Read-back verification explained</a></li><li><a href="./write-iso-to-usb.html">Write an ISO to USB</a></li></ul></section>
+            <div class="guide-cta"><h2>Use Bootable for SD media</h2><p>Choose the native desktop app or mouse-enabled terminal interface.</p><a class="button primary" href="./download.html">Download Bootable</a></div>
+          </div>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#source">Choose an image</a></li><li><a href="#capacity">Capacity checks</a></li><li><a href="#steps">Write the card</a></li><li><a href="#verification">Verification</a></li><li><a href="#after">After the write</a></li></ul></aside>
+        </div>
+      </article>
+    </main>
+    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
+  </body>
+</html>

@@ -6,11 +6,13 @@ on:
     paths:
       - '.github/workflows/pages.yml'
       - 'site/**'
+      - 'scripts/install.sh'
       - 'assets/bootable-logo.svg'
       - 'assets/bootable-logo-animated.svg'
       - 'assets/bootable-mark.svg'
       - 'docs/screenshots/gui-discover.png'
       - 'docs/screenshots/gui-demo.gif'
+      - 'docs/screenshots/gui-toolbar.png'
       - 'docs/screenshots/tui-main.png'
       - 'docs/screenshots/tui-demo.gif'
   workflow_dispatch:
@@ -37,13 +39,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          canonical_file="$(mktemp)"
+          page_count=0
+          for page in site/*.html; do
+            if [ "${page##*/}" = "404.html" ]; then
+              continue
+            fi
+            page_count=$((page_count + 1))
+            canonical="$(sed -n 's/.*<link rel="canonical" href="\([^"]*\)".*/\1/p' "$page")"
+            test -n "$canonical"
+            printf '%s\n' "$canonical" >> "$canonical_file"
+            grep -Fq "<loc>${canonical}</loc>" site/sitemap.xml
+            if grep -Fq 'name="robots" content="noindex"' "$page"; then
+              echo "Indexable page is marked noindex: $page" >&2
+              exit 1
+            fi
+          done
+          test "$(sort -u "$canonical_file" | wc -l)" -eq "$page_count"
+          test "$(grep -c '<loc>' site/sitemap.xml)" -eq "$page_count"
+          version="$(sed -n 's/^VERSION="${BOOTABLE_VERSION:-\([^"]*\)}"/\1/p' scripts/install.sh)"
+          test -n "$version"
+          grep -Fq "v${version}" site/index.html
+          grep -Fq "v${version}" site/download.html
           mkdir _site
-          cp site/index.html site/404.html site/styles.css site/robots.txt site/sitemap.xml _site/
+          cp site/*.html site/*.css site/robots.txt site/sitemap.xml _site/
+          cp site/social-card.png _site/social-card.png
+          cp scripts/install.sh _site/install.sh
           cp assets/bootable-logo.svg _site/bootable-logo.svg
           cp assets/bootable-logo-animated.svg _site/bootable-logo-animated.svg
           cp assets/bootable-mark.svg _site/favicon.svg
           cp docs/screenshots/gui-discover.png _site/gui-discover.png
           cp docs/screenshots/gui-demo.gif _site/gui-demo.gif
+          cp docs/screenshots/gui-toolbar.png _site/gui-toolbar.png
           cp docs/screenshots/tui-main.png _site/tui-main.png
           cp docs/screenshots/tui-demo.gif _site/tui-demo.gif
           touch _site/.nojekyll

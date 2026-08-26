@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>How Bootable protects disks during USB writes</title>
+    <meta name="description" content="See how Bootable filters removable targets, revalidates stable identity, reviews erasure, limits elevation, and handles cancellation.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable"><meta property="og:title" content="How Bootable protects disks"><meta property="og:description" content="Removable-drive filtering, stable identity checks, explicit review, and narrow elevation."><meta property="og:url" content="https://bootable.palash.dev/safe-usb-writer.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png"><meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/safe-usb-writer.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Disk safety</li></ol></nav>
+      <article>
+        <header class="guide-hero"><p class="eyebrow">Target safety · privilege boundary</p><h1>The target is checked twice.</h1><p class="lede">Bootable filters drives before selection, binds confirmation to a reviewed plan, and revalidates the physical device before erasure.</p></header>
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="eligibility">A drive must be eligible</h2>
+            <p>The native platform adapter discovers whole removable devices. A target must be USB-attached or explicitly removable, writable, large enough for the planned operation, and separate from the running system root.</p>
+            <p>Loop devices and fixed disks are not made eligible for convenience. If an adapter cannot establish the required safety properties, the device stays out of the target list.</p>
+
+            <h2 id="review">Erasure requires a reviewed plan</h2>
+            <p>Review shows the image, physical target, strategy, dependencies, ordered operations, and permanent consequences. Opening Review does not write anything. A separate acknowledgment unlocks the final erase-and-write action.</p>
+            <p>The CLI uses a plan-specific confirmation phrase derived from the device path and serial suffix.</p>
+
+            <h2 id="revalidation">Identity is checked again</h2>
+            <p>USB device paths can change after unplugging, reconnecting, or refreshing. Immediately before writing, Bootable discovers the target by stable ID again and compares its capacity and safety flags with the reviewed plan. Mounted child filesystems are then unmounted.</p>
+            <div class="guide-callout"><p><strong>Revalidation does not replace physical inspection.</strong> Confirm the device you can see and touch before authorizing erasure.</p></div>
+
+            <h2 id="privilege">The interface remains unprivileged</h2>
+            <p>The interactive desktop app and TUI do not run their network client, catalog, image parser, or renderer as root or administrator. After review, they authenticate a fixed, protected helper that accepts the plan, checks the target again, writes, and reports progress.</p>
+            <ul>
+              <li>Linux uses a root-owned helper through PolicyKit.</li>
+              <li>macOS uses a root-owned helper and private Unix socket.</li>
+              <li>Windows validates the helper under <code>Program Files</code> and uses an authenticated loopback channel after UAC.</li>
+            </ul>
+            <p>The Linux CLI can also be invoked directly as root. That path still uses the same target checks and plan-bound confirmation.</p>
+
+            <h2 id="cancellation">Cancellation leaves an explicit result</h2>
+            <p>The stop action cancels on a controlled boundary, terminates managed media tools, and flushes completed raw output. Bootable reports the target as incomplete and requiring a full rewrite.</p>
+
+            <h2 id="limits">What the safety model cannot do</h2>
+            <p>No software can identify a physical USB drive for you. Bootable cannot make an untrusted operating-system image safe, guarantee firmware compatibility, or recover data after the final confirmation. Backups and physical target review remain required.</p>
+
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./verify-bootable-usb.html">Verification scope and limits</a></li><li><a href="./write-iso-to-usb.html">The full ISO write sequence</a></li><li><a href="./terminal-usb-writer.html">TUI and CLI confirmation paths</a></li></ul></section>
+            <div class="guide-cta"><h2>Review the implementation</h2><p>The full safety model and platform checks are documented in the repository.</p><a class="button secondary" href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Read safety.md</a></div>
+          </div>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#eligibility">Drive eligibility</a></li><li><a href="#review">Reviewed plan</a></li><li><a href="#revalidation">Identity check</a></li><li><a href="#privilege">Privilege boundary</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#limits">Limits</a></li></ul></aside>
+        </div>
+      </article>
+    </main>
+    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
+  </body>
+</html>

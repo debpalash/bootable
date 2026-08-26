@@ -17,3 +17,11 @@ behavior does not count as implementation.
 
 Do not copy code from Rufus, WoeUSB, or other projects whose license is incompatible with this
 Apache-2.0 repository. Behavioral research and clean-room implementations are welcome.
+
+Documentation and product copy must follow the same standard as destructive code:
+
+- Lead with the task, constraint, or result.
+- Quantify only facts that can be traced to code, tests, release assets, or project documentation.
+- Name unsupported behavior and alpha limitations beside the related feature.
+- Keep publisher checksums, raw read-back, boot-tree audits, and installation tests distinct.
+- Avoid claims such as “safe,” “seamless,” “powerful,” or “flawless” without stating the mechanism.

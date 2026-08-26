@@ -161,7 +161,18 @@ jobs:
           prerelease: true
           generate_release_notes: true
           body: |
-            ## Bootable alpha
+            ## Bootable public alpha
 
-            This is early, destructive-media software. Verify the selected physical USB drive before confirming any write. Linux, macOS, and Windows keep the full interface unprivileged and authenticate only a fixed, protected narrow write helper. Native GPT/MBR FAT32 Windows media is implemented across all three platforms; oversized payload and CA-2023 operations require wimlib on Linux and macOS.
+            Executables are unsigned; the macOS build is not notarized. Use expendable USB or SD
+            media. Check the physical target before approving erasure.
+
+            - Packages: Linux x86-64, Windows 10+ x86-64, macOS Apple Silicon
+            - Interfaces: native desktop, mouse-enabled TUI, CLI
+            - Raw media: ISO, IMG, RAW, XZ, gzip, Zstandard, bzip2
+            - Windows media: GPT or MBR, FAT32, split WIM, boot-tree audit
+            - Integrity: publisher checksum when available; raw byte read-back after writing
+            - Privilege: interactive apps remain unelevated; a fixed helper performs approved writes
+
+            Each archive has a SHA-256 sidecar and GitHub build provenance. Legacy BIOS helpers,
+            Linux persistence, Windows To Go, DOS media, and multiboot are not implemented.
           files: dist/*

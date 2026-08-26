@@ -1,0 +1,87 @@
+name: Alpha report
+description: Report a successful write, failure, or installation problem.
+title: "[alpha] "
+labels: [alpha]
+body:
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - Successful write and boot
+        - Successful write; boot not tested
+        - Install or launch failed
+        - Discovery or download failed
+        - Write failed
+        - Verification failed
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Bootable version
+      placeholder: 0.1.0-alpha.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux x86-64
+        - Windows x86-64
+        - macOS Apple Silicon
+    validations:
+      required: true
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - Desktop
+        - TUI
+        - CLI
+    validations:
+      required: true
+
+  - type: input
+    id: image
+    attributes:
+      label: Boot image
+      description: Distribution or operating system, version, and file type.
+      placeholder: Fedora Workstation 42, ISO
+    validations:
+      required: true
+
+  - type: input
+    id: target
+    attributes:
+      label: Target drive
+      description: Model and capacity. Remove serial numbers.
+      placeholder: SanDisk Ultra, 32 GB
+
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened?
+      description: Include the stage, visible error, and expected result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: text
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed serial numbers, paths containing my username, and other secrets.
+          required: true

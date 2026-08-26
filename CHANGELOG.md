@@ -47,4 +47,4 @@ Initial public alpha.
 - macOS administrator authentication through a fixed root-owned helper and private Unix-socket
   reviewed-plan/cancel/progress protocol; the GUI/TUI process remains unprivileged.
 
-Native macOS extracted FAT32 creation and platform code signing remain unfinished.
+At this release, native macOS extracted FAT32 creation and platform code signing were unfinished.

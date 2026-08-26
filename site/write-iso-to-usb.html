@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Write an ISO to a USB drive and verify it — Bootable</title>
+    <meta name="description" content="Write a bootable ISO to removable USB media with target review, checksum support, cancellation, and byte read-back verification.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Write an ISO to USB and verify it"><meta property="og:description" content="Inspect the image, confirm the physical target, write, and read back the result.">
+    <meta property="og:url" content="https://bootable.palash.dev/write-iso-to-usb.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/write-iso-to-usb.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
+
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Write ISO to USB</li></ol></nav>
+      <article>
+        <header class="guide-hero"><p class="eyebrow">ISO · USB</p><h1>Write an ISO to USB and verify it.</h1><p class="lede">Bootable inspects the image, limits target selection to removable drives, and reads raw writes back before reporting success.</p></header>
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="inspection">Image inspection decides the method</h2>
+            <p>Open a local ISO or choose an image from the catalog. Bootable inspects it before a target can be reviewed. A hybrid Linux or Unix ISO normally uses a raw byte-for-byte write. A Windows installer ISO uses the FAT32 construction path instead.</p>
+            <p>If the download has a publisher checksum sidecar or manifest, Bootable selects the strongest supported digest and refuses a mismatch. When no checksum is available, the interface states that clearly.</p>
+
+            <h2 id="target">Select the physical drive</h2>
+            <p>Insert the USB drive and identify it by model, capacity, device path, and any available serial suffix. Fixed disks, read-only devices, and drives containing the running system root are not eligible.</p>
+            <div class="guide-callout"><p><strong>Target selection is destructive.</strong> Capacity alone is not enough to identify a drive. Check the physical device before confirming erasure.</p></div>
+
+            <h2 id="steps">Write the ISO</h2>
+            <ol>
+              <li>Choose the ISO and wait for inspection to finish.</li>
+              <li>Select the removable USB drive.</li>
+              <li>Open Review and check the write strategy, ordered operations, and target identity.</li>
+              <li>Acknowledge permanent erasure.</li>
+              <li>Start the write and keep the drive connected through verification.</li>
+            </ol>
+            <p>Immediately before opening the target, the helper discovers it again by stable ID and compares its capacity and safety flags with the reviewed plan.</p>
+
+            <h2 id="readback">Read-back verification</h2>
+            <p>For a raw write, Bootable hashes the image bytes while streaming, flushes the target, then reads back exactly the written image length and compares SHA-256. Extra space after the image on a larger drive is not part of the comparison.</p>
+            <p>A matching result confirms that the intended byte range reached the target. It does not prove that the image supports every firmware or computer.</p>
+
+            <h2 id="cancel">Cancellation</h2>
+            <p>Cancellation stops at a controlled boundary, flushes completed raw output, and marks the media incomplete. Rewrite the full image before trying to boot it.</p>
+
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./compressed-image-writer.html">Write XZ, gzip, Zstandard, and bzip2 images</a></li><li><a href="./verify-bootable-usb.html">Understand each verification layer</a></li><li><a href="./safe-usb-writer.html">How the target is protected</a></li></ul></section>
+            <div class="guide-cta"><h2>Write from the desktop or terminal</h2><p>Both interfaces use the same inspection, review, write, and verification path.</p><a class="button primary" href="./download.html">Download Bootable</a></div>
+          </div>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#inspection">Image inspection</a></li><li><a href="#target">Target selection</a></li><li><a href="#steps">Write the ISO</a></li><li><a href="#readback">Read-back check</a></li><li><a href="#cancel">Cancellation</a></li></ul></aside>
+        </div>
+      </article>
+    </main>
+    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/validation.md">Validation</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
+  </body>
+</html>

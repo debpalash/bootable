@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Write bootable USB media from a terminal — Bootable TUI</title>
+    <meta name="description" content="Use Bootable's mouse-enabled terminal interface to discover images, review removable targets, write media, and verify results.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable"><meta property="og:title" content="Write boot media from a terminal"><meta property="og:description" content="A mouse-enabled TUI with the same write plans and safety states as the desktop app."><meta property="og:url" content="https://bootable.palash.dev/terminal-usb-writer.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png"><meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/terminal-usb-writer.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Terminal interface</li></ol></nav>
+      <article>
+        <header class="guide-hero"><p class="eyebrow">Ratatui · mouse · keyboard</p><h1>Write boot media from a terminal.</h1><p class="lede">Bootable's TUI supports catalog browsing, downloads, target review, writing, cancellation, and verification without a desktop window.</p></header>
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="install">Install the TUI</h2>
+            <div class="guide-commands"><pre><code>curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --tui
+bootable</code></pre></div>
+            <p>Linux x86-64 and macOS Apple Silicon use the Unix installer. Windows users can install the TUI from the release ZIP with <code>install.ps1 -Variant Tui</code>.</p>
+
+            <h2 id="workflow">One terminal workflow</h2>
+            <ol>
+              <li>Discover a catalog image or choose a local file.</li>
+              <li>Wait for inspection and checksum status.</li>
+              <li>Select an eligible removable drive.</li>
+              <li>Review the source, target, strategy, operations, and consequences.</li>
+              <li>Confirm erasure, follow progress, and wait for verification.</li>
+            </ol>
+            <p>Mouse clicks, wheel scrolling, and keyboard navigation reach the same controls. The terminal layout reflows for available geometry but keeps the Source → Target → Review order.</p>
+
+            <h2 id="parity">Desktop and TUI parity</h2>
+            <p>The TUI and GPUI desktop app consume the same core sessions and plans. Loading, cached, empty, failure, retry, cancellation, and stale-response states have matching behavior. Write progress includes phase, percentage, transferred bytes, throughput, ETA, elapsed time, verification, and safe-removal result.</p>
+
+            <h2 id="privilege">Writing without running the TUI as root</h2>
+            <p>The interactive TUI stays unprivileged. After the destructive consequences are acknowledged, it launches the fixed protected helper and asks the operating system for administrator authentication. Catalog and download code never enters the helper process.</p>
+
+            <h2 id="cli">CLI commands</h2>
+            <p>The <code>bootable</code> binary also exposes non-interactive commands. Run <code>bootable --help</code> for the commands supported by the installed version. Destructive CLI writes require the exact plan-bound confirmation phrase; never hard-code a device path in automation.</p>
+            <div class="guide-callout"><p><strong>Do not launch the whole TUI with sudo.</strong> Install the protected helper and let Bootable request elevation only for the reviewed write.</p></div>
+
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./safe-usb-writer.html">Privilege and target safety</a></li><li><a href="./write-iso-to-usb.html">Write and verify a local ISO</a></li><li><a href="./windows-11-usb-on-linux.html">Create Windows media from Linux</a></li></ul></section>
+            <div class="guide-cta"><h2>Install the terminal build</h2><p>Use <code>--all</code> if you also want the desktop interface.</p><a class="button primary" href="./download.html">View install commands</a></div>
+          </div>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#install">Install</a></li><li><a href="#workflow">Workflow</a></li><li><a href="#parity">Interface parity</a></li><li><a href="#privilege">Elevation</a></li><li><a href="#cli">CLI commands</a></li></ul></aside>
+        </div>
+      </article>
+    </main>
+    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/ui-parity.md">UI parity</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
+  </body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Download Bootable — Linux, Windows, and macOS</title>
+    <meta name="description" content="Download Bootable v0.1.0-alpha.2 for Linux x86-64, Windows x86-64, or macOS Apple Silicon. Archive sizes, SHA-256 files, install commands, and known limits.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Download Bootable v0.1.0-alpha.2">
+    <meta property="og:description" content="Direct archives, checksums, install commands, requirements, and current alpha limits.">
+    <meta property="og:url" content="https://bootable.palash.dev/download.html">
+    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/download.html">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Bootable home">
+        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="./">Home</a>
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./download.html" aria-current="page">Download</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </nav>
+    </header>
+
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol><li><a href="./">Home</a></li><li aria-current="page">Download</li></ol>
+      </nav>
+      <header class="guide-hero">
+        <p class="eyebrow">Current release · 18 August 2026</p>
+        <h1>Download Bootable.</h1>
+        <p class="lede">v0.1.0-alpha.2. Desktop, TUI, CLI, and write helper included.</p>
+      </header>
+
+      <div class="guide-body">
+        <article class="guide-content">
+          <h2 id="release-files">Release files</h2>
+          <div class="release-table-wrap">
+            <table class="release-table">
+              <thead><tr><th>Platform</th><th>Architecture</th><th>Archive</th><th>Size</th><th>Integrity</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Linux</td><td>x86-64</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
+                  <td>23.8 MiB</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
+                </tr>
+                <tr>
+                  <td>Windows 10+</td><td>x86-64</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip">ZIP</a></td>
+                  <td>16.5 MiB</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
+                </tr>
+                <tr>
+                  <td>macOS</td><td>Apple Silicon</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
+                  <td>14.7 MiB</td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="guide-callout">
+            <p><strong>Unsigned alpha.</strong> Binaries are not signed; macOS is not notarized. Use expendable media. Check the target before erasure.</p>
+          </div>
+
+          <h2 id="install">Install</h2>
+          <h3>Linux or macOS</h3>
+          <p>The installer downloads the matching archive, verifies its SHA-256 sidecar, and asks for administrator authentication only when it installs the write helper.</p>
+          <div class="guide-commands"><pre><code># Desktop
+curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui
+
+# Terminal
+curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --tui
+
+# Both
+curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --all</code></pre></div>
+          <p>Review <a href="https://github.com/debpalash/bootable/blob/main/scripts/install.sh">install.sh</a> before piping it to a shell. Set <code>BOOTABLE_SKIP_PRIVILEGED_HELPER=1</code> for a non-writing install.</p>
+
+          <h3>Windows</h3>
+          <p>Download the ZIP and SHA-256 file above, verify the archive, extract it, then run:</p>
+          <div class="guide-commands"><pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All</code></pre></div>
+          <p>The installer copies Bootable under <code>Program Files</code>. The interface remains unelevated; UAC appears when an approved write starts.</p>
+
+          <h2 id="integrity">Verify the archive yourself</h2>
+          <p>The sidecar proves the downloaded archive matches the release file. GitHub build provenance ties that archive to the release workflow. It is not a substitute for platform code signing.</p>
+          <h3>Linux, macOS, and GitHub provenance</h3>
+          <div class="guide-commands"><pre><code># Linux
+sha256sum -c bootable-*.sha256
+
+# macOS
+shasum -a 256 -c bootable-*.sha256
+
+# GitHub provenance; use the archive you downloaded
+gh attestation verify bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz \
+  --repo debpalash/bootable</code></pre></div>
+          <h3>Windows PowerShell</h3>
+          <div class="guide-commands"><pre><code>$asset = "bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip"
+$expected = (Get-Content "$asset.sha256" -Raw).Split(" ")[0]
+$actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+if ($actual -ne $expected) { throw "SHA-256 mismatch" }</code></pre></div>
+
+          <h2 id="requirements">Platform support</h2>
+          <ul class="status-list">
+            <li><strong>Linux x86-64</strong><span>Raw/compressed images, Windows installers, and RAW backup. Split WIM and CA 2023 operations require <code>wimtools</code>.</span></li>
+            <li><strong>Windows 10+ x86-64</strong><span>Raw/compressed images and Windows installers. RAW backup is unavailable.</span></li>
+            <li><strong>macOS Apple Silicon</strong><span>Raw/compressed images, Windows installers, and RAW backup. Split WIM and CA 2023 operations require <code>wimlib</code>.</span></li>
+          </ul>
+
+          <h2 id="limits">Known limits</h2>
+          <ul>
+            <li>Only the newest published alpha receives fixes.</li>
+            <li>Constructed Windows installer media targets UEFI; legacy BIOS helpers are not implemented.</li>
+            <li>Linux persistence, Windows To Go, DOS media, and multiboot are not implemented.</li>
+            <li>Release packages are limited to the three platform and architecture pairs listed above.</li>
+            <li>Verification checks source bytes, written bytes, or the Windows boot tree. It does not prove an operating-system installation will finish.</li>
+          </ul>
+
+          <div class="guide-cta">
+            <h2>Something failed?</h2>
+            <p>Include the Bootable version, host platform, interface, image name and version, target model and capacity, failed stage, and visible error. Remove serial numbers and private paths.</p>
+            <a class="button primary" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Open an alpha report</a>
+          </div>
+        </article>
+
+        <aside class="guide-aside">
+          <strong>On this page</strong>
+          <ul>
+            <li><a href="#release-files">Release files</a></li>
+            <li><a href="#install">Install</a></li>
+            <li><a href="#integrity">Verify the archive</a></li>
+            <li><a href="#requirements">Platform support</a></li>
+            <li><a href="#limits">Known limits</a></li>
+            <li><a href="./faq.html">FAQ</a></li>
+          </ul>
+        </aside>
+      </div>
+    </main>
+
+    <footer>
+      <img src="./favicon.svg" width="30" height="30" alt="">
+      <span>Bootable · Apache-2.0</span>
+      <span class="footer-links">
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./faq.html">FAQ</a>
+        <a href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">Release notes</a>
+        <a href="https://github.com/debpalash/bootable/blob/main/SECURITY.md">Security</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </span>
+    </footer>
+  </body>
+</html>

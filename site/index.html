@@ -3,174 +3,246 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bootable — Cross-platform boot media writer</title>
+    <title>Bootable — USB and SD image writer with read-back verification</title>
     <meta
       name="description"
-      content="Discover, download, review, write, and verify bootable USB and SD media on Linux, Windows, and macOS."
+      content="Write and verify bootable USB and SD media on Linux, Windows, and macOS. Raw images, compressed archives, and FAT32 Windows installers."
     >
-    <meta name="theme-color" content="#091019">
+    <meta name="theme-color" content="#f5f3ed">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Bootable — Cross-platform boot media writer">
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Bootable — Create and verify boot media">
     <meta
       property="og:description"
-      content="A native GUI and mouse-friendly TUI for deliberate, verified boot media."
+      content="A native USB and SD writer with removable-drive checks, publisher checksums, and post-write verification."
     >
     <meta property="og:url" content="https://bootable.palash.dev/">
-    <meta property="og:image" content="https://bootable.palash.dev/gui-discover.png">
+    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Bootable — checked before, verified after">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Bootable — Create and verify boot media">
+    <meta name="twitter:description" content="Native GUI and TUI for bootable USB and SD media.">
+    <meta name="twitter:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:image:alt" content="Bootable — checked before, verified after">
     <link rel="canonical" href="https://bootable.palash.dev/">
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./styles.css?v=bef7b83">
+    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Bootable home">
-        <img src="./bootable-logo-animated.svg?v=bef7b83" alt="Bootable" width="250" height="64">
+        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
       </a>
       <nav aria-label="Primary navigation">
-        <a href="#features">Features</a>
-        <a href="#install">Install</a>
-        <a href="https://github.com/debpalash/bootable">GitHub</a>
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./download.html">Download</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow"><span></span> 0.1 alpha</p>
-          <h1 id="hero-title">Boot media,<br>written deliberately.</h1>
+          <p class="eyebrow"><span></span> USB + SD writer</p>
+          <h1 id="hero-title">Write boot media.<br>Verify it.</h1>
           <p class="lede">
-            Discover an image. Review the physical target. Write and verify it—from a native GUI
-            or mouse-friendly terminal app.
+            Raw, compressed, and Windows installer images on Linux, Windows, and macOS.
+            Native GUI and TUI.
           </p>
           <div class="actions">
-            <a class="button primary" href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">
-              Download alpha
-            </a>
-            <a class="button secondary" href="https://github.com/debpalash/bootable">
-              View source
-            </a>
+            <a class="button primary" href="./download.html">Download alpha</a>
+            <a class="button secondary" href="#safety">Disk safety</a>
           </div>
-          <p class="platforms">Linux x86-64 · Windows x86-64 · macOS Apple Silicon</p>
+          <p class="platforms">Linux x86-64 · Windows 10+ x86-64 · macOS Apple Silicon</p>
         </div>
-        <div class="hero-demos" aria-label="Bootable interface previews">
-          <figure class="demo-window demo-gui">
-            <figcaption><span>GUI</span> Native desktop</figcaption>
+
+        <figure class="hero-product media-stage media-stage-sage">
+          <div class="shot-header"><span>Desktop</span><span>v0.1.0-alpha.2</span></div>
+          <div class="shot-frame">
             <img
-              class="demo-motion"
-              src="./gui-demo.gif"
-              alt="Bootable desktop app catalog demonstrated with mouse clicks"
-              width="860"
-              height="566"
-            >
-            <img
-              class="demo-still"
               src="./gui-discover.png?v=bef7b83"
-              alt="Bootable desktop app distribution catalog"
-              width="1749"
-              height="1948"
+              alt="Bootable desktop catalog with a selected image and removable drive"
+              width="1638"
+              height="904"
+              fetchpriority="high"
             >
-          </figure>
-          <figure class="demo-window demo-tui">
-            <figcaption><span>TUI</span> Terminal + mouse</figcaption>
-            <img
-              class="demo-motion"
-              src="./tui-demo.gif"
-              alt="Bootable terminal app demonstrated with mouse clicks"
-              width="860"
-              height="538"
-            >
-            <img
-              class="demo-still"
-              src="./tui-main.png?v=bef7b83"
-              alt="Bootable mouse-friendly terminal interface"
-              width="1763"
-              height="1948"
-            >
-          </figure>
-        </div>
+          </div>
+          <figcaption>Source → target → review → write → verify</figcaption>
+        </figure>
       </section>
 
       <aside class="alpha-note" aria-label="Alpha warning">
-        <strong>Alpha software.</strong>
-        Writing erases the selected device. Check the physical target and keep backups.
+        <strong>Unsigned alpha.</strong>
+        Not code-signed or notarized. Use expendable media; writing erases the selected drive.
       </aside>
 
-      <section class="feature-section" id="features" aria-labelledby="features-title">
+      <section id="workflow" aria-labelledby="workflow-title">
         <div class="section-heading">
-          <p class="eyebrow">One path</p>
-          <h2 id="features-title">Image to verified media.</h2>
+          <p class="eyebrow">Write path</p>
+          <h2 id="workflow-title">Five visible stages.</h2>
         </div>
-        <div class="feature-grid">
-          <article>
-            <span class="feature-number">01</span>
-            <h3>Discover</h3>
-            <p>DistroWatch, Omarchy, Raspberry Pi, local files, and compressed images.</p>
-          </article>
-          <article>
-            <span class="feature-number">02</span>
-            <h3>Review</h3>
-            <p>Removable targets only. See the method, operations, and permanent consequences.</p>
-          </article>
-          <article>
-            <span class="feature-number">03</span>
-            <h3>Write + verify</h3>
-            <p>Read-back verification, publisher checksums, cancellation, and clear progress.</p>
-          </article>
-        </div>
+        <ol class="write-path">
+          <li><span>01</span><strong>Source</strong><small>Catalog or local file</small></li>
+          <li><span>02</span><strong>Target</strong><small>Whole removable disk</small></li>
+          <li><span>03</span><strong>Review</strong><small>Exact operations</small></li>
+          <li><span>04</span><strong>Write</strong><small>Protected helper</small></li>
+          <li><span>05</span><strong>Verify</strong><small>Read-back or boot audit</small></li>
+        </ol>
       </section>
 
-      <section class="interfaces" aria-labelledby="interfaces-title">
-        <div class="section-heading compact">
-          <p class="eyebrow">Two interfaces</p>
-          <h2 id="interfaces-title">One safety model.</h2>
-          <p>GPUI on the desktop. Ratatui in the terminal. Shared plans and write engine.</p>
+      <section id="safety" aria-labelledby="safety-title">
+        <div class="section-heading">
+          <p class="eyebrow">Disk safeguards</p>
+          <h2 id="safety-title">Before and after erasure.</h2>
         </div>
-        <div class="interface-grid">
-          <figure class="screenshot-card large">
-            <img src="./gui-discover.png?v=bef7b83" alt="Bootable native desktop interface" loading="lazy">
-            <figcaption>Native desktop</figcaption>
-          </figure>
-          <figure class="screenshot-card">
-            <img src="./tui-main.png?v=bef7b83" alt="Bootable mouse-friendly terminal interface" loading="lazy">
-            <figcaption>Mouse-friendly TUI</figcaption>
-          </figure>
+        <div class="verification-ledger">
+          <div>
+            <h3>Before erasure</h3>
+            <ul>
+              <li>Only whole USB-attached or explicitly removable disks.</li>
+              <li>Fixed, system, read-only, undersized, and partition targets rejected.</li>
+              <li>Source, target, operations, and effects shown before confirmation.</li>
+              <li>Stable ID rechecked and child volumes unmounted before writing.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>After writing</h3>
+            <ul>
+              <li>Exact written range read back and compared with SHA-256.</li>
+              <li>Compressed sources compared after expansion.</li>
+              <li>Windows boot files, payloads, split-WIM parts, and FAT32 limits audited.</li>
+              <li>Failed or cancelled media marked incomplete; full rewrite required.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="scope-line">
+          <p><strong>Scope:</strong> verification covers bytes or boot structure, not installation success.</p>
+          <a class="text-link" href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety design →</a>
         </div>
       </section>
 
       <section class="capabilities" aria-labelledby="capabilities-title">
-        <div class="section-heading compact">
-          <p class="eyebrow">Media support</p>
-          <h2 id="capabilities-title">Raw images and Windows installers.</h2>
+        <div class="section-heading">
+          <p class="eyebrow">Supported media</p>
+          <h2 id="capabilities-title">Images, installers, drive tools.</h2>
         </div>
         <ul>
-          <li><strong>Linux + Unix</strong><span>ISO, IMG, RAW, XZ, gzip, Zstandard, bzip2</span></li>
-          <li><strong>Windows</strong><span>GPT/MBR, FAT32, split WIM, Windows 11/OOBE options</span></li>
-          <li><strong>Integrity</strong><span>MD5, SHA-1, SHA-256, SHA-512, byte read-back</span></li>
-          <li><strong>Safety</strong><span>System-disk exclusion, target revalidation, narrow helper</span></li>
+          <li>
+            <strong>Raw and compressed</strong>
+            <span>ISO, IMG, RAW, XZ, gzip, Zstandard, and bzip2; expanded size measured before review</span>
+          </li>
+          <li>
+            <strong>Windows installers</strong>
+            <span>GPT or MBR, FAT32, split WIM, ten setup choices, boot-tree audit</span>
+          </li>
+          <li>
+            <strong>Download integrity</strong>
+            <span>MD5, SHA-1, SHA-256, and SHA-512; mismatch blocks writing</span>
+          </li>
+          <li>
+            <strong>Drive tools</strong>
+            <span>Bad-block and fake-capacity checks; RAW backup on Linux and macOS</span>
+          </li>
         </ul>
+        <p class="section-action"><a class="text-link" href="./features.html">All features →</a></p>
       </section>
 
-      <section class="install" id="install" aria-labelledby="install-title">
-        <div class="section-heading compact">
-          <p class="eyebrow">Install</p>
-          <h2 id="install-title">Choose your interface.</h2>
+      <section aria-labelledby="interfaces-title">
+        <div class="section-heading">
+          <p class="eyebrow">Interface parity</p>
+          <h2 id="interfaces-title">GUI and TUI. One engine.</h2>
         </div>
-        <div class="install-grid">
-          <article>
-            <div class="install-label"><span>GUI</span> Linux + macOS</div>
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --gui</code></pre>
-          </article>
-          <article>
-            <div class="install-label"><span>TUI</span> Linux + macOS</div>
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/debpalash/bootable/main/scripts/install.sh | sh -s -- --tui</code></pre>
-          </article>
+        <div class="interface-proof">
+          <figure class="media-stage media-stage-sand">
+            <div class="shot-header"><span>TUI</span><span>Mouse + keyboard</span></div>
+            <div class="shot-frame tui-motion-crop">
+              <picture>
+                <source media="(prefers-reduced-motion: reduce)" srcset="./tui-main.png?v=bef7b83">
+                <img
+                  src="./tui-demo.gif"
+                  alt="Bootable terminal interface browsing images and write modes"
+                  width="860"
+                  height="538"
+                  loading="lazy"
+                >
+              </picture>
+            </div>
+            <figcaption>Catalog, plan, write, and verification states.</figcaption>
+          </figure>
+          <div class="parity-copy">
+            <p>Both use the same write plan and protected helper.</p>
+            <ul>
+              <li>Same labels, order, and options</li>
+              <li>Same progress and cancellation</li>
+              <li>Same errors, recovery, and retries</li>
+            </ul>
+            <a class="text-link" href="https://github.com/debpalash/bootable/blob/main/docs/ui-parity.md">Parity contract →</a>
+          </div>
         </div>
-        <p class="install-footnote">
-          Windows builds and SHA-256 files are on the
-          <a href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">release page</a>.
-          Review the installer before piping it into a shell.
-        </p>
+      </section>
+
+      <section aria-labelledby="guide-list-title">
+        <div class="section-heading">
+          <p class="eyebrow">Guides</p>
+          <h2 id="guide-list-title">Guides by task.</h2>
+        </div>
+        <div class="guide-index-list">
+          <a href="./windows-11-usb-on-linux.html"><strong>Windows 11 USB on Linux</strong><span>Windows · Linux</span></a>
+          <a href="./windows-11-usb-on-macos.html"><strong>Windows 11 USB on macOS</strong><span>Windows · macOS</span></a>
+          <a href="./write-iso-to-usb.html"><strong>Write an ISO to USB</strong><span>ISO · USB</span></a>
+          <a href="./raspberry-pi-image-writer.html"><strong>Write a Raspberry Pi image</strong><span>IMG · SD</span></a>
+          <a href="./compressed-image-writer.html"><strong>Write compressed images</strong><span>XZ · GZ · ZST · BZ2</span></a>
+          <a href="./verify-bootable-usb.html"><strong>Verify boot media</strong><span>Checksums · read-back</span></a>
+          <a href="./safe-usb-writer.html"><strong>Disk safety model</strong><span>Targets · privilege</span></a>
+          <a href="./terminal-usb-writer.html"><strong>Terminal writer</strong><span>TUI · CLI</span></a>
+        </div>
+        <p class="section-action"><a class="text-link" href="./guides.html">All guides →</a></p>
+      </section>
+
+      <section id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">Current release · 18 August 2026</p>
+          <h2 id="download-title">v0.1.0-alpha.2</h2>
+        </div>
+        <div class="release-table-wrap">
+          <table class="release-table">
+            <thead><tr><th>Platform</th><th>Architecture</th><th>Archive</th><th>Size</th><th>Integrity</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Linux</td><td>x86-64</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
+                <td>23.8 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
+              </tr>
+              <tr>
+                <td>Windows 10+</td><td>x86-64</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip">ZIP</a></td>
+                <td>16.5 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
+              </tr>
+              <tr>
+                <td>macOS</td><td>Apple Silicon</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
+                <td>14.7 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="release-actions">
+          <a class="button primary" href="./download.html">Install</a>
+          <a class="button secondary" href="./faq.html">FAQ</a>
+          <a class="text-link" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Report issue →</a>
+        </div>
+        <div class="project-support" aria-label="Support Bootable development">
+          <span>Free and Apache-2.0. Fund the work.</span>
+          <a class="support-button" href="https://ko-fi.com/debpalash" target="_blank" rel="noopener">Ko-fi ↗</a>
+          <a class="support-button" href="https://paypal.me/palashCoder" target="_blank" rel="noopener">PayPal ↗</a>
+        </div>
       </section>
     </main>
 
@@ -178,8 +250,11 @@
       <img src="./favicon.svg" width="30" height="30" alt="">
       <span>Bootable · Apache-2.0</span>
       <span class="footer-links">
-        <a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a>
-        <a href="https://github.com/debpalash/bootable/issues">Issues</a>
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./download.html">Download</a>
+        <a href="./faq.html">FAQ</a>
+        <a href="https://github.com/debpalash/bootable/blob/main/CHANGELOG.md">Changelog</a>
         <a href="https://github.com/debpalash/bootable">Source</a>
       </span>
     </footer>

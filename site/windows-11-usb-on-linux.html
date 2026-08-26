@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create a Windows 11 bootable USB on Linux — Bootable</title>
+    <meta name="description" content="Create verified Windows 11 USB installer media on Linux with FAT32, split WIM support, setup options, and boot-tree checks.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Create a Windows 11 bootable USB on Linux">
+    <meta property="og:description" content="FAT32 media, split WIM support, setup options, and verification.">
+    <meta property="og:url" content="https://bootable.palash.dev/windows-11-usb-on-linux.html">
+    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/windows-11-usb-on-linux.html">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a>
+      <nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav>
+    </header>
+
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Windows USB on Linux</li></ol></nav>
+      <article>
+        <header class="guide-hero">
+          <p class="eyebrow">Windows installer · Linux</p>
+          <h1>Create a Windows 11 USB on Linux.</h1>
+          <p class="lede">Bootable builds a FAT32 Windows installer from an ISO, splits oversized WIM files, and checks the finished boot tree.</p>
+        </header>
+
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="result">What Bootable creates</h2>
+            <p>Bootable inspects the Windows ISO and creates one FAT32 Microsoft Basic Data partition on the selected removable drive. You can choose GPT or MBR. Current Windows media targets UEFI boot; legacy BIOS helpers are not implemented.</p>
+            <p>If <code>install.wim</code> is too large for FAT32, Bootable uses <code>wimlib-imagex</code> to create <code>install.swm</code> and numbered parts. It then checks the UEFI files, Windows payload, split set, and FAT32 file-size limits.</p>
+
+            <h2 id="requirements">Before you start</h2>
+            <ul>
+              <li>A Windows 11 ISO from a source you trust.</li>
+              <li>An expendable USB drive large enough for the ISO contents.</li>
+              <li><code>wimtools</code> for oversized WIM payloads and CA 2023 boot files.</li>
+              <li>Administrator authentication for the protected write helper.</li>
+            </ul>
+            <p>On Debian or Ubuntu:</p>
+            <div class="guide-commands"><pre><code>sudo apt install wimtools
+curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui</code></pre></div>
+            <div class="guide-callout"><p><strong>The USB drive will be erased.</strong> Bootable excludes fixed and system disks, but you must still confirm the physical device before writing.</p></div>
+
+            <h2 id="steps">Create the installer</h2>
+            <ol>
+              <li>Open Bootable and choose the Windows 11 ISO.</li>
+              <li>Insert the USB drive and select it by model and capacity.</li>
+              <li>Choose GPT or MBR and review any Windows setup options.</li>
+              <li>Open Review. Check the source, target, partitioning, file operations, and erasure warning.</li>
+              <li>Acknowledge the consequences and start the write.</li>
+              <li>Wait for the boot-tree verification and safe-removal result.</li>
+            </ol>
+            <p>Windows setup options are explicit. Bootable shows them in the reviewed plan and does not silently apply hardware, account, privacy, BitLocker, regional, or policy changes.</p>
+
+            <h2 id="verification">What verification covers</h2>
+            <p>Before erasure, Bootable checks the installer tree, regular files, answer-file collisions, and FAT32 limits. After copying, it checks UEFI boot files, the Windows setup payload, and every split WIM part.</p>
+            <p>This confirms the required media structure. It does not prove that setup will complete on every PC.</p>
+
+            <section class="related-guides">
+              <h2>Related guides</h2>
+              <ul><li><a href="./verify-bootable-usb.html">What Bootable verifies</a></li><li><a href="./safe-usb-writer.html">How target protection works</a></li><li><a href="./terminal-usb-writer.html">Use the terminal interface</a></li></ul>
+            </section>
+            <div class="guide-cta"><h2>Install Bootable on Linux</h2><p>Desktop and terminal builds are available for Linux x86-64.</p><a class="button primary" href="./download.html">View install commands</a></div>
+          </div>
+
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#result">What it creates</a></li><li><a href="#requirements">Requirements</a></li><li><a href="#steps">Create the installer</a></li><li><a href="#verification">Verification</a></li></ul></aside>
+        </div>
+      </article>
+    </main>
+
+    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
+  </body>
+</html>

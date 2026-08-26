@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bootable FAQ — Safety, verification, and supported media</title>
+    <meta name="description" content="Straight answers about Bootable's disk safeguards, verification scope, Windows 11 media, image formats, administrator access, cancellation, and alpha limits.">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:title" content="Bootable FAQ">
+    <meta property="og:description" content="Safety, verification, supported media, administrator access, and current limits.">
+    <meta property="og:url" content="https://bootable.palash.dev/faq.html">
+    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://bootable.palash.dev/faq.html">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Bootable home">
+        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="./">Home</a>
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./download.html">Download</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </nav>
+    </header>
+
+    <main class="guide-main">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol><li><a href="./">Home</a></li><li aria-current="page">FAQ</li></ol>
+      </nav>
+      <header class="guide-hero">
+        <p class="eyebrow">Frequently asked questions</p>
+        <h1>Short answers. Exact limits.</h1>
+        <p class="lede">Disk safety, verification scope, and current limits.</p>
+      </header>
+
+      <section class="guide-index faq-list" aria-label="Questions and answers">
+        <article>
+          <h2>What does Bootable write?</h2>
+          <p>ISO, IMG, and RAW images; XZ, gzip, Zstandard, and bzip2 archives; and extracted FAT32 Windows installer media. Sources can be local files or downloads from the built-in catalog.</p>
+        </article>
+        <article>
+          <h2>Can it erase an internal disk?</h2>
+          <p>Bootable rejects fixed disks, the running system disk, partitions, read-only media, and write plans that do not fit the expanded image. It accepts whole USB-attached or explicitly removable disks, then rechecks the stable target identity immediately before writing. This is alpha software: always verify the physical device named in the review.</p>
+        </article>
+        <article>
+          <h2>Why does writing require administrator access?</h2>
+          <p>Operating systems restrict raw disk access. Interactive writes elevate only a fixed, protected helper after the write plan is approved. The desktop, TUI, catalog, downloads, and image parsing stay unelevated.</p>
+        </article>
+        <article>
+          <h2>What does “verified” mean?</h2>
+          <div>
+            <ul>
+              <li>A publisher checksum match proves the source bytes match the publisher's checksum file.</li>
+              <li>Raw read-back proves the written range matches the expanded source stream.</li>
+              <li>A Windows boot-tree audit checks UEFI files, installer payloads, split-WIM parts, and FAT32 limits.</li>
+            </ul>
+            <p>None of these proves that every firmware or operating-system installation will succeed.</p>
+          </div>
+        </article>
+        <article>
+          <h2>Can it create a Windows 11 USB on Linux or macOS?</h2>
+          <p>Yes. Bootable creates GPT or MBR media with one FAT32 partition and splits an oversized <code>install.wim</code>. Linux needs <code>wimtools</code>; macOS needs <code>wimlib</code>. Current Windows media targets UEFI, not legacy BIOS.</p>
+        </article>
+        <article>
+          <h2>Which Windows setup choices are available?</h2>
+          <p>Hardware-requirement bypass, offline-account path, named local account, host regional settings, privacy defaults, automatic BitLocker control, quality-of-life policies, CA 2023 boot files, SkuSiPolicy revocations, and S Mode. Each choice appears in the reviewed write plan.</p>
+        </article>
+        <article>
+          <h2>What happens if I cancel a write?</h2>
+          <p>Bootable stops at a controlled boundary, terminates media tools it started, and marks the target incomplete. Do not boot or reuse that media. Start a full write again.</p>
+        </article>
+        <article>
+          <h2>Are the desktop and terminal apps equivalent?</h2>
+          <p>Yes. GUI and TUI use the same labels, section order, plans, progress stages, cancellation, errors, and retry behavior. Both call the same core and protected helper.</p>
+        </article>
+        <article>
+          <h2>What is not implemented?</h2>
+          <p>Legacy BIOS helpers for constructed Windows media, Linux persistence, Windows To Go, DOS media, and multiboot. Windows RAW backup is also unavailable. See the <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">roadmap</a> before depending on a planned feature.</p>
+        </article>
+        <article>
+          <h2>Why does the operating system warn about Bootable?</h2>
+          <p>The alpha executables are not code-signed and the macOS build is not notarized. Release archives include SHA-256 sidecars and GitHub build provenance, but those do not remove SmartScreen or Gatekeeper warnings.</p>
+        </article>
+        <article>
+          <h2>How should I report a failed write?</h2>
+          <p>Use the <a href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">alpha report</a>. Include version, platform, interface, image name and version, target model and capacity, failed stage, and exact error. Remove disk serial numbers, usernames, and private paths.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      <img src="./favicon.svg" width="30" height="30" alt="">
+      <span>Bootable · Apache-2.0</span>
+      <span class="footer-links">
+        <a href="./features.html">Features</a>
+        <a href="./guides.html">Guides</a>
+        <a href="./download.html">Download</a>
+        <a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a>
+        <a href="https://github.com/debpalash/bootable/blob/main/SECURITY.md">Security</a>
+        <a href="https://github.com/debpalash/bootable">Source</a>
+      </span>
+    </footer>
+  </body>
+</html>
