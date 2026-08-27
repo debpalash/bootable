@@ -93,6 +93,7 @@ Project links
 [Architecture](docs/architecture.md) ·
 [Validation](docs/validation.md) ·
 [GUI/TUI parity](docs/ui-parity.md) ·
+[Release channels](docs/releases.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) ·
 [Report a problem](https://github.com/debpalash/bootable/issues/new?template=bug-report.yml)

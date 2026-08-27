@@ -2,28 +2,42 @@ name: Release
 
 on:
   pull_request:
-    paths:
-      - '.github/workflows/release.yml'
-      - 'Cargo.lock'
-      - 'Cargo.toml'
-      - 'apps/**'
-      - 'assets/**'
-      - 'crates/**'
-      - 'packaging/**'
-      - 'scripts/package-*'
-      - 'scripts/verify-*'
-  push:
-    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
+  metadata:
+    name: Validate release context
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Require main for a stable release
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Stable releases must be manually dispatched from main." >&2
+          exit 1
+      - uses: actions/checkout@v4
+      - id: version
+        name: Read package version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
   linux:
     name: Package Linux x86-64
+    needs: metadata
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -32,16 +46,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-x86_64-unknown-linux-gnu
-      - name: Read and validate package version
-        shell: bash
-        run: |
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
-          test -n "$version"
-          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
-            exit 1
-          fi
-          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Export package version
+        run: echo "BOOTABLE_VERSION=${{ needs.metadata.outputs.version }}" >> "$GITHUB_ENV"
       - name: Install build and packaging dependencies
         run: |
           sudo apt-get update
@@ -68,7 +74,7 @@ jobs:
       - name: Verify Linux packages
         run: scripts/verify-linux-packages.sh "$BOOTABLE_VERSION"
       - uses: actions/attest-build-provenance@v2
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch'
         with:
           subject-path: dist/linux/*
       - uses: actions/upload-artifact@v4
@@ -79,7 +85,12 @@ jobs:
 
   macos:
     name: Package macOS Apple Silicon
+    needs: metadata
     runs-on: macos-14
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -88,16 +99,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-aarch64-apple-darwin
-      - name: Read and validate package version
-        shell: bash
-        run: |
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
-          test -n "$version"
-          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
-            exit 1
-          fi
-          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Export package version
+        run: echo "BOOTABLE_VERSION=${{ needs.metadata.outputs.version }}" >> "$GITHUB_ENV"
       - run: cargo test --workspace
       - run: cargo build --release --workspace --target aarch64-apple-darwin
       - name: Build DMG and archive
@@ -105,7 +108,7 @@ jobs:
       - name: Verify macOS packages
         run: scripts/verify-macos-packages.sh "$BOOTABLE_VERSION"
       - uses: actions/attest-build-provenance@v2
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch'
         with:
           subject-path: dist/macos/*
       - uses: actions/upload-artifact@v4
@@ -116,7 +119,12 @@ jobs:
 
   windows:
     name: Package Windows x86-64
+    needs: metadata
     runs-on: windows-2025
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -125,16 +133,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-x86_64-pc-windows-msvc
-      - name: Read and validate package version
+      - name: Export package version
         shell: bash
-        run: |
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
-          test -n "$version"
-          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
-            exit 1
-          fi
-          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+        run: echo "BOOTABLE_VERSION=${{ needs.metadata.outputs.version }}" >> "$GITHUB_ENV"
       - name: Install pinned cargo-packager
         run: cargo install cargo-packager --locked --version 0.11.8
       - run: cargo test --workspace
@@ -146,7 +147,7 @@ jobs:
         shell: pwsh
         run: scripts/verify-windows-packages.ps1 -Version $env:BOOTABLE_VERSION
       - uses: actions/attest-build-provenance@v2
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch'
         with:
           subject-path: dist/windows/*
       - uses: actions/upload-artifact@v4
@@ -155,11 +156,96 @@ jobs:
           path: dist/windows/*
           if-no-files-found: error
 
-  publish:
-    name: Publish release
-    needs: [linux, macos, windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+  publish-rc:
+    name: Publish release candidate
+    needs: [metadata, linux, macos, windows]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Require the matching CI run to pass
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            runs="$(gh api -X GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f event=pull_request \
+              -f head_sha="$HEAD_SHA" \
+              -f per_page=20)"
+
+            conclusion="$(jq -r \
+              '[.workflow_runs[] | select(.head_sha == env.HEAD_SHA)] | sort_by(.run_attempt) | last | .conclusion // ""' \
+              <<<"$runs")"
+            status="$(jq -r \
+              '[.workflow_runs[] | select(.head_sha == env.HEAD_SHA)] | sort_by(.run_attempt) | last | .status // ""' \
+              <<<"$runs")"
+
+            if [[ "$status" == completed && "$conclusion" == success ]]; then
+              exit 0
+            fi
+            if [[ "$status" == completed && -n "$conclusion" ]]; then
+              echo "CI finished with conclusion: $conclusion" >&2
+              exit 1
+            fi
+            sleep 20
+          done
+
+          echo "Timed out waiting for CI on $HEAD_SHA" >&2
+          exit 1
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify the downloaded release set
+        shell: bash
+        run: |
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 22
+          (cd dist && sha256sum --check ./*.sha256)
+
+      - name: Name the release candidate
+        id: rc
+        shell: bash
+        run: echo "tag=v${{ needs.metadata.outputs.version }}-rc.pr${PR_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rc.outputs.tag }}
+          target_commitish: ${{ env.HEAD_SHA }}
+          name: Bootable ${{ steps.rc.outputs.tag }}
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            ## Bootable ${{ steps.rc.outputs.tag }}
+
+            Automated release candidate for #${{ env.PR_NUMBER }} after both CI and the native
+            package matrix passed. This build is for testing; stable releases are published only
+            through a human-approved manual workflow run from `main`.
+
+            - Linux x86-64: AppImage, DEB, RPM, and tar.gz
+            - Windows 10+ x86-64: MSI, setup EXE, portable GUI/TUI EXEs, and ZIP
+            - macOS Apple Silicon: DMG and tar.gz
+            - Integrity: SHA-256 sidecars for every asset
+            - Safety: interactive apps remain unelevated; approved removable-media writes use the fixed helper
+          files: dist/*
+
+  publish:
+    name: Publish stable release
+    needs: [metadata, linux, macos, windows]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -168,10 +254,12 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          name: Bootable ${{ needs.metadata.outputs.tag }}
           prerelease: false
           generate_release_notes: true
           body: |
-            ## Bootable ${{ github.ref_name }}
+            ## Bootable ${{ needs.metadata.outputs.tag }}
 
             Bootable ships native installers and portable builds for its matching GUI and TUI.
             Packages are unsigned and the macOS app is ad-hoc signed, not notarized. Use expendable
