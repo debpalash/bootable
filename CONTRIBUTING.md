@@ -18,6 +18,10 @@ behavior does not count as implementation.
 Do not copy code from Rufus, WoeUSB, or other projects whose license is incompatible with this
 Apache-2.0 repository. Behavioral research and clean-room implementations are welcome.
 
+Every same-repository pull request publishes a release candidate only after both CI and the native
+package matrix pass. Stable releases require an explicit manual dispatch from `main`; see
+[release channels](docs/releases.md).
+
 Documentation and product copy must follow the same standard as destructive code:
 
 - Lead with the task, constraint, or result.

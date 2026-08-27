@@ -3,9 +3,9 @@
 <p align="center"><strong>Create and verify bootable USB and SD drives.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz"><strong>Linux</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip"><strong>Windows</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz"><strong>macOS</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64.AppImage"><strong>Linux AppImage</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-setup.exe"><strong>Windows installer</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-aarch64.dmg"><strong>macOS DMG</strong></a> ·
   <a href="https://bootable.palash.dev/download.html">All downloads and checksums</a>
 </p>
 
@@ -65,7 +65,8 @@ curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --tui
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --all
 ```
 
-Windows: download and extract the ZIP, then run:
+Native packages are also available as DEB/RPM on Linux, MSI on Windows, and DMG on macOS. For the
+portable Windows ZIP, extract it and run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All
@@ -92,6 +93,7 @@ Project links
 [Architecture](docs/architecture.md) ·
 [Validation](docs/validation.md) ·
 [GUI/TUI parity](docs/ui-parity.md) ·
+[Release channels](docs/releases.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) ·
 [Report a problem](https://github.com/debpalash/bootable/issues/new?template=bug-report.yml)

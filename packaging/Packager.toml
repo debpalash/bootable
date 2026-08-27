@@ -1,0 +1,36 @@
+name = "bootable"
+product-name = "Bootable"
+identifier = "app.bootable.Bootable"
+version = "0.1.1"
+description = "Create verified boot media from trusted images"
+long-description = "A safety-first boot media writer with matching desktop and terminal interfaces."
+homepage = "https://github.com/debpalash/bootable"
+authors = ["Bootable contributors"]
+publisher = "Bootable contributors"
+category = "Utility"
+license-file = "../LICENSE"
+icons = ["../assets/bootable.ico"]
+resources = ["../README.md", "../LICENSE"]
+formats = ["wix", "nsis"]
+out-dir = "../dist/windows"
+binaries-dir = "../target/x86_64-pc-windows-msvc/release"
+target-triple = "x86_64-pc-windows-msvc"
+
+[[binaries]]
+path = "bootable-desktop"
+main = true
+
+[[binaries]]
+path = "bootable"
+
+[[binaries]]
+path = "bootable-helper"
+
+[nsis]
+installer-mode = "perMachine"
+installer-icon = "../assets/bootable.ico"
+compression = "lzma"
+languages = ["English"]
+
+[wix]
+languages = ["en-US"]
