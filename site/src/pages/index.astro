@@ -32,27 +32,64 @@ const page = {
           <p class="maker-note"><span>independent project</span> Rust · Apache-2.0 · built in the open</p>
         </div>
 
-        <figure class="hero-product media-stage media-stage-sage">
-          <div class="shot-header"><span>Desktop app</span><span>v0.1.0-alpha.3</span></div>
-          <div class="shot-frame">
-            <img
-              src="/gui-discover.png"
-              alt="The Bootable desktop app showing an image catalog and a selected removable drive"
-              width="1638"
-              height="904"
-              fetchpriority="high"
-            >
+        <fieldset class="hero-product hero-preview">
+          <legend>Choose an interface</legend>
+          <input class="preview-choice" type="radio" name="hero-interface" id="hero-gui" checked>
+          <input class="preview-choice" type="radio" name="hero-interface" id="hero-tui">
+
+          <div class="preview-tabs">
+            <label for="hero-gui">Desktop GUI</label>
+            <label for="hero-tui">Terminal TUI</label>
           </div>
-          <div class="product-proof" aria-label="Write safeguards">
-            <span><small>Before</small> Drive review</span>
-            <span><small>After</small> SHA-256 read-back</span>
+
+          <div class="preview-panels">
+            <figure class="preview-panel preview-panel-gui">
+              <div class="shot-frame">
+                <picture>
+                  <source media="(prefers-reduced-motion: reduce)" srcset="/gui-discover.png">
+                  <img
+                    src="/gui-demo.gif"
+                    alt="Bootable desktop app browsing images and preparing a removable drive"
+                    width="860"
+                    height="474"
+                    fetchpriority="high"
+                  >
+                </picture>
+              </div>
+              <figcaption class="preview-command">
+                <span>Install the GUI</span>
+                <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --gui</code>
+              </figcaption>
+            </figure>
+
+            <figure class="preview-panel preview-panel-tui">
+              <div class="shot-frame tui-motion-crop">
+                <picture>
+                  <source media="(prefers-reduced-motion: reduce)" srcset="/tui-main.png">
+                  <img
+                    src="/tui-demo.gif"
+                    alt="Bootable terminal interface browsing images and write modes"
+                    width="860"
+                    height="538"
+                  >
+                </picture>
+              </div>
+              <figcaption class="preview-command">
+                <span>Install the TUI</span>
+                <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --tui</code>
+              </figcaption>
+            </figure>
           </div>
-          <figcaption>Choose source → choose drive → review → write → verify</figcaption>
-        </figure>
+
+          <div class="install-both">
+            <span>Install both</span>
+            <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --all</code>
+          </div>
+        </fieldset>
       </section>
 
-      <aside class="alpha-note" aria-label="Alpha warning">
-        <strong>Unsigned alpha.</strong>
+      <aside class="release-note" aria-label="Release warning">
+        <strong>Unsigned release.</strong>
         <span>Not code-signed or notarized. Use expendable media—writing erases the selected drive.</span>
         <a href="/faq">Read the FAQ →</a>
       </aside>
@@ -197,7 +234,7 @@ const page = {
         <div class="section-heading">
           <p class="eyebrow">Current release · 27 August 2026</p>
           <div>
-            <h2 id="download-title">Download v0.1.0-alpha.3</h2>
+            <h2 id="download-title">Download v0.1.0</h2>
           </div>
         </div>
         <div class="release-table-wrap">
@@ -206,21 +243,21 @@ const page = {
             <tbody>
               <tr>
                 <td>Linux</td><td>x86-64</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
                 <td>~24 MiB</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
               </tr>
               <tr>
                 <td>Windows 10+</td><td>x86-64</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip">ZIP</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip">ZIP</a></td>
                 <td>~17 MiB</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
               </tr>
               <tr>
                 <td>macOS</td><td>Apple Silicon</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
                 <td>~15 MiB</td>
-                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
               </tr>
             </tbody>
           </table>
@@ -228,7 +265,7 @@ const page = {
         <div class="release-actions">
           <a class="button primary" href="/download">View install steps</a>
           <a class="button secondary" href="/faq">Read the FAQ</a>
-          <a class="text-link" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Report a problem →</a>
+          <a class="text-link" href="https://github.com/debpalash/bootable/issues/new?template=bug-report.yml">Report a problem →</a>
         </div>
         <div class="project-support" aria-label="Support Bootable development">
           <span>Support development.</span>

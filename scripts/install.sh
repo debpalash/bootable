@@ -2,7 +2,7 @@
 set -eu
 
 REPOSITORY="${BOOTABLE_REPOSITORY:-debpalash/bootable}"
-VERSION="${BOOTABLE_VERSION:-0.1.0-alpha.3}"
+VERSION="${BOOTABLE_VERSION:-0.1.0}"
 VARIANT="${1:---gui}"
 INSTALL_ROOT="${BOOTABLE_INSTALL_ROOT:-${HOME}/.local}"
 
@@ -37,7 +37,7 @@ base="https://github.com/${REPOSITORY}/releases/download/v${VERSION}"
 temporary="$(mktemp -d "${TMPDIR:-/tmp}/bootable-install.XXXXXX")"
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 
-echo "Bootable ${VERSION} is alpha software that can erase removable drives."
+echo "Bootable ${VERSION} can erase removable drives after explicit review and confirmation."
 echo "Downloading ${asset}…"
 curl -fL --proto '=https' --tlsv1.2 "${base}/${asset}" -o "${temporary}/${asset}"
 curl -fL --proto '=https' --tlsv1.2 "${base}/${asset}.sha256" -o "${temporary}/${asset}.sha256"

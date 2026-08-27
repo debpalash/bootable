@@ -418,7 +418,7 @@ footer a:focus-visible {
   text-transform: uppercase;
 }
 
-.alpha-note {
+.release-note {
   display: flex;
   gap: 10px;
   padding: 15px 18px;
@@ -429,7 +429,7 @@ footer a:focus-visible {
   font-size: 0.88rem;
 }
 
-.alpha-note a {
+.release-note a {
   margin-left: auto;
   color: var(--warning);
   font-weight: 680;
@@ -437,12 +437,12 @@ footer a:focus-visible {
   white-space: nowrap;
 }
 
-.alpha-note a:hover {
+.release-note a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.alpha-note strong {
+.release-note strong {
   color: var(--warning);
 }
 
@@ -1487,11 +1487,11 @@ footer {
     padding: 54px 0 48px;
   }
 
-  .alpha-note {
+  .release-note {
     display: block;
   }
 
-  .alpha-note a {
+  .release-note a {
     display: block;
     margin: 8px 0 0;
   }
@@ -1500,7 +1500,7 @@ footer {
     padding: 10px;
   }
 
-  .alpha-note strong {
+  .release-note strong {
     display: block;
     margin-bottom: 4px;
   }
@@ -1947,7 +1947,7 @@ h1,
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.alpha-note {
+.release-note {
   position: relative;
   gap: 12px;
   margin-top: 10px;
@@ -1958,7 +1958,7 @@ h1,
   font: 0.75rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.alpha-note::before {
+.release-note::before {
   position: absolute;
   top: 12px;
   left: 15px;
@@ -2331,13 +2331,13 @@ footer {
     box-shadow: 5px 5px 0 var(--line);
   }
 
-  .alpha-note {
+  .release-note {
     align-items: flex-start;
     flex-direction: column;
     padding-left: 42px;
   }
 
-  .alpha-note a {
+  .release-note a {
     margin-left: 0;
   }
 

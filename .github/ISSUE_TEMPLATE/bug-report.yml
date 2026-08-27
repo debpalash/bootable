@@ -1,7 +1,7 @@
-name: Alpha report
+name: Bootable report
 description: Report a successful write, failure, or installation problem.
-title: "[alpha] "
-labels: [alpha]
+title: "[report] "
+labels: [bug]
 body:
   - type: dropdown
     id: outcome
@@ -22,7 +22,7 @@ body:
     id: version
     attributes:
       label: Bootable version
-      placeholder: 0.1.0-alpha.3
+      placeholder: 0.1.0
     validations:
       required: true
 

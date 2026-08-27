@@ -2,7 +2,7 @@
 
 All notable changes to Bootable are documented here.
 
-## 0.1.0-alpha.3 — 2026-08-27
+## 0.1.0 — 2026-08-27
 
 - Reworked the desktop and terminal interfaces around the same workspace-first flow, shared
   four-step progress model, safety guidance, target eligibility labels, and retry behavior.
