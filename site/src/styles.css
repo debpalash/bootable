@@ -1933,6 +1933,113 @@ h1,
   border-radius: 0;
 }
 
+.hero-preview {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--stage-sage);
+  box-shadow: 9px 9px 0 var(--line);
+  transform: none;
+}
+
+.hero-preview legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font: 600 0.65rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.preview-choice {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.preview-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.preview-tabs label {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font: 650 0.76rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.preview-tabs label:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+#hero-gui:checked ~ .preview-tabs label[for="hero-gui"],
+#hero-tui:checked ~ .preview-tabs label[for="hero-tui"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--surface);
+}
+
+#hero-gui:focus-visible ~ .preview-tabs label[for="hero-gui"],
+#hero-tui:focus-visible ~ .preview-tabs label[for="hero-tui"] {
+  outline: 3px solid rgba(8, 122, 87, 0.32);
+  outline-offset: 2px;
+}
+
+.preview-panel {
+  display: none;
+  margin: 0;
+}
+
+#hero-gui:checked ~ .preview-panels .preview-panel-gui,
+#hero-tui:checked ~ .preview-panels .preview-panel-tui {
+  display: block;
+}
+
+.preview-command,
+.install-both {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+  font: 0.68rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.preview-command span,
+.install-both span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.preview-command code,
+.install-both code {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--product-bg);
+  color: #e2eee8;
+  white-space: nowrap;
+}
+
+.install-both {
+  padding-top: 9px;
+  border-top: 1px dotted var(--line);
+}
+
 .product-proof {
   border-color: var(--line);
   background: var(--surface);
@@ -2329,6 +2436,12 @@ footer {
 
   .hero-product {
     box-shadow: 5px 5px 0 var(--line);
+  }
+
+  .preview-command,
+  .install-both {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
   .release-note {
