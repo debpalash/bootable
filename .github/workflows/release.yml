@@ -1,6 +1,17 @@
 name: Release
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'apps/**'
+      - 'assets/**'
+      - 'crates/**'
+      - 'packaging/**'
+      - 'scripts/package-*'
+      - 'scripts/verify-*'
   push:
     tags: ['v*']
 
@@ -10,145 +21,144 @@ permissions:
   attestations: write
 
 jobs:
-  build:
-    name: Package ${{ matrix.target }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-            archive: tar
-          - os: macos-14
-            target: aarch64-apple-darwin
-            archive: tar
-          - os: windows-2025
-            target: x86_64-pc-windows-msvc
-            archive: zip
-    runs-on: ${{ matrix.os }}
+  linux:
+    name: Package Linux x86-64
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
+          key: release-x86_64-unknown-linux-gnu
+      - name: Read and validate package version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
+            exit 1
+          fi
+          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install build and packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-x11-dev pkg-config
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-x11-dev pkg-config rpm
+      - name: Download pinned AppImage tools
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/appimage-tools"
+          curl -fsSLo "$RUNNER_TEMP/appimage-tools/linuxdeploy" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          echo 'c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  '"$RUNNER_TEMP/appimage-tools/linuxdeploy" | sha256sum -c -
+          curl -fsSLo "$RUNNER_TEMP/appimage-tools/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  '"$RUNNER_TEMP/appimage-tools/appimagetool" | sha256sum -c -
+          chmod 0755 "$RUNNER_TEMP/appimage-tools/linuxdeploy" "$RUNNER_TEMP/appimage-tools/appimagetool"
       - run: cargo test --workspace
-      - run: cargo build --release --workspace --target ${{ matrix.target }}
-      - name: Package Unix artifacts
-        if: matrix.archive == 'tar'
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          asset="bootable-${version}-${{ matrix.target }}.tar.gz"
-          stage="$(mktemp -d)"
-          cp "target/${{ matrix.target }}/release/bootable" "$stage/"
-          cp "target/${{ matrix.target }}/release/bootable-desktop" "$stage/"
-          cp "target/${{ matrix.target }}/release/bootable-helper" "$stage/"
-          cp assets/bootable-mark.svg "$stage/bootable.svg"
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            cp packaging/app.bootable.Bootable.desktop "$stage/"
-            cp packaging/app.bootable.write-media.policy "$stage/"
-          fi
-          cp scripts/install.sh "$stage/"
-          cp README.md LICENSE "$stage/"
-          tar -C "$stage" -czf "$asset" .
-          sha256sum "$asset" > "${asset}.sha256" 2>/dev/null || shasum -a 256 "$asset" > "${asset}.sha256"
-      - name: Verify Unix release archive
-        if: matrix.archive == 'tar'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          asset="bootable-${version}-${{ matrix.target }}.tar.gz"
-          verify="$(mktemp -d)"
-          trap 'rm -rf "$verify"' EXIT
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum -c "${asset}.sha256"
-          else
-            shasum -a 256 -c "${asset}.sha256"
-          fi
-          tar -xzf "$asset" -C "$verify"
-          for executable in bootable bootable-desktop bootable-helper install.sh; do
-            test -x "$verify/$executable"
-          done
-          for file in README.md LICENSE bootable.svg; do
-            test -f "$verify/$file"
-          done
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            test -f "$verify/app.bootable.Bootable.desktop"
-            test -f "$verify/app.bootable.write-media.policy"
-          fi
-          test "$("$verify/bootable" --version)" = "bootable $version"
-          "$verify/bootable" --help >/dev/null
-      - name: Package Windows artifacts
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          $asset = "bootable-$version-${{ matrix.target }}.zip"
-          New-Item -ItemType Directory -Path stage
-          Copy-Item "target/${{ matrix.target }}/release/bootable.exe" stage/
-          Copy-Item "target/${{ matrix.target }}/release/bootable-desktop.exe" stage/
-          Copy-Item "target/${{ matrix.target }}/release/bootable-helper.exe" stage/
-          Copy-Item scripts/install.ps1 stage/
-          Copy-Item assets/bootable-mark.svg stage/bootable.svg
-          Copy-Item README.md,LICENSE stage/
-          Compress-Archive -Path stage/* -DestinationPath $asset
-          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
-          "$hash  $asset" | Set-Content -NoNewline "$asset.sha256"
-      - name: Verify Windows release archive
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          $asset = "bootable-$version-${{ matrix.target }}.zip"
-          $expectedHash = (Get-Content "$asset.sha256" -Raw).Split(' ')[0]
-          $actualHash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
-          if ($actualHash -ne $expectedHash) { throw 'Packaged ZIP checksum does not match its sidecar.' }
-          $verify = Join-Path $env:RUNNER_TEMP 'bootable-release-verify'
-          Expand-Archive -LiteralPath $asset -DestinationPath $verify
-          $required = @(
-            'bootable.exe',
-            'bootable-desktop.exe',
-            'bootable-helper.exe',
-            'install.ps1',
-            'bootable.svg',
-            'README.md',
-            'LICENSE'
-          )
-          foreach ($name in $required) {
-            if (-not (Test-Path -LiteralPath (Join-Path $verify $name) -PathType Leaf)) {
-              throw "Release ZIP is missing $name."
-            }
-          }
-          $reportedVersion = & (Join-Path $verify 'bootable.exe') --version
-          if ($LASTEXITCODE -ne 0 -or $reportedVersion.Trim() -ne "bootable $version") {
-            throw "Release binary reported unexpected version: $reportedVersion"
-          }
-          & (Join-Path $verify 'bootable.exe') --help | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged TUI failed its help smoke test.' }
+      - run: cargo build --release --workspace --target x86_64-unknown-linux-gnu
+      - name: Build DEB, RPM, AppImage, and archive
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          LINUXDEPLOY: ${{ runner.temp }}/appimage-tools/linuxdeploy
+          APPIMAGETOOL: ${{ runner.temp }}/appimage-tools/appimagetool
+        run: scripts/package-linux.sh "$BOOTABLE_VERSION"
+      - name: Verify Linux packages
+        run: scripts/verify-linux-packages.sh "$BOOTABLE_VERSION"
       - uses: actions/attest-build-provenance@v2
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          subject-path: bootable-*
+          subject-path: dist/linux/*
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}
-          path: |
-            bootable-*.tar.gz
-            bootable-*.zip
-            bootable-*.sha256
+          name: release-linux-x86_64
+          path: dist/linux/*
+          if-no-files-found: error
+
+  macos:
+    name: Package macOS Apple Silicon
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-aarch64-apple-darwin
+      - name: Read and validate package version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
+            exit 1
+          fi
+          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+      - run: cargo test --workspace
+      - run: cargo build --release --workspace --target aarch64-apple-darwin
+      - name: Build DMG and archive
+        run: scripts/package-macos.sh "$BOOTABLE_VERSION"
+      - name: Verify macOS packages
+        run: scripts/verify-macos-packages.sh "$BOOTABLE_VERSION"
+      - uses: actions/attest-build-provenance@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          subject-path: dist/macos/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-aarch64
+          path: dist/macos/*
+          if-no-files-found: error
+
+  windows:
+    name: Package Windows x86-64
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-x86_64-pc-windows-msvc
+      - name: Read and validate package version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo version $version" >&2
+            exit 1
+          fi
+          echo "BOOTABLE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install pinned cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+      - run: cargo test --workspace
+      - run: cargo build --release --workspace --target x86_64-pc-windows-msvc
+      - name: Build MSI, NSIS installer, portable executables, and archive
+        shell: pwsh
+        run: scripts/package-windows.ps1 -Version $env:BOOTABLE_VERSION
+      - name: Verify Windows packages
+        shell: pwsh
+        run: scripts/verify-windows-packages.ps1 -Version $env:BOOTABLE_VERSION
+      - uses: actions/attest-build-provenance@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          subject-path: dist/windows/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x86_64
+          path: dist/windows/*
           if-no-files-found: error
 
   publish:
     name: Publish release
-    needs: build
+    needs: [linux, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -163,16 +173,17 @@ jobs:
           body: |
             ## Bootable ${{ github.ref_name }}
 
-            Executables are unsigned; the macOS build is not notarized. Use expendable USB or SD
-            media. Check the physical target before approving erasure.
+            Bootable ships native installers and portable builds for its matching GUI and TUI.
+            Packages are unsigned and the macOS app is ad-hoc signed, not notarized. Use expendable
+            USB or SD media and check the physical target before approving erasure.
 
-            - Packages: Linux x86-64, Windows 10+ x86-64, macOS Apple Silicon
-            - Interfaces: native desktop, mouse-enabled TUI, CLI
-            - Raw media: ISO, IMG, RAW, XZ, gzip, Zstandard, bzip2
-            - Windows media: GPT or MBR, FAT32, split WIM, boot-tree audit
-            - Integrity: publisher checksum when available; raw byte read-back after writing
+            - Linux x86-64: AppImage, DEB, RPM, and tar.gz
+            - Windows 10+ x86-64: MSI, setup EXE, portable GUI/TUI EXEs, and ZIP
+            - macOS Apple Silicon: DMG and tar.gz
+            - Integrity: SHA-256 sidecars and GitHub build provenance for every asset
             - Privilege: interactive apps remain unelevated; a fixed helper performs approved writes
 
-            Each archive has a SHA-256 sidecar and GitHub build provenance. Legacy BIOS helpers,
-            Linux persistence, Windows To Go, DOS media, and multiboot are not implemented.
+            The DEB/RPM and Windows installers place the protected helper automatically. The macOS
+            DMG includes an explicit helper installer. Legacy BIOS helpers, Linux persistence,
+            Windows To Go, DOS media, and multiboot are not implemented.
           files: dist/*

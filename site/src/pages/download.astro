@@ -4,12 +4,12 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Download Bootable — Linux, Windows, and macOS",
-  description: "Download Bootable v0.1.0 for Linux x86-64, Windows x86-64, or Apple Silicon macOS. Includes checksums and install steps.",
-  ogTitle: "Download Bootable v0.1.0",
+  description: "Download Bootable v0.1.1 for Linux x86-64, Windows x86-64, or Apple Silicon macOS. Includes native installers, checksums, and install steps.",
+  ogTitle: "Download Bootable v0.1.1",
   ogDescription: "Downloads, checksums, install steps, and release limits.",
   ogType: "website",
   current: "download",
-  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.0" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
+  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.1" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
   crumbs: [{ label: "Home", href: "/" }, { label: "Download" }],
 };
 ---
@@ -27,25 +27,25 @@ const page = {
           <h2 id="release-files">Release files</h2>
           <div class="release-table-wrap">
             <table class="release-table">
-              <thead><tr><th>Platform</th><th>Architecture</th><th>Archive</th><th>Size</th><th>Integrity</th></tr></thead>
+              <thead><tr><th>Platform</th><th>Architecture</th><th>Recommended</th><th>Alternatives</th><th>Integrity</th></tr></thead>
               <tbody>
                 <tr>
                   <td>Linux</td><td>x86-64</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
-                  <td>~24 MiB</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64.AppImage">AppImage</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable_0.1.1_amd64.deb">DEB</a> · <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-1.x86_64.rpm">RPM</a> · <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64.AppImage.sha256">SHA-256</a></td>
                 </tr>
                 <tr>
                   <td>Windows 10+</td><td>x86-64</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip">ZIP</a></td>
-                  <td>~17 MiB</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-setup.exe">setup EXE</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64.msi">MSI</a> · <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-desktop-0.1.1-x86_64.exe">GUI EXE</a> · <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-tui-0.1.1-x86_64.exe">TUI EXE</a> · <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-pc-windows-msvc.zip">ZIP</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-setup.exe.sha256">SHA-256</a></td>
                 </tr>
                 <tr>
                   <td>macOS</td><td>Apple Silicon</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
-                  <td>~15 MiB</td>
-                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-aarch64.dmg">DMG</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
+                  <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-aarch64.dmg.sha256">SHA-256</a></td>
                 </tr>
               </tbody>
             </table>
@@ -56,7 +56,7 @@ const page = {
 
           <h2 id="install">Install</h2>
           <h3>Linux or macOS</h3>
-          <p>The installer downloads and verifies the archive. It asks for administrator access to install the write helper.</p>
+          <p>Use the DEB/RPM or DMG for a native install. The archive installer remains available and verifies its download before installing the write helper.</p>
           <div class="guide-commands"><pre><code># Desktop
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui
 
@@ -68,9 +68,9 @@ curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --all</code></pre><
           <p>Review <a href="https://github.com/debpalash/bootable/blob/main/scripts/install.sh">install.sh</a> first. Set <code>BOOTABLE_SKIP_PRIVILEGED_HELPER=1</code> to install without write access.</p>
 
           <h3>Windows</h3>
-          <p>Download the ZIP and SHA-256 file. Verify and extract the ZIP. Then run:</p>
+          <p>The setup EXE and MSI install the complete app under <code>Program Files</code>. For the portable ZIP, verify and extract it, then run:</p>
           <div class="guide-commands"><pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All</code></pre></div>
-          <p>Bootable installs under <code>Program Files</code>. UAC appears only for approved writes.</p>
+          <p>UAC appears during native installation and later only for approved writes.</p>
 
           <h2 id="integrity">Verify the archive</h2>
           <p>The SHA-256 file checks the archive. GitHub provenance links it to the release workflow. Neither replaces code signing.</p>
@@ -82,10 +82,10 @@ sha256sum -c bootable-*.sha256
 shasum -a 256 -c bootable-*.sha256
 
 # GitHub provenance; use the archive you downloaded
-gh attestation verify bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz \
+gh attestation verify bootable-0.1.1-x86_64.AppImage \
   --repo debpalash/bootable</code></pre></div>
           <h3>Windows</h3>
-          <div class="guide-commands"><pre><code>$asset = "bootable-0.1.0-x86_64-pc-windows-msvc.zip"
+          <div class="guide-commands"><pre><code>$asset = "bootable-0.1.1-x86_64-setup.exe"
 $expected = (Get-Content "$asset.sha256" -Raw).Split(" ")[0]
 $actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
 if ($actual -ne $expected) {'{'} throw "SHA-256 mismatch" {'}'}</code></pre></div>

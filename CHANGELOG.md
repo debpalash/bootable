@@ -2,6 +2,15 @@
 
 All notable changes to Bootable are documented here.
 
+## 0.1.1 — 2026-08-27
+
+- Added native Linux AppImage, DEB, and RPM packages, each containing the desktop app, TUI, and
+  protected write helper.
+- Added a macOS DMG with an application bundle and explicit privileged-helper installer.
+- Added Windows MSI and setup EXE installers plus direct portable GUI and TUI executables.
+- Added package-content, embedded-version, checksum, and installer extraction checks to the release
+  workflow, with SHA-256 sidecars and provenance for every published artifact.
+
 ## 0.1.0 — 2026-08-27
 
 - Reworked the desktop and terminal interfaces around the same workspace-first flow, shared
