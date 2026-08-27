@@ -1,0 +1,69 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+
+const page = {
+  title: "Bootable guides — USB, SD card, and Windows installer media",
+  description: "Practical guides for writing and verifying ISO, IMG, Raspberry Pi, compressed, and Windows installer media with Bootable.",
+  ogTitle: "Bootable guides",
+  ogDescription: "USB, SD card, Windows installer, safety, and verification guides.",
+  ogType: "website",
+  current: "guides",
+  crumbs: [{ label: "Home", href: "/" }, { label: "Guides" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+      <header class="guide-hero">
+        <p class="eyebrow">Guides</p>
+        <h1>Choose a task.</h1>
+        <p class="lede">Requirements, destructive steps, and verification limits.</p>
+      </header>
+
+      <section class="guide-index" aria-label="All guides">
+        <div class="guide-card-grid">
+          <a class="guide-card" href="/windows-11-usb-on-linux">
+            <span>Windows · Linux</span>
+            <h3>Create a Windows 11 USB on Linux</h3>
+            <p>Build FAT32 setup media, split oversized WIM files, and review Windows setup options.</p>
+          </a>
+          <a class="guide-card" href="/windows-11-usb-on-macos">
+            <span>Windows · macOS</span>
+            <h3>Create a Windows 11 USB on macOS</h3>
+            <p>Use the native macOS adapter, protected helper, and wimlib on Apple Silicon.</p>
+          </a>
+          <a class="guide-card" href="/write-iso-to-usb">
+            <span>ISO · USB</span>
+            <h3>Write an ISO to a USB drive</h3>
+            <p>Inspect the image, review the exact target, write, and read back the result.</p>
+          </a>
+          <a class="guide-card" href="/raspberry-pi-image-writer">
+            <span>IMG · SD</span>
+            <h3>Write a Raspberry Pi image</h3>
+            <p>Find Pi images, handle compressed downloads, and verify the expanded bytes.</p>
+          </a>
+          <a class="guide-card" href="/compressed-image-writer">
+            <span>XZ · GZ · ZST · BZ2</span>
+            <h3>Write compressed disk images</h3>
+            <p>Measure expanded size and stream an image without creating an unpacked copy.</p>
+          </a>
+          <a class="guide-card" href="/verify-bootable-usb">
+            <span>Integrity</span>
+            <h3>Verify bootable USB media</h3>
+            <p>Understand publisher checksums, byte read-back, and Windows boot-tree audits.</p>
+          </a>
+          <a class="guide-card" href="/safe-usb-writer">
+            <span>Safety</span>
+            <h3>How Bootable protects disks</h3>
+            <p>Target filtering, stable identity, consequence review, and narrow elevation.</p>
+          </a>
+          <a class="guide-card" href="/terminal-usb-writer">
+            <span>TUI · CLI</span>
+            <h3>Write boot media from a terminal</h3>
+            <p>Use the mouse-enabled TUI or inspect the available CLI commands.</p>
+          </a>
+        </div>
+      </section>
+</main>
+</Layout>

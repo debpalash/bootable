@@ -1,0 +1,122 @@
+---
+import Header from '../components/Header.astro';
+import Footer, { type FooterLink } from '../components/Footer.astro';
+import '../styles.css';
+
+interface Props {
+  title: string;
+  description: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogType?: 'website' | 'article';
+  /** Index page: full twitter card and social-card image meta. */
+  home?: boolean;
+  noindex?: boolean;
+  current?: 'features' | 'guides' | 'download' | 'faq' | 'guide';
+  /** Fifth footer link for guide pages; defaults to Safety. */
+  doc?: FooterLink;
+  /** Explicit footer links; overrides the per-page defaults. */
+  footerLinks?: FooterLink[];
+}
+const {
+  title,
+  description,
+  ogTitle = title,
+  ogDescription = description,
+  ogType = 'website',
+  home = false,
+  noindex = false,
+  current,
+  doc,
+  footerLinks: footerProp,
+} = Astro.props;
+
+const GITHUB = 'https://github.com/debpalash/bootable';
+const docs = (name: string) => `${GITHUB}/blob/main/docs/${name}`;
+
+// Clean public URLs: /download. Emitted files keep the .html name so older
+// shared links still resolve; canonical/og urls declare the clean form.
+const slug = Astro.url.pathname.replace(/\/$/, '').slice(1);
+const url = new URL(slug, Astro.site ?? 'https://bootable.palash.dev');
+const image = new URL('social-card.png', Astro.site ?? 'https://bootable.palash.dev');
+const imageAlt = 'Bootable — checked before, verified after';
+
+const footerLinks: FooterLink[] = footerProp ?? (home
+  ? [
+      { label: 'Features', href: '/features' },
+      { label: 'Guides', href: '/guides' },
+      { label: 'Download', href: '/download' },
+      { label: 'FAQ', href: '/faq' },
+      { label: 'Changelog', href: `${GITHUB}/blob/main/CHANGELOG.md` },
+      { label: 'Source', href: GITHUB },
+    ]
+  : current === 'guides'
+    ? [
+        { label: 'Home', href: '/' },
+        { label: 'Download', href: '/download' },
+        { label: 'FAQ', href: '/faq' },
+        { label: 'Safety', href: docs('safety.md') },
+        { label: 'Source', href: GITHUB },
+      ]
+    : current === 'faq'
+      ? [
+          { label: 'Features', href: '/features' },
+          { label: 'Guides', href: '/guides' },
+          { label: 'Download', href: '/download' },
+          { label: 'Safety', href: docs('safety.md') },
+          { label: 'Source', href: GITHUB },
+        ]
+      : [
+          { label: 'Features', href: '/features' },
+          { label: 'Guides', href: '/guides' },
+          { label: 'Download', href: '/download' },
+          { label: 'FAQ', href: '/faq' },
+          doc ?? { label: 'Safety', href: docs('safety.md') },
+          { label: 'Source', href: GITHUB },
+        ]);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {noindex && <meta name="robots" content="noindex">}
+    <title>{title}</title>
+    <meta name="description" content={description}>
+    <meta name="application-name" content="Bootable">
+    <meta name="author" content="Bootable contributors">
+    <meta name="theme-color" content="#f5f3ed">
+    <meta property="og:type" content={ogType}>
+    <meta property="og:site_name" content="Bootable">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:title" content={ogTitle}>
+    <meta property="og:description" content={ogDescription}>
+    <meta property="og:url" content={url.href}>
+    <meta property="og:image" content={image.href}>
+    {
+      home && (
+        <>
+          <meta property="og:image:type" content="image/png">
+          <meta property="og:image:width" content="1200">
+          <meta property="og:image:height" content="630">
+          <meta property="og:image:alt" content={imageAlt}>
+          <meta name="twitter:card" content="summary_large_image">
+          <meta name="twitter:title" content="Bootable — Rufus and Balena Etcher alternative">
+          <meta name="twitter:description" content="Write ISO, IMG, and compressed disk images to USB and SD, build Windows installer media, and verify every write by reading it back.">
+          <meta name="twitter:image" content={image.href}>
+          <meta name="twitter:image:alt" content={imageAlt}>
+        </>
+      )
+    }
+    {!home && <meta name="twitter:card" content="summary_large_image">}
+    <link rel="canonical" href={url.href}>
+    <link rel="alternate" hreflang="en" href={url.href}>
+    <link rel="alternate" hreflang="x-default" href={url.href}>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  </head>
+  <body>
+    <Header home={home} current={current} />
+    <slot />
+    <Footer links={footerLinks} />
+  </body>
+</html>

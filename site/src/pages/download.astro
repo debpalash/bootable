@@ -1,40 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Download Bootable — Linux, Windows, and macOS</title>
-    <meta name="description" content="Download Bootable v0.1.0-alpha.2 for Linux x86-64, Windows x86-64, or macOS Apple Silicon. Archive sizes, SHA-256 files, install commands, and known limits.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Bootable">
-    <meta property="og:title" content="Download Bootable v0.1.0-alpha.2">
-    <meta property="og:description" content="Direct archives, checksums, install commands, requirements, and current alpha limits.">
-    <meta property="og:url" content="https://bootable.palash.dev/download.html">
-    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/download.html">
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="./" aria-label="Bootable home">
-        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="./">Home</a>
-        <a href="./features.html">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./download.html" aria-current="page">Download</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </nav>
-    </header>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 
-    <main class="guide-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb">
-        <ol><li><a href="./">Home</a></li><li aria-current="page">Download</li></ol>
-      </nav>
+const page = {
+  title: "Download Bootable — Linux, Windows, and macOS",
+  description: "Download Bootable v0.1.0-alpha.2 for Linux x86-64, Windows x86-64, or macOS Apple Silicon. Archive sizes, SHA-256 files, install commands, and known limits.",
+  ogTitle: "Download Bootable v0.1.0-alpha.2",
+  ogDescription: "Direct archives, checksums, install commands, requirements, and current alpha limits.",
+  ogType: "website",
+  current: "download",
+  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
+  crumbs: [{ label: "Home", href: "/" }, { label: "Download" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <header class="guide-hero">
         <p class="eyebrow">Current release · 18 August 2026</p>
         <h1>Download Bootable.</h1>
@@ -107,7 +88,7 @@ gh attestation verify bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz \
           <div class="guide-commands"><pre><code>$asset = "bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip"
 $expected = (Get-Content "$asset.sha256" -Raw).Split(" ")[0]
 $actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
-if ($actual -ne $expected) { throw "SHA-256 mismatch" }</code></pre></div>
+if ($actual -ne $expected) {'{'} throw "SHA-256 mismatch" {'}'}</code></pre></div>
 
           <h2 id="requirements">Platform support</h2>
           <ul class="status-list">
@@ -140,23 +121,9 @@ if ($actual -ne $expected) { throw "SHA-256 mismatch" }</code></pre></div>
             <li><a href="#integrity">Verify the archive</a></li>
             <li><a href="#requirements">Platform support</a></li>
             <li><a href="#limits">Known limits</a></li>
-            <li><a href="./faq.html">FAQ</a></li>
+            <li><a href="/faq">FAQ</a></li>
           </ul>
         </aside>
       </div>
-    </main>
-
-    <footer>
-      <img src="./favicon.svg" width="30" height="30" alt="">
-      <span>Bootable · Apache-2.0</span>
-      <span class="footer-links">
-        <a href="./features.html">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./faq.html">FAQ</a>
-        <a href="https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2">Release notes</a>
-        <a href="https://github.com/debpalash/bootable/blob/main/SECURITY.md">Security</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </span>
-    </footer>
-  </body>
-</html>
+</main>
+</Layout>

@@ -1,22 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Write an ISO to a USB drive and verify it — Bootable</title>
-    <meta name="description" content="Write a bootable ISO to removable USB media with target review, checksum support, cancellation, and byte read-back verification.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable">
-    <meta property="og:title" content="Write an ISO to USB and verify it"><meta property="og:description" content="Inspect the image, confirm the physical target, write, and read back the result.">
-    <meta property="og:url" content="https://bootable.palash.dev/write-iso-to-usb.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/write-iso-to-usb.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 
-    <main class="guide-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Write ISO to USB</li></ol></nav>
+const page = {
+  title: "Write an ISO to a USB drive and verify it — Bootable",
+  description: "Write a bootable ISO to removable USB media with target review, checksum support, cancellation, and byte read-back verification.",
+  ogTitle: "Write an ISO to USB and verify it",
+  ogDescription: "Inspect the image, confirm the physical target, write, and read back the result.",
+  ogType: "article",
+  current: "guide",
+  doc: { label: "Validation", href: "https://github.com/debpalash/bootable/blob/main/docs/validation.md" },
+  crumbs: [{ label: "Home", href: "/" }, { label: "Guides", href: "/guides.html" }, { label: "Write ISO to USB" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <article>
         <header class="guide-hero"><p class="eyebrow">ISO · USB</p><h1>Write an ISO to USB and verify it.</h1><p class="lede">Bootable inspects the image, limits target selection to removable drives, and reads raw writes back before reporting success.</p></header>
         <div class="guide-body">
@@ -46,13 +45,11 @@
             <h2 id="cancel">Cancellation</h2>
             <p>Cancellation stops at a controlled boundary, flushes completed raw output, and marks the media incomplete. Rewrite the full image before trying to boot it.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./compressed-image-writer.html">Write XZ, gzip, Zstandard, and bzip2 images</a></li><li><a href="./verify-bootable-usb.html">Understand each verification layer</a></li><li><a href="./safe-usb-writer.html">How the target is protected</a></li></ul></section>
-            <div class="guide-cta"><h2>Write from the desktop or terminal</h2><p>Both interfaces use the same inspection, review, write, and verification path.</p><a class="button primary" href="./download.html">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/compressed-image-writer">Write XZ, gzip, Zstandard, and bzip2 images</a></li><li><a href="/verify-bootable-usb">Understand each verification layer</a></li><li><a href="/safe-usb-writer">How the target is protected</a></li></ul></section>
+            <div class="guide-cta"><h2>Write from the desktop or terminal</h2><p>Both interfaces use the same inspection, review, write, and verification path.</p><a class="button primary" href="/download">Download Bootable</a></div>
           </div>
           <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#inspection">Image inspection</a></li><li><a href="#target">Target selection</a></li><li><a href="#steps">Write the ISO</a></li><li><a href="#readback">Read-back check</a></li><li><a href="#cancel">Cancellation</a></li></ul></aside>
         </div>
       </article>
-    </main>
-    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/validation.md">Validation</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
-  </body>
-</html>
+</main>
+</Layout>

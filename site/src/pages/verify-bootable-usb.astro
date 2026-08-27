@@ -1,17 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>How to verify a bootable USB drive — Bootable</title>
-    <meta name="description" content="Understand publisher checksum verification, raw byte read-back, Windows boot-tree audits, and the limits of bootable USB verification.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable"><meta property="og:title" content="How Bootable verifies USB media"><meta property="og:description" content="Checksums before writing, target read-back after writing, and honest verification limits."><meta property="og:url" content="https://bootable.palash.dev/verify-bootable-usb.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png"><meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/verify-bootable-usb.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
-    <main class="guide-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Verify USB media</li></ol></nav>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+
+const page = {
+  title: "How to verify a bootable USB drive — Bootable",
+  description: "Understand publisher checksum verification, raw byte read-back, Windows boot-tree audits, and the limits of bootable USB verification.",
+  ogTitle: "How Bootable verifies USB media",
+  ogDescription: "Checksums before writing, target read-back after writing, and honest verification limits.",
+  ogType: "article",
+  current: "guide",
+  doc: { label: "Validation", href: "https://github.com/debpalash/bootable/blob/main/docs/validation.md" },
+  crumbs: [{ label: "Home", href: "/" }, { label: "Guides", href: "/guides.html" }, { label: "Verify USB media" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <article>
         <header class="guide-hero"><p class="eyebrow">Checksums · read-back · boot tree</p><h1>Know what “verified” means.</h1><p class="lede">Bootable checks the download and the written media separately. The result names what was tested and what was not.</p></header>
         <div class="guide-body">
@@ -39,13 +43,11 @@
             <h2 id="boot-test">Boot validation</h2>
             <p>The repository includes a separate read-only QEMU/OVMF smoke-test harness for developers. It can confirm that firmware reached a loader frame. It remains separate from physical-media verification and does not claim that setup finished.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./write-iso-to-usb.html">Write and read back an ISO</a></li><li><a href="./compressed-image-writer.html">Verify expanded compressed images</a></li><li><a href="./safe-usb-writer.html">Review the destructive-write safety gates</a></li></ul></section>
-            <div class="guide-cta"><h2>Make verification part of the write</h2><p>Bootable reports verification in the same workflow as writing.</p><a class="button primary" href="./download.html">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/write-iso-to-usb">Write and read back an ISO</a></li><li><a href="/compressed-image-writer">Verify expanded compressed images</a></li><li><a href="/safe-usb-writer">Review the destructive-write safety gates</a></li></ul></section>
+            <div class="guide-cta"><h2>Make verification part of the write</h2><p>Bootable reports verification in the same workflow as writing.</p><a class="button primary" href="/download">Download Bootable</a></div>
           </div>
           <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#download">Download checksum</a></li><li><a href="#raw">Raw read-back</a></li><li><a href="#windows">Windows boot tree</a></li><li><a href="#limits">Limits</a></li><li><a href="#boot-test">Boot validation</a></li></ul></aside>
         </div>
       </article>
-    </main>
-    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/validation.md">Validation</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
-  </body>
-</html>
+</main>
+</Layout>

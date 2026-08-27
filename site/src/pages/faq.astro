@@ -1,40 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bootable FAQ — Safety, verification, and supported media</title>
-    <meta name="description" content="Straight answers about Bootable's disk safeguards, verification scope, Windows 11 media, image formats, administrator access, cancellation, and alpha limits.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Bootable">
-    <meta property="og:title" content="Bootable FAQ">
-    <meta property="og:description" content="Safety, verification, supported media, administrator access, and current limits.">
-    <meta property="og:url" content="https://bootable.palash.dev/faq.html">
-    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/faq.html">
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="./" aria-label="Bootable home">
-        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="./">Home</a>
-        <a href="./features.html">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./download.html">Download</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </nav>
-    </header>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 
-    <main class="guide-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb">
-        <ol><li><a href="./">Home</a></li><li aria-current="page">FAQ</li></ol>
-      </nav>
+const page = {
+  title: "Bootable FAQ — Safety, verification, and supported media",
+  description: "Straight answers about Bootable's disk safeguards, verification scope, Windows 11 media, image formats, administrator access, cancellation, and alpha limits.",
+  ogTitle: "Bootable FAQ",
+  ogDescription: "Safety, verification, supported media, administrator access, and current limits.",
+  ogType: "website",
+  current: "faq",
+  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "Download", href: "/download" }, { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
+  crumbs: [{ label: "Home", href: "/" }, { label: "FAQ" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <header class="guide-hero">
         <p class="eyebrow">Frequently asked questions</p>
         <h1>Short answers. Exact limits.</h1>
@@ -82,6 +63,10 @@
           <p>Yes. GUI and TUI use the same labels, section order, plans, progress stages, cancellation, errors, and retry behavior. Both call the same core and protected helper.</p>
         </article>
         <article>
+          <h2>Is Bootable a drop-in replacement for Rufus or Etcher?</h2>
+          <p>It covers the common raw and compressed image workflow across Linux, Windows, and macOS, and it can construct UEFI Windows installer media on all three. It is not feature-for-feature complete: persistence, multiboot, DOS media, Windows To Go, legacy-BIOS helpers, and general-purpose formatting are not implemented. Bootable is independent and is not affiliated with Rufus, balena, or Etcher.</p>
+        </article>
+        <article>
           <h2>What is not implemented?</h2>
           <p>Legacy BIOS helpers for constructed Windows media, Linux persistence, Windows To Go, DOS media, and multiboot. Windows RAW backup is also unavailable. See the <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">roadmap</a> before depending on a planned feature.</p>
         </article>
@@ -94,19 +79,5 @@
           <p>Use the <a href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">alpha report</a>. Include version, platform, interface, image name and version, target model and capacity, failed stage, and exact error. Remove disk serial numbers, usernames, and private paths.</p>
         </article>
       </section>
-    </main>
-
-    <footer>
-      <img src="./favicon.svg" width="30" height="30" alt="">
-      <span>Bootable · Apache-2.0</span>
-      <span class="footer-links">
-        <a href="./features.html">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./download.html">Download</a>
-        <a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a>
-        <a href="https://github.com/debpalash/bootable/blob/main/SECURITY.md">Security</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </span>
-    </footer>
-  </body>
-</html>
+</main>
+</Layout>

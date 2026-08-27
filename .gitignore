@@ -3,3 +3,14 @@
 *.tmp
 .aislop/history.jsonl
 .wrangler/
+site/node_modules/
+site/dist/
+site/.astro/
+site/public/favicon.svg
+site/public/bootable-logo.svg
+site/public/bootable-logo-animated.svg
+site/public/gui-*.png
+site/public/gui-*.gif
+site/public/tui-*.png
+site/public/tui-*.gif
+site/public/install.sh

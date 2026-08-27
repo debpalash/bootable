@@ -1,0 +1,292 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const page = {
+  title: "Bootable — Rufus and Balena Etcher alternative for USB and SD",
+  description: "A free, open-source alternative to Rufus and Balena Etcher. Write ISO, IMG, and compressed disk images to USB and SD, build Windows installer media, and verify every write by reading it back. Linux, Windows, and macOS, in a native GUI or terminal.",
+  ogTitle: "Bootable — Rufus and Balena Etcher alternative",
+  ogDescription: "Write ISO, IMG, and compressed disk images to USB and SD, build Windows installer media, and verify every write by reading it back.",
+  ogType: "website",
+  home: true,
+};
+---
+<Layout {...page}>
+<main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Open source · Cross-platform</p>
+          <h1 id="hero-title">The USB writer that checks its work.</h1>
+          <p class="lede">
+            A native Rufus and Balena Etcher alternative for Linux, Windows, and macOS. Write
+            ISO, IMG, and compressed images—or build Windows installer media—then read the drive
+            back to verify the result.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="/download">Download for free</a>
+            <a class="button secondary" href="#compare">Why switch?</a>
+          </div>
+          <ul class="platforms" aria-label="Supported platforms">
+            <li>Linux <span>x86-64</span></li>
+            <li>Windows 10+ <span>x86-64</span></li>
+            <li>macOS <span>Apple Silicon</span></li>
+          </ul>
+        </div>
+
+        <figure class="hero-product media-stage media-stage-sage">
+          <div class="shot-header"><span>Desktop app</span><span>v0.1.0-alpha.2</span></div>
+          <div class="shot-frame">
+            <img
+              src="/gui-discover.png"
+              alt="The Bootable desktop app showing an image catalog and a selected removable drive"
+              width="1638"
+              height="904"
+              fetchpriority="high"
+            >
+          </div>
+          <div class="product-proof" aria-label="Write safeguards">
+            <span><small>Before</small> Exact target review</span>
+            <span><small>After</small> SHA-256 read-back</span>
+          </div>
+          <figcaption>Source → target → review → write → verify</figcaption>
+        </figure>
+      </section>
+
+      <aside class="alpha-note" aria-label="Alpha warning">
+        <strong>Unsigned alpha.</strong>
+        <span>Not code-signed or notarized. Use expendable media—writing erases the selected drive.</span>
+        <a href="/faq">Read the alpha FAQ →</a>
+      </aside>
+
+      <section class="proof-strip" aria-label="Bootable at a glance">
+        <div><strong>3</strong><span>desktop platforms</span></div>
+        <div><strong>7</strong><span>source formats</span></div>
+        <div><strong>2</strong><span>full interfaces</span></div>
+        <div><strong>100%</strong><span>open source</span></div>
+      </section>
+
+      <section id="compare" class="switch-section" aria-labelledby="compare-title">
+        <div class="section-heading section-heading-wide">
+          <p class="eyebrow">Why Bootable</p>
+          <div>
+            <h2 id="compare-title">One careful workflow, across every desktop.</h2>
+            <p>Built for people who like Rufus’s depth, Etcher’s reach, and a write path that makes the destructive parts impossible to miss.</p>
+          </div>
+        </div>
+        <div class="switch-grid">
+          <article>
+            <p class="switch-kicker">Coming from Rufus</p>
+            <h3>Build Windows media without a Windows host.</h3>
+            <ul>
+              <li>Run on Linux, Windows, or macOS</li>
+              <li>Choose GPT or MBR and split oversized WIM files</li>
+              <li>Review ten optional Windows setup choices</li>
+            </ul>
+            <a class="text-link" href="/windows-11-usb-on-linux">Windows USB on Linux →</a>
+          </article>
+          <article>
+            <p class="switch-kicker">Coming from Etcher</p>
+            <h3>See the plan before erase—and the evidence after.</h3>
+            <ul>
+              <li>Inspect source, physical target, and exact operations</li>
+              <li>Read back the written range and compare SHA-256</li>
+              <li>Use the same complete workflow in a native TUI</li>
+            </ul>
+            <a class="text-link" href="/verify-bootable-usb">How verification works →</a>
+          </article>
+          <article class="switch-card-accent">
+            <p class="switch-kicker">Managing mixed systems</p>
+            <h3>Teach one flow. Keep one safety model.</h3>
+            <ul>
+              <li>Matching GUI and TUI labels, states, and retries</li>
+              <li>One open core for raw images and Windows installers</li>
+              <li>Free to audit, adapt, and redistribute under Apache-2.0</li>
+            </ul>
+            <a class="text-link" href="https://github.com/debpalash/bootable">Inspect the source →</a>
+          </article>
+        </div>
+        <p class="comparison-note">Bootable is an independent project, not affiliated with Rufus, balena, or Etcher. <a href="/features">Check current platform limits →</a></p>
+      </section>
+
+      <section id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Write path</p>
+          <h2 id="workflow-title">Nothing destructive is hidden.</h2>
+        </div>
+        <ol class="write-path">
+          <li><span>01</span><strong>Source</strong><small>Catalog or local file</small></li>
+          <li><span>02</span><strong>Target</strong><small>Whole removable disk</small></li>
+          <li><span>03</span><strong>Review</strong><small>Exact operations</small></li>
+          <li><span>04</span><strong>Write</strong><small>Protected helper</small></li>
+          <li><span>05</span><strong>Verify</strong><small>Read-back or boot audit</small></li>
+        </ol>
+      </section>
+
+      <section id="safety" aria-labelledby="safety-title">
+        <div class="section-heading">
+          <p class="eyebrow">Disk safeguards</p>
+          <h2 id="safety-title">Checked before. Verified after.</h2>
+        </div>
+        <div class="verification-ledger">
+          <div>
+            <h3>Before erasure</h3>
+            <ul>
+              <li>Only whole USB-attached or explicitly removable disks.</li>
+              <li>Fixed, system, read-only, undersized, and partition targets rejected.</li>
+              <li>Source, target, operations, and effects shown before confirmation.</li>
+              <li>Stable ID rechecked and child volumes unmounted before writing.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>After writing</h3>
+            <ul>
+              <li>Exact written range read back and compared with SHA-256.</li>
+              <li>Compressed sources compared after expansion.</li>
+              <li>Windows boot files, payloads, split-WIM parts, and FAT32 limits audited.</li>
+              <li>Failed or cancelled media marked incomplete; full rewrite required.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="scope-line">
+          <p><strong>Scope:</strong> bytes or boot structure, not installation success.</p>
+          <a class="text-link" href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety design →</a>
+        </div>
+      </section>
+
+      <section class="capabilities" aria-labelledby="capabilities-title">
+        <div class="section-heading">
+          <p class="eyebrow">More than flashing</p>
+          <h2 id="capabilities-title">From download to safe removal.</h2>
+        </div>
+        <ul>
+          <li>
+            <strong>Raw and compressed</strong>
+            <span>ISO, IMG, RAW, XZ, gzip, Zstandard, and bzip2; expanded size measured before review</span>
+          </li>
+          <li>
+            <strong>Windows installers</strong>
+            <span>GPT or MBR, FAT32, split WIM, ten setup choices, boot-tree audit</span>
+          </li>
+          <li>
+            <strong>Download integrity</strong>
+            <span>MD5, SHA-1, SHA-256, and SHA-512; mismatch blocks writing</span>
+          </li>
+          <li>
+            <strong>Drive tools</strong>
+            <span>Bad-block and fake-capacity checks; RAW backup on Linux and macOS</span>
+          </li>
+        </ul>
+        <p class="section-action"><a class="text-link" href="/features">All features →</a></p>
+      </section>
+
+      <section aria-labelledby="interfaces-title">
+        <div class="section-heading">
+          <p class="eyebrow">Interface parity</p>
+          <h2 id="interfaces-title">GUI and TUI. One engine.</h2>
+        </div>
+        <div class="interface-proof">
+          <figure class="media-stage media-stage-sand">
+            <div class="shot-header"><span>TUI</span><span>Mouse + keyboard</span></div>
+            <div class="shot-frame tui-motion-crop">
+              <picture>
+                <source media="(prefers-reduced-motion: reduce)" srcset="/tui-main.png">
+                <img
+                  src="/tui-demo.gif"
+                  alt="Bootable terminal interface browsing images and write modes"
+                  width="860"
+                  height="538"
+                  loading="lazy"
+                >
+              </picture>
+            </div>
+            <figcaption>Catalog, plan, write, and verification states.</figcaption>
+          </figure>
+          <div class="parity-copy">
+            <p>Same write plan and protected helper.</p>
+            <ul>
+              <li>Same labels, order, and options</li>
+              <li>Same progress and cancellation</li>
+              <li>Same errors, recovery, and retries</li>
+            </ul>
+            <a class="text-link" href="https://github.com/debpalash/bootable/blob/main/docs/ui-parity.md">Parity contract →</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust-section" aria-labelledby="trust-title">
+        <div class="trust-intro">
+          <p class="eyebrow">Open by design</p>
+          <h2 id="trust-title">Trust the architecture, not a slogan.</h2>
+          <p>Bootable keeps browsing, downloads, image parsing, and both interfaces outside the privilege boundary. Only a fixed helper is elevated for an approved write.</p>
+          <a class="button secondary" href="https://github.com/debpalash/bootable/blob/main/docs/architecture.md">Read the architecture</a>
+        </div>
+        <ol class="trust-ledger">
+          <li><span>01</span><div><strong>Inspect everything</strong><small>Apache-2.0 source, safety design, validation harness, and release history are public.</small></div></li>
+          <li><span>02</span><div><strong>Elevate less</strong><small>The GUI, TUI, network, catalog, and parsers stay at normal user privilege.</small></div></li>
+          <li><span>03</span><div><strong>Verify releases</strong><small>Every archive ships with a SHA-256 sidecar and GitHub build provenance.</small></div></li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="guide-list-title">
+        <div class="section-heading">
+          <p class="eyebrow">Guides</p>
+          <h2 id="guide-list-title">Guides by task.</h2>
+        </div>
+        <div class="guide-index-list">
+          <a href="/windows-11-usb-on-linux"><strong>Windows 11 USB on Linux</strong><span>Windows · Linux</span></a>
+          <a href="/windows-11-usb-on-macos"><strong>Windows 11 USB on macOS</strong><span>Windows · macOS</span></a>
+          <a href="/write-iso-to-usb"><strong>Write an ISO to USB</strong><span>ISO · USB</span></a>
+          <a href="/raspberry-pi-image-writer"><strong>Write a Raspberry Pi image</strong><span>IMG · SD</span></a>
+          <a href="/compressed-image-writer"><strong>Write compressed images</strong><span>XZ · GZ · ZST · BZ2</span></a>
+          <a href="/verify-bootable-usb"><strong>Verify boot media</strong><span>Checksums · read-back</span></a>
+          <a href="/safe-usb-writer"><strong>Disk safety model</strong><span>Targets · privilege</span></a>
+          <a href="/terminal-usb-writer"><strong>Terminal writer</strong><span>TUI · CLI</span></a>
+        </div>
+        <p class="section-action"><a class="text-link" href="/guides">All guides →</a></p>
+      </section>
+
+      <section id="download" aria-labelledby="download-title">
+        <div class="section-heading">
+          <p class="eyebrow">Current release · 18 August 2026</p>
+          <div>
+            <h2 id="download-title">Start with expendable media.</h2>
+            <p>Download v0.1.0-alpha.2, verify the archive, and keep your first write low-stakes.</p>
+          </div>
+        </div>
+        <div class="release-table-wrap">
+          <table class="release-table">
+            <thead><tr><th>Platform</th><th>Architecture</th><th>Archive</th><th>Size</th><th>Integrity</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Linux</td><td>x86-64</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz">tar.gz</a></td>
+                <td>23.8 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz.sha256">SHA-256</a></td>
+              </tr>
+              <tr>
+                <td>Windows 10+</td><td>x86-64</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip">ZIP</a></td>
+                <td>16.5 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip.sha256">SHA-256</a></td>
+              </tr>
+              <tr>
+                <td>macOS</td><td>Apple Silicon</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz">tar.gz</a></td>
+                <td>14.7 MiB</td>
+                <td><a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz.sha256">SHA-256</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="release-actions">
+          <a class="button primary" href="/download">Install</a>
+          <a class="button secondary" href="/faq">FAQ</a>
+          <a class="text-link" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Report issue →</a>
+        </div>
+        <div class="project-support" aria-label="Support Bootable development">
+          <span>Free and Apache-2.0. Fund the work.</span>
+          <a class="support-button" href="https://ko-fi.com/debpalash" target="_blank" rel="noopener">Ko-fi ↗</a>
+          <a class="support-button" href="https://paypal.me/palashCoder" target="_blank" rel="noopener">PayPal ↗</a>
+        </div>
+      </section>
+</main>
+</Layout>

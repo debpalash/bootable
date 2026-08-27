@@ -1,40 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bootable features — Writing, verification, and disk safety</title>
-    <meta name="description" content="Bootable features: image discovery, downloads, disk safety, raw and compressed writing, Windows installers, verification, backup, GUI, TUI, and CLI.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Bootable">
-    <meta property="og:title" content="Bootable features">
-    <meta property="og:description" content="Implemented features, platform scope, current limits, and real interface captures.">
-    <meta property="og:url" content="https://bootable.palash.dev/features.html">
-    <meta property="og:image" content="https://bootable.palash.dev/social-card.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/features.html">
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="./" aria-label="Bootable home">
-        <img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="./">Home</a>
-        <a href="./features.html" aria-current="page">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./download.html">Download</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </nav>
-    </header>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
 
-    <main class="guide-main feature-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb">
-        <ol><li><a href="./">Home</a></li><li aria-current="page">Features</li></ol>
-      </nav>
+const page = {
+  title: "Bootable features — Writing, verification, and disk safety",
+  description: "Bootable features: image discovery, downloads, disk safety, raw and compressed writing, Windows installers, verification, backup, GUI, TUI, and CLI.",
+  ogTitle: "Bootable features",
+  ogDescription: "Implemented features, platform scope, current limits, and real interface captures.",
+  ogType: "website",
+  current: "features",
+  doc: { label: "Roadmap", href: "https://github.com/debpalash/bootable/blob/main/docs/roadmap.md" },
+  crumbs: [{ label: "Home", href: "/" }, { label: "Features" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main feature-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <header class="guide-hero">
         <p class="eyebrow">v0.1.0-alpha.2</p>
         <h1>All implemented features.</h1>
@@ -47,8 +28,8 @@
             <div class="shot-header"><span>Desktop</span><span>Discovery + downloads</span></div>
             <div class="shot-frame">
               <picture>
-                <source media="(prefers-reduced-motion: reduce)" srcset="./gui-discover.png?v=bef7b83">
-                <img src="./gui-demo.gif" alt="Bootable desktop catalog browsing distributions and releases" width="860" height="474">
+                <source media="(prefers-reduced-motion: reduce)" srcset="/gui-discover.png">
+                <img src="/gui-demo.gif" alt="Bootable desktop catalog browsing distributions and releases" width="860" height="474">
               </picture>
             </div>
             <figcaption>GUI catalog. The same states exist in the TUI.</figcaption>
@@ -73,7 +54,7 @@
           <figure class="feature-visual media-stage media-stage-cool">
             <div class="shot-header"><span>Desktop</span><span>Source + target</span></div>
             <div class="shot-frame">
-              <img src="./gui-discover.png?v=bef7b83" alt="Bootable desktop source and removable-drive selection" width="1638" height="904" loading="lazy">
+              <img src="/gui-discover.png" alt="Bootable desktop source and removable-drive selection" width="1638" height="904" loading="lazy">
             </div>
             <figcaption>Source and target stay visible until the plan is ready.</figcaption>
           </figure>
@@ -98,7 +79,7 @@
           <figure class="feature-visual media-stage media-stage-sand">
             <div class="shot-header"><span>TUI</span><span>Write + drive tools</span></div>
             <div class="shot-frame tui-still-crop">
-              <img src="./tui-main.png?v=bef7b83" alt="Bootable terminal interface with source, drive, and review controls" width="1902" height="1954" loading="lazy">
+              <img src="/tui-main.png" alt="Bootable terminal interface with source, drive, and review controls" width="1902" height="1954" loading="lazy">
             </div>
             <figcaption>TUI write stages, tools, progress, cancellation, and results.</figcaption>
           </figure>
@@ -123,8 +104,8 @@
             <div class="shot-header"><span>TUI</span><span>Windows + Raspberry Pi</span></div>
             <div class="shot-frame tui-motion-crop">
               <picture>
-                <source media="(prefers-reduced-motion: reduce)" srcset="./tui-main.png?v=bef7b83">
-                <img src="./tui-demo.gif" alt="Bootable terminal interface showing Windows and Raspberry Pi modes" width="860" height="538" loading="lazy">
+                <source media="(prefers-reduced-motion: reduce)" srcset="/tui-main.png">
+                <img src="/tui-demo.gif" alt="Bootable terminal interface showing Windows and Raspberry Pi modes" width="860" height="538" loading="lazy">
               </picture>
             </div>
             <figcaption>Windows mode and setup choices before source selection.</figcaption>
@@ -149,7 +130,7 @@
           <figure class="feature-visual media-stage media-stage-sage">
             <div class="shot-header"><span>Desktop</span><span>Filters + search</span></div>
             <div class="shot-frame toolbar-crop">
-              <img src="./gui-toolbar.png?v=bef7b83" alt="Bootable desktop catalog filters and search controls" width="2301" height="229" loading="lazy">
+              <img src="/gui-toolbar.png" alt="Bootable desktop catalog filters and search controls" width="2301" height="229" loading="lazy">
             </div>
             <figcaption>Catalog modes and search at desktop scale.</figcaption>
           </figure>
@@ -190,24 +171,10 @@
         </section>
 
         <div class="feature-actions">
-          <a class="button primary" href="./download.html">Download</a>
-          <a class="button secondary" href="./guides.html">Guides</a>
+          <a class="button primary" href="/download">Download</a>
+          <a class="button secondary" href="/guides">Guides</a>
           <a class="text-link" href="https://github.com/debpalash/bootable/blob/main/docs/rufus-parity.md">Implementation status →</a>
         </div>
       </div>
-    </main>
-
-    <footer>
-      <img src="./favicon.svg" width="30" height="30" alt="">
-      <span>Bootable · Apache-2.0</span>
-      <span class="footer-links">
-        <a href="./features.html">Features</a>
-        <a href="./guides.html">Guides</a>
-        <a href="./download.html">Download</a>
-        <a href="./faq.html">FAQ</a>
-        <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">Roadmap</a>
-        <a href="https://github.com/debpalash/bootable">Source</a>
-      </span>
-    </footer>
-  </body>
-</html>
+</main>
+</Layout>

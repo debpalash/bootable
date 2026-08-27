@@ -1,17 +1,21 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Write XZ, gzip, Zstandard, and bzip2 disk images — Bootable</title>
-    <meta name="description" content="Write XZ, gzip, Zstandard, and bzip2 disk images without manually extracting them, with expanded-size preflight and read-back verification.">
-    <meta name="theme-color" content="#f5f3ed">
-    <meta property="og:type" content="article"><meta property="og:site_name" content="Bootable"><meta property="og:title" content="Write compressed disk images directly"><meta property="og:description" content="Expanded-size preflight, streaming decompression, cancellation, and read-back verification."><meta property="og:url" content="https://bootable.palash.dev/compressed-image-writer.html"><meta property="og:image" content="https://bootable.palash.dev/social-card.png"><meta name="twitter:card" content="summary_large_image">
-    <link rel="canonical" href="https://bootable.palash.dev/compressed-image-writer.html"><link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css?v=d6fa80c">
-  </head>
-  <body>
-    <header class="site-header"><a class="brand" href="./" aria-label="Bootable home"><img src="./favicon.svg" alt="" width="34" height="34"><span>Bootable</span></a><nav aria-label="Primary navigation"><a href="./">Home</a><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="https://github.com/debpalash/bootable">Source</a></nav></header>
-    <main class="guide-main">
-      <nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="./">Home</a></li><li><a href="./guides.html">Guides</a></li><li aria-current="page">Compressed images</li></ol></nav>
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+
+const page = {
+  title: "Write XZ, gzip, Zstandard, and bzip2 disk images — Bootable",
+  description: "Write XZ, gzip, Zstandard, and bzip2 disk images without manually extracting them, with expanded-size preflight and read-back verification.",
+  ogTitle: "Write compressed disk images directly",
+  ogDescription: "Expanded-size preflight, streaming decompression, cancellation, and read-back verification.",
+  ogType: "article",
+  current: "guide",
+  doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
+  crumbs: [{ label: "Home", href: "/" }, { label: "Guides", href: "/guides.html" }, { label: "Compressed images" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
       <article>
         <header class="guide-hero"><p class="eyebrow">XZ · gzip · Zstandard · bzip2</p><h1>Write compressed disk images directly.</h1><p class="lede">Bootable measures the expanded image, streams it to removable media, and verifies the expanded target bytes.</p></header>
         <div class="guide-body">
@@ -40,13 +44,11 @@
             <p>A decompression error stops the operation. Cancellation is checked during inspection and writing. Any interrupted target is marked incomplete and needs a full rewrite.</p>
             <div class="guide-callout"><p><strong>Keep enough local free space for the download.</strong> Manual extraction is unnecessary, but the compressed source still needs a complete local file.</p></div>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="./raspberry-pi-image-writer.html">Write a Raspberry Pi image</a></li><li><a href="./write-iso-to-usb.html">Write a local ISO to USB</a></li><li><a href="./verify-bootable-usb.html">Compare checksum and read-back results</a></li></ul></section>
-            <div class="guide-cta"><h2>Write compressed media</h2><p>Supported in both the desktop app and terminal interface.</p><a class="button primary" href="./download.html">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/raspberry-pi-image-writer">Write a Raspberry Pi image</a></li><li><a href="/write-iso-to-usb">Write a local ISO to USB</a></li><li><a href="/verify-bootable-usb">Compare checksum and read-back results</a></li></ul></section>
+            <div class="guide-cta"><h2>Write compressed media</h2><p>Supported in both the desktop app and terminal interface.</p><a class="button primary" href="/download">Download Bootable</a></div>
           </div>
           <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#formats">Formats</a></li><li><a href="#preflight">Expanded-size check</a></li><li><a href="#write">Streaming write</a></li><li><a href="#integrity">Integrity checks</a></li><li><a href="#failure">Failure handling</a></li></ul></aside>
         </div>
       </article>
-    </main>
-    <footer><img src="./favicon.svg" width="30" height="30" alt=""><span>Bootable · Apache-2.0</span><span class="footer-links"><a href="./features.html">Features</a><a href="./guides.html">Guides</a><a href="./download.html">Download</a><a href="./faq.html">FAQ</a><a href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Safety</a><a href="https://github.com/debpalash/bootable">Source</a></span></footer>
-  </body>
-</html>
+</main>
+</Layout>

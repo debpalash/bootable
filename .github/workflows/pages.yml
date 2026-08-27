@@ -34,14 +34,22 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
       - uses: actions/configure-pages@v6
       - name: Build static artifact
         shell: bash
         run: |
           set -euo pipefail
+          npm ci --prefix site
+          npm run build --prefix site
+          dist=site/dist
           canonical_file="$(mktemp)"
           page_count=0
-          for page in site/*.html; do
+          for page in "$dist"/*.html; do
             if [ "${page##*/}" = "404.html" ]; then
               continue
             fi
@@ -49,34 +57,21 @@ jobs:
             canonical="$(sed -n 's/.*<link rel="canonical" href="\([^"]*\)".*/\1/p' "$page")"
             test -n "$canonical"
             printf '%s\n' "$canonical" >> "$canonical_file"
-            grep -Fq "<loc>${canonical}</loc>" site/sitemap.xml
+            grep -Fq "<loc>${canonical}</loc>" "$dist/sitemap.xml"
             if grep -Fq 'name="robots" content="noindex"' "$page"; then
               echo "Indexable page is marked noindex: $page" >&2
               exit 1
             fi
           done
           test "$(sort -u "$canonical_file" | wc -l)" -eq "$page_count"
-          test "$(grep -c '<loc>' site/sitemap.xml)" -eq "$page_count"
+          test "$(grep -c '<loc>' "$dist/sitemap.xml")" -eq "$page_count"
           version="$(sed -n 's/^VERSION="${BOOTABLE_VERSION:-\([^"]*\)}"/\1/p' scripts/install.sh)"
           test -n "$version"
-          grep -Fq "v${version}" site/index.html
-          grep -Fq "v${version}" site/download.html
-          mkdir _site
-          cp site/*.html site/*.css site/robots.txt site/sitemap.xml _site/
-          cp site/social-card.png _site/social-card.png
-          cp scripts/install.sh _site/install.sh
-          cp assets/bootable-logo.svg _site/bootable-logo.svg
-          cp assets/bootable-logo-animated.svg _site/bootable-logo-animated.svg
-          cp assets/bootable-mark.svg _site/favicon.svg
-          cp docs/screenshots/gui-discover.png _site/gui-discover.png
-          cp docs/screenshots/gui-demo.gif _site/gui-demo.gif
-          cp docs/screenshots/gui-toolbar.png _site/gui-toolbar.png
-          cp docs/screenshots/tui-main.png _site/tui-main.png
-          cp docs/screenshots/tui-demo.gif _site/tui-demo.gif
-          touch _site/.nojekyll
+          grep -Fq "v${version}" "$dist/index.html"
+          grep -Fq "v${version}" "$dist/download.html"
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: _site
+          path: site/dist
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
