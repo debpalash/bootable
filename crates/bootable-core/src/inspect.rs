@@ -354,7 +354,9 @@ fn has_hybrid_partition_header(sectors: &[u8]) -> bool {
     }
     let mbr = sectors[510..512] == [0x55, 0xaa]
         && sectors[446..510]
-            .chunks_exact(16)
+            .as_chunks::<16>()
+            .0
+            .iter()
             .any(|entry| entry[4] != 0 && entry[12..16] != [0, 0, 0, 0]);
     let gpt = &sectors[512..520] == b"EFI PART";
     mbr || gpt

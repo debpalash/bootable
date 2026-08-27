@@ -39,8 +39,9 @@ pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,
     Progress, ProgressPhase, ReviewReadiness, WindowsExperienceOptions, WindowsPartitionScheme,
-    WindowsPayload, WindowsRegionalOptions, WriteOptions, WritePlan, WriteStrategy,
-    destructive_confirmation_ready, format_bytes, review_readiness,
+    WindowsPayload, WindowsRegionalOptions, WorkspaceProgress, WorkspaceStepState, WriteOptions,
+    WritePlan, WriteStrategy, destructive_confirmation_ready, format_bytes, review_readiness,
+    target_eligibility_label, workspace_progress,
 };
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};

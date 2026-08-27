@@ -156,6 +156,31 @@ pub enum ReviewReadiness {
     Ready,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceStepState {
+    Complete,
+    Active,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkspaceProgress {
+    pub source: WorkspaceStepState,
+    pub target: WorkspaceStepState,
+    pub review: WorkspaceStepState,
+    pub readiness: ReviewReadiness,
+}
+
+impl WorkspaceProgress {
+    pub fn status(self) -> &'static str {
+        match self.readiness {
+            ReviewReadiness::NeedsImage => "Choose or download an image to continue",
+            ReviewReadiness::NeedsTarget => "Choose a removable drive · nothing has been written",
+            ReviewReadiness::Ready => "Ready to review · nothing has been written",
+        }
+    }
+}
+
 impl ReviewReadiness {
     pub fn action_label(self) -> &'static str {
         match self {
@@ -181,6 +206,45 @@ pub fn review_readiness(image: Option<&ImageReport>, target: Option<&Device>) ->
         ReviewReadiness::NeedsTarget
     } else {
         ReviewReadiness::Ready
+    }
+}
+
+pub fn workspace_progress(
+    image: Option<&ImageReport>,
+    target: Option<&Device>,
+) -> WorkspaceProgress {
+    let readiness = review_readiness(image, target);
+    match readiness {
+        ReviewReadiness::NeedsImage => WorkspaceProgress {
+            source: WorkspaceStepState::Active,
+            target: WorkspaceStepState::Blocked,
+            review: WorkspaceStepState::Blocked,
+            readiness,
+        },
+        ReviewReadiness::NeedsTarget => WorkspaceProgress {
+            source: WorkspaceStepState::Complete,
+            target: WorkspaceStepState::Active,
+            review: WorkspaceStepState::Blocked,
+            readiness,
+        },
+        ReviewReadiness::Ready => WorkspaceProgress {
+            source: WorkspaceStepState::Complete,
+            target: WorkspaceStepState::Complete,
+            review: WorkspaceStepState::Active,
+            readiness,
+        },
+    }
+}
+
+pub fn target_eligibility_label(device: &Device) -> &'static str {
+    if device.system_disk {
+        "System disk · blocked"
+    } else if !device.removable {
+        "Internal disk · blocked"
+    } else if device.read_only {
+        "Read-only · blocked"
+    } else {
+        "Removable · eligible"
     }
 }
 
@@ -555,6 +619,53 @@ mod tests {
         assert_eq!(
             review_readiness(Some(&image), Some(&target)),
             ReviewReadiness::Ready
+        );
+
+        let progress = workspace_progress(Some(&image), Some(&target));
+        assert_eq!(progress.source, WorkspaceStepState::Complete);
+        assert_eq!(progress.target, WorkspaceStepState::Complete);
+        assert_eq!(progress.review, WorkspaceStepState::Active);
+        assert_eq!(
+            progress.status(),
+            "Ready to review · nothing has been written"
+        );
+    }
+
+    #[test]
+    fn workspace_steps_expose_one_active_step_and_reject_a_blocked_target() {
+        let image = ImageReport {
+            path: PathBuf::from("image.iso"),
+            size: 1,
+            kind: ImageKind::HybridIso,
+            volume_label: None,
+            warnings: Vec::new(),
+        };
+        let blocked = Device {
+            id: DeviceId::new("fixed"),
+            path: PathBuf::from("/dev/fixed"),
+            vendor: None,
+            model: None,
+            serial: None,
+            transport: None,
+            capacity: 1,
+            removable: false,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        };
+
+        let empty = workspace_progress(None, None);
+        assert_eq!(empty.source, WorkspaceStepState::Active);
+        assert_eq!(empty.target, WorkspaceStepState::Blocked);
+        assert_eq!(empty.review, WorkspaceStepState::Blocked);
+
+        let waiting = workspace_progress(Some(&image), Some(&blocked));
+        assert_eq!(waiting.source, WorkspaceStepState::Complete);
+        assert_eq!(waiting.target, WorkspaceStepState::Active);
+        assert_eq!(waiting.review, WorkspaceStepState::Blocked);
+        assert_eq!(
+            target_eligibility_label(&blocked),
+            "Internal disk · blocked"
         );
     }
 

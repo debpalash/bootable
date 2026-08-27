@@ -4,19 +4,27 @@ Bootable has two adapters over one product interface: GPUI and Ratatui. They mus
 capabilities and state transitions. Terminal geometry may reflow a card, but it must not remove a
 choice, invent different behavior, or use a different information hierarchy.
 
-## Shared order
+## Shared workspace
 
-1. Create boot media header
-2. Discover bootable images, when open
-3. Choose an image
-4. Choose a removable drive
-5. Setup options, when an image enables them
-6. Review and write status/actions
+Both adapters open on the same persistent three-step path:
+
+1. Source
+2. Target
+3. Review & write
+
+Discovery and managed downloads are secondary tools. Discovery starts collapsed, loads lazily when
+opened, and never displaces the Source → Target → Review hierarchy on a window or terminal large
+enough to show both. Setup options appear after an image is inspected and remain collapsed until
+opened. The shared step state uses exactly one active step: Source before inspection, Target after
+inspection, and Review after an eligible target is explicitly selected.
 
 The GPUI workspace stacks discovery and chooser columns below 960 px and expands catalog lists on
 tall windows. Ratatui reflows at terminal breakpoints and docks Review & Write at the bottom when
 the catalog is closed. Both keep branding, source, target, and the safety action visually anchored;
 unused space may separate those regions but must not appear after an arbitrary document ending.
+
+Neither adapter implicitly selects a target. Keyboard navigation, mouse input, or pointer input must
+produce an explicit selection, and blocked/internal/system/read-only drives remain unselectable.
 
 ## Shared discovery states
 
