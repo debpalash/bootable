@@ -4613,7 +4613,7 @@ fn main() {
             let bounds = Bounds::centered(None, size(px(1080.), px(720.)), cx);
             cx.spawn(async move |cx| {
                 let mut titlebar = TitleBar::title_bar_options();
-                titlebar.title = Some("Bootable Alpha".into());
+                titlebar.title = Some("Bootable".into());
                 let options = WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     window_min_size: Some(size(px(880.), px(640.))),

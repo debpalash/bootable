@@ -147,7 +147,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish prerelease
+    name: Publish release
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -158,10 +158,10 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
           body: |
-            ## Bootable public alpha
+            ## Bootable ${{ github.ref_name }}
 
             Executables are unsigned; the macOS build is not notarized. Use expendable USB or SD
             media. Check the physical target before approving erasure.

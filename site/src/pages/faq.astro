@@ -4,7 +4,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Bootable FAQ — Safety, verification, and supported media",
-  description: "Answers about supported files, drive safety, verification, Windows media, administrator access, and alpha limits.",
+  description: "Answers about supported files, drive safety, verification, Windows media, administrator access, and release limits.",
   ogTitle: "Bootable FAQ",
   ogDescription: "Supported files, safety, verification, access, and limits.",
   ogType: "website",
@@ -72,11 +72,11 @@ const page = {
         </article>
         <article>
           <h2>Why does the operating system warn about Bootable?</h2>
-          <p>The alpha is not code-signed. The macOS build is not notarized. SHA-256 files and GitHub provenance verify the release but do not prevent system warnings.</p>
+          <p>The release is not code-signed, and the macOS build is not notarized. SHA-256 files and GitHub provenance verify the release but do not prevent system warnings.</p>
         </article>
         <article>
           <h2>How should I report a failed write?</h2>
-          <p>Open an <a href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">issue</a>. Include the version, platform, interface, image, drive model and capacity, failed stage, and error. Remove serial numbers and private paths.</p>
+          <p>Open an <a href="https://github.com/debpalash/bootable/issues/new?template=bug-report.yml">issue</a>. Include the version, platform, interface, image, drive model and capacity, failed stage, and error. Remove serial numbers and private paths.</p>
         </article>
       </section>
 </main>

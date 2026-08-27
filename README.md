@@ -3,9 +3,9 @@
 <p align="center"><strong>Create and verify bootable USB and SD drives.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-unknown-linux-gnu.tar.gz"><strong>Linux</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip"><strong>Windows</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-aarch64-apple-darwin.tar.gz"><strong>macOS</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-unknown-linux-gnu.tar.gz"><strong>Linux</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-x86_64-pc-windows-msvc.zip"><strong>Windows</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0/bootable-0.1.0-aarch64-apple-darwin.tar.gz"><strong>macOS</strong></a> ·
   <a href="https://bootable.palash.dev/download.html">All downloads and checksums</a>
 </p>
 
@@ -29,7 +29,7 @@ Major features
 </table>
 
 > [!CAUTION]
-> Bootable is unsigned alpha software. Check the selected drive and keep backups. Only the newest alpha receives fixes.
+> Bootable is unsigned. Check the selected drive, keep backups, and use media you can erase.
 
 Install
 -------
@@ -76,7 +76,7 @@ Project links
 [GUI/TUI parity](docs/ui-parity.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) ·
-[Report a problem](https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml)
+[Report a problem](https://github.com/debpalash/bootable/issues/new?template=bug-report.yml)
 
 Build and test
 --------------

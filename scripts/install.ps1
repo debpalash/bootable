@@ -38,7 +38,7 @@ foreach ($name in $required) {
     }
 }
 
-Write-Host 'Bootable 0.1 alpha can erase removable drives after an explicit review and confirmation.'
+Write-Host 'Bootable can erase removable drives after an explicit review and confirmation.'
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 foreach ($name in $required) {
     Copy-Item -LiteralPath (Join-Path $source $name) -Destination (Join-Path $destination $name) -Force

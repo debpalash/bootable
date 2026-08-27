@@ -4,8 +4,8 @@ Bootable modifies block devices and treats safety defects as security defects.
 
 ## Supported versions
 
-Only the newest published alpha receives fixes. Alpha releases are not recommended for
-irreplaceable media or unattended use.
+The latest published release receives fixes. Because Bootable performs destructive block-device
+operations, keep backups and do not use it unattended.
 
 ## Reporting a vulnerability
 

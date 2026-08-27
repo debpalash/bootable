@@ -21,7 +21,7 @@ const page = {
         <div class="guide-body">
           <div class="guide-content">
             <h2 id="support">macOS support</h2>
-            <p>The alpha supports Apple Silicon. It accepts whole removable drives and rejects the macOS system disk.</p>
+            <p>Bootable supports Apple Silicon. It accepts whole removable drives and rejects the macOS system disk.</p>
             <p>Bootable mounts the ISO read-only. It creates GPT or MBR FAT32 media with <code>diskutil</code>.</p>
 
             <h2 id="requirements">Requirements</h2>
@@ -33,7 +33,7 @@ const page = {
             </ul>
             <div class="guide-commands"><pre><code>brew install wimlib
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui</code></pre></div>
-            <div class="guide-callout"><p><strong>The alpha is not signed or notarized.</strong> Verify the release SHA-256 file before running it.</p></div>
+            <div class="guide-callout"><p><strong>The release is not signed or notarized.</strong> Verify the release SHA-256 file before running it.</p></div>
 
             <h2 id="helper">Write helper</h2>
             <p>The installer adds the root-owned helper at <code>/Library/PrivilegedHelperTools/app.bootable.helper</code>. The desktop app runs without administrator access.</p>
