@@ -13,16 +13,18 @@ archive="$output/bootable-${version}-x86_64-unknown-linux-gnu.tar.gz"
 
 (cd "$output" && sha256sum -c -- *.sha256)
 test "$(dpkg-deb -f "$deb" Version)" = "$version"
+deb_contents="$(dpkg-deb -c "$deb")"
 for path in ./usr/bin/bootable ./usr/bin/bootable-desktop ./usr/libexec/bootable-helper \
   ./usr/share/applications/app.bootable.Bootable.desktop \
   ./usr/share/polkit-1/actions/app.bootable.write-media.policy; do
-  dpkg-deb -c "$deb" | grep -Fq "$path"
+  grep -Fq "$path" <<<"$deb_contents"
 done
 test "$(rpm -qp --queryformat '%{VERSION}' "$rpm")" = "$version"
+rpm_contents="$(rpm -qlp "$rpm")"
 for path in /usr/bin/bootable /usr/bin/bootable-desktop /usr/libexec/bootable-helper \
   /usr/share/applications/app.bootable.Bootable.desktop \
   /usr/share/polkit-1/actions/app.bootable.write-media.policy; do
-  rpm -qlp "$rpm" | grep -Fxq "$path"
+  grep -Fxq "$path" <<<"$rpm_contents"
 done
 
 extract="$(mktemp -d "${TMPDIR:-/tmp}/bootable-linux-verify.XXXXXX")"
