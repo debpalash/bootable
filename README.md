@@ -19,12 +19,30 @@ Major features
 - Create FAT32 Windows installation media, including split WIM files.
 - Verify publisher checksums and read back every written byte.
 - Reject system disks and require explicit review before erasing a removable drive.
-- Use the same workflow, states, and recovery actions in the GUI and TUI.
+- Follow the same Source → Target → Review & write flow in the GUI and TUI.
+
+GUI and TUI
+-----------
+
+Both interfaces keep the same three steps visible:
+
+**Source → Target → Review & write**
+
+Discovery opens only when needed. Image-specific setup appears after source inspection. Review stays
+locked until you select an eligible removable drive. Bootable never selects a drive automatically.
 
 <table>
   <tr>
-    <td width="50%"><img alt="Bootable desktop app" src="docs/screenshots/gui-demo.gif"></td>
-    <td width="50%"><img alt="Bootable TUI" src="docs/screenshots/tui-demo.gif"></td>
+    <th width="50%">Desktop GUI</th>
+    <th width="50%">Terminal TUI</th>
+  </tr>
+  <tr>
+    <td><img alt="Bootable desktop GUI showing image discovery and removable-drive setup" src="docs/screenshots/gui-demo.gif"></td>
+    <td><img alt="Bootable TUI showing the Source, Target, and Review workspace" src="docs/screenshots/tui-demo.gif"></td>
+  </tr>
+  <tr>
+    <td align="center">Pointer and keyboard</td>
+    <td align="center">Keyboard and mouse</td>
   </tr>
 </table>
 
