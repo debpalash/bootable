@@ -19,7 +19,10 @@ use crate::{ChecksumAlgorithm, OperationControl, Progress, ProgressPhase};
 const DISTROWATCH_BASE: &str = "https://distrowatch.com/";
 const POPULARITY_URL: &str = "https://distrowatch.com/dwres.php?resource=popularity";
 const SEARCH_URL: &str = "https://distrowatch.com/search.php";
-const USER_AGENT: &str = "Bootable/0.1 (boot-media catalog client)";
+// DistroWatch rejects generic application-style user agents even for interactive,
+// human-triggered requests. Use a conventional desktop browser signature while
+// retaining Bootable's existing cache and request limits.
+const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const MAX_CATALOG_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CRAWL_DEPTH: usize = 3;

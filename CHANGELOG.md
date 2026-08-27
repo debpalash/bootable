@@ -2,6 +2,17 @@
 
 All notable changes to Bootable are documented here.
 
+## 0.1.0-alpha.3 — 2026-08-27
+
+- Reworked the desktop and terminal interfaces around the same workspace-first flow, shared
+  four-step progress model, safety guidance, target eligibility labels, and retry behavior.
+- Added explicit keyboard focus and target selection to the TUI, plus responsive layouts for both
+  interfaces without changing their shared capability or information hierarchy.
+- Restored live DistroWatch catalog loading in both interfaces while retaining the existing cache
+  and request limits, and deferred catalog work until discovery is opened.
+- Redesigned the website with a compact independent-developer visual system and refreshed the
+  download, feature, FAQ, and task-guide content.
+
 ## 0.1.0-alpha.2 — 2026-08-18
 
 - Native macOS GPT/MBR FAT32 Windows-installer creation with read-only `hdiutil` source mounting,

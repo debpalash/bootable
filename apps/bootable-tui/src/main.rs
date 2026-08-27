@@ -9,8 +9,9 @@ use bootable_core::{
     ChecksumAlgorithm, Device, DiscoverySession, DiscoverySource, DistributionBundle,
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
     DownloadStatus, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog,
-    Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession, WriteCompletion,
-    WriteOptions, WritePlan, format_bytes, review_readiness,
+    Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
+    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, format_bytes, review_readiness,
+    target_eligibility_label, workspace_progress,
 };
 use clap::{Args, Parser, Subcommand};
 use crossterm::event::{
@@ -538,7 +539,7 @@ struct App {
     image_loading: bool,
     image_receiver: Option<Receiver<std::result::Result<(ImageReport, PathBuf), String>>>,
     initial_image: Option<PathBuf>,
-    selected: usize,
+    selected: Option<usize>,
     status: String,
     options: WriteOptions,
     advanced: bool,
@@ -576,6 +577,7 @@ struct App {
     write_session: ReviewedWriteSession,
     write_receiver: Option<Receiver<WriteUpdate>>,
     hit_regions: HitRegions,
+    workspace_focus: WorkspaceFocus,
 }
 
 enum DownloadUpdate {
@@ -607,11 +609,47 @@ enum CatalogUpdate {
     },
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum CatalogFocus {
     #[default]
     Distributions,
     Releases,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum WorkspaceFocus {
+    #[default]
+    Source,
+    Target,
+    Setup,
+    Review,
+    Discover,
+    Refresh,
+}
+
+impl WorkspaceFocus {
+    fn next(self, image_available: bool) -> Self {
+        match self {
+            Self::Source => Self::Target,
+            Self::Target if image_available => Self::Setup,
+            Self::Target | Self::Setup => Self::Review,
+            Self::Review => Self::Discover,
+            Self::Discover => Self::Refresh,
+            Self::Refresh => Self::Source,
+        }
+    }
+
+    fn previous(self, image_available: bool) -> Self {
+        match self {
+            Self::Source => Self::Refresh,
+            Self::Target => Self::Source,
+            Self::Setup => Self::Target,
+            Self::Review if image_available => Self::Setup,
+            Self::Review => Self::Target,
+            Self::Discover => Self::Review,
+            Self::Refresh => Self::Discover,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -678,19 +716,13 @@ impl App {
                     .count();
                 (
                     devices,
-                    format!(
-                        "Watching for USB changes • {eligible} eligible target(s) • press p to preview"
-                    ),
+                    format!("{eligible} eligible target(s) detected · choose an image to begin"),
                 )
             }
             Err(error) => (Vec::new(), error.to_string()),
         };
         let initial_image = image_path;
         let image = None;
-        let selected = devices
-            .iter()
-            .position(Device::is_eligible_target)
-            .unwrap_or(0);
         let (catalog_sender, catalog_receiver) = mpsc::channel();
         Self {
             engine,
@@ -699,13 +731,13 @@ impl App {
             image_loading: false,
             image_receiver: None,
             initial_image,
-            selected,
+            selected: None,
             status,
             options: WriteOptions::default(),
             advanced: false,
             checksum_algorithm: ChecksumAlgorithm::Sha256,
             browse_directory: None,
-            catalog_open: true,
+            catalog_open: false,
             discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
             popular_distributions: Vec::new(),
@@ -737,6 +769,7 @@ impl App {
             write_session: ReviewedWriteSession::default(),
             write_receiver: None,
             hit_regions: HitRegions::default(),
+            workspace_focus: WorkspaceFocus::Source,
         }
     }
 
@@ -1849,6 +1882,60 @@ impl App {
         }
     }
 
+    fn move_target_selection(&mut self, direction: i8) {
+        let eligible = self
+            .devices
+            .iter()
+            .enumerate()
+            .filter_map(|(index, device)| device.is_eligible_target().then_some(index))
+            .collect::<Vec<_>>();
+        if eligible.is_empty() {
+            self.selected = None;
+            self.status = "No eligible removable drive is available".into();
+            return;
+        }
+        let position = self
+            .selected
+            .and_then(|selected| eligible.iter().position(|index| *index == selected));
+        let next = match (position, direction.is_negative()) {
+            (None, _) => 0,
+            (Some(position), true) => position.saturating_sub(1),
+            (Some(position), false) => (position + 1).min(eligible.len() - 1),
+        };
+        self.selected = eligible.get(next).copied();
+        self.workspace_focus = WorkspaceFocus::Target;
+        self.status =
+            "Target selected · confirm the physical drive before reviewing the erase plan".into();
+    }
+
+    fn move_workspace_focus(&mut self, backwards: bool) {
+        self.workspace_focus = if backwards {
+            self.workspace_focus.previous(self.image.is_some())
+        } else {
+            self.workspace_focus.next(self.image.is_some())
+        };
+        self.status = match self.workspace_focus {
+            WorkspaceFocus::Source => "Source · choose or change the image",
+            WorkspaceFocus::Target => "Target · choose an eligible removable drive",
+            WorkspaceFocus::Setup => "Setup options · configure image-specific choices",
+            WorkspaceFocus::Review => "Review & write · inspect the plan before erasure",
+            WorkspaceFocus::Discover => "Discover images · browse trusted catalogs",
+            WorkspaceFocus::Refresh => "Refresh drives · rescan removable media",
+        }
+        .into();
+    }
+
+    fn activate_workspace_focus(&mut self) {
+        match self.workspace_focus {
+            WorkspaceFocus::Source => self.choose_image(),
+            WorkspaceFocus::Target => self.move_target_selection(1),
+            WorkspaceFocus::Setup => self.toggle_advanced(),
+            WorkspaceFocus::Review => self.preview(),
+            WorkspaceFocus::Discover => self.toggle_catalog(),
+            WorkspaceFocus::Refresh => self.refresh(true),
+        }
+    }
+
     fn refresh(&mut self, manual: bool) {
         if self.write_session.active() {
             if manual {
@@ -1875,13 +1962,11 @@ impl App {
                     .filter(|device| !devices.iter().any(|current| current.id == device.id))
                     .count();
                 let selected_id = self
-                    .devices
-                    .get(self.selected)
+                    .selected
+                    .and_then(|index| self.devices.get(index))
                     .map(|device| device.id.clone());
-                self.selected = selected_id
-                    .and_then(|id| devices.iter().position(|device| device.id == id))
-                    .or_else(|| devices.iter().position(Device::is_eligible_target))
-                    .unwrap_or(0);
+                self.selected =
+                    selected_id.and_then(|id| devices.iter().position(|device| device.id == id));
                 self.devices = devices;
                 self.status = device_change_message(added, removed);
             }
@@ -1894,7 +1979,11 @@ impl App {
             self.status = "Start with --image /path/to/image.iso to create a plan".into();
             return;
         };
-        let Some(target) = self.devices.get(self.selected).cloned() else {
+        let Some(target) = self
+            .selected
+            .and_then(|index| self.devices.get(index))
+            .cloned()
+        else {
             self.status = "No target device is selected".into();
             return;
         };
@@ -1916,7 +2005,10 @@ impl App {
     }
 
     fn review_readiness(&self) -> ReviewReadiness {
-        review_readiness(self.image.as_ref(), self.devices.get(self.selected))
+        review_readiness(
+            self.image.as_ref(),
+            self.selected.and_then(|index| self.devices.get(index)),
+        )
     }
 
     fn close_review(&mut self) {
@@ -2190,7 +2282,11 @@ impl App {
     }
 
     fn backup(&mut self) {
-        let Some(device) = self.devices.get(self.selected).cloned() else {
+        let Some(device) = self
+            .selected
+            .and_then(|index| self.devices.get(index))
+            .cloned()
+        else {
             self.status = "Choose a removable drive to back up".into();
             return;
         };
@@ -2274,8 +2370,11 @@ impl App {
                 .get(index)
                 .is_some_and(Device::is_eligible_target)
             {
-                self.selected = index;
-                self.status = "Target selected • preview the plan before writing".into();
+                self.selected = Some(index);
+                self.workspace_focus = WorkspaceFocus::Target;
+                self.status =
+                    "Target selected · confirm the physical drive before reviewing the erase plan"
+                        .into();
             } else {
                 self.status = "That drive is blocked and cannot be selected".into();
             }
@@ -2485,10 +2584,10 @@ impl App {
         }
         match mouse.kind {
             MouseEventKind::ScrollUp => {
-                self.selected = self.selected.saturating_sub(1);
+                self.move_target_selection(-1);
             }
             MouseEventKind::ScrollDown => {
-                self.selected = (self.selected + 1).min(self.devices.len().saturating_sub(1));
+                self.move_target_selection(1);
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 let point = (mouse.column, mouse.row);
@@ -2531,7 +2630,6 @@ fn run_tui(engine: Bootable, image_path: Option<PathBuf>) -> Result<()> {
 fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
     let mut last_device_scan = Instant::now();
     let mut last_download_scan = Instant::now();
-    let mut catalog_started = false;
     let mut state_started = false;
     loop {
         app.poll_download();
@@ -2547,10 +2645,6 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                 app.inspect_image_path(path);
             }
             state_started = true;
-        }
-        if !catalog_started {
-            app.load_distrowatch();
-            catalog_started = true;
         }
         if event::poll(Duration::from_millis(250))? {
             match event::read()? {
@@ -2622,6 +2716,27 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                         app.toggle_downloads();
                         continue;
                     }
+                    if !app.catalog_open {
+                        match key.code {
+                            KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                                app.move_workspace_focus(true);
+                                continue;
+                            }
+                            KeyCode::Tab => {
+                                app.move_workspace_focus(false);
+                                continue;
+                            }
+                            KeyCode::BackTab => {
+                                app.move_workspace_focus(true);
+                                continue;
+                            }
+                            KeyCode::Enter => {
+                                app.activate_workspace_focus();
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
                     match key.code {
                         code if app.catalog_open => app.handle_catalog_key(code),
                         KeyCode::Char('q') => return Ok(()),
@@ -2640,12 +2755,14 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                         KeyCode::Char('p') => app.preview(),
                         KeyCode::Char('h') => app.checksum(),
                         KeyCode::Char('u') => app.backup(),
+                        KeyCode::Char('?') => {
+                            app.status = "Keyboard: Tab / Shift+Tab moves focus · Enter activates · arrows choose a target · o image · g discover · a setup · p review · r refresh · q quit".into();
+                        }
                         KeyCode::Up | KeyCode::Char('k') => {
-                            app.selected = app.selected.saturating_sub(1);
+                            app.move_target_selection(-1);
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
-                            app.selected =
-                                (app.selected + 1).min(app.devices.len().saturating_sub(1));
+                            app.move_target_selection(1);
                         }
                         _ => {}
                     }
@@ -2682,8 +2799,9 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         return;
     }
     let show_options = app.image.is_some() && app.advanced;
-    let header_height = 3;
-    let status_height = if canvas.height < 22 { 5 } else { 6 };
+    let setup_available = app.image.is_some() && !app.advanced;
+    let header_height = 5;
+    let status_height = 7;
     let options_height = if show_options {
         advanced_height(canvas.width)
     } else {
@@ -2706,35 +2824,75 @@ fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
             .saturating_add(options_height)
             .saturating_add(if show_options { 2 } else { 1 });
         if content.height >= required {
-            let mut constraints = vec![
-                Constraint::Min(catalog_min_height(canvas.width)),
-                Constraint::Length(workspace_height),
-            ];
+            let mut constraints = vec![Constraint::Length(workspace_height)];
             if show_options {
                 constraints.push(Constraint::Length(options_height));
             }
+            constraints.push(Constraint::Min(catalog_min_height(canvas.width)));
             let rows = Layout::vertical(constraints).spacing(1).split(content);
-            draw_catalog(frame, app, rows[0]);
-            draw_workspace(frame, app, rows[1]);
+            draw_workspace(frame, app, rows[0]);
             if show_options {
-                draw_advanced(frame, app, rows[2]);
+                draw_advanced(frame, app, rows[1]);
             }
+            draw_catalog(frame, app, rows[usize::from(show_options) + 1]);
         } else {
             draw_catalog(frame, app, content);
         }
         return;
     }
 
+    let show_setup_toggle = setup_available && content.height >= workspace_height.saturating_add(4);
+    let show_discovery_toggle = content.height
+        >= workspace_height
+            .saturating_add(if show_setup_toggle { 4 } else { 0 })
+            .saturating_add(4);
     let mut constraints = vec![Constraint::Length(workspace_height)];
     if show_options {
         constraints.push(Constraint::Length(options_height));
+    } else if show_setup_toggle {
+        constraints.push(Constraint::Length(3));
+    }
+    if show_discovery_toggle {
+        constraints.push(Constraint::Length(3));
     }
     constraints.push(Constraint::Min(0));
     let rows = Layout::vertical(constraints).spacing(1).split(content);
     draw_workspace(frame, app, rows[0]);
+    let mut next_row = 1;
     if show_options {
-        draw_advanced(frame, app, rows[1]);
+        draw_advanced(frame, app, rows[next_row]);
+        next_row += 1;
+    } else if show_setup_toggle {
+        draw_collapsed_setup(frame, app, rows[next_row]);
+        next_row += 1;
     }
+    if show_discovery_toggle {
+        draw_collapsed_discovery(frame, app, rows[next_row]);
+    }
+}
+
+fn draw_collapsed_setup(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let bad_blocks = match app.options.bad_block_check.passes() {
+        0 => "Bad blocks off".into(),
+        passes => format!("Bad blocks {passes}x"),
+    };
+    render_button(
+        frame,
+        area,
+        &format!("+  Setup options · Verification on · {bad_blocks}"),
+        app.workspace_focus == WorkspaceFocus::Setup,
+    );
+    app.hit_regions.advanced = Some(area);
+}
+
+fn draw_collapsed_discovery(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    render_button(
+        frame,
+        area,
+        "+  Discover images · All · Arch · Debian · Omarchy · Windows · Raspberry Pi",
+        app.workspace_focus == WorkspaceFocus::Discover,
+    );
+    app.hit_regions.discover = Some(area);
 }
 
 fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
@@ -3124,7 +3282,7 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
 }
 
 fn draw_workspace(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    if area.width >= 82 {
+    if area.width >= 72 {
         let workspace =
             Layout::horizontal([Constraint::Percentage(46), Constraint::Percentage(54)])
                 .spacing(1)
@@ -3141,6 +3299,10 @@ fn draw_workspace(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let header_rows = Layout::vertical([Constraint::Length(3), Constraint::Length(1)])
+        .spacing(1)
+        .split(area);
+    let area = header_rows[0];
     let wide = area.width >= 82;
     let action_count = if app.image.is_some() { 4 } else { 3 };
     let action_width = if wide {
@@ -3183,7 +3345,7 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         } else {
             if wide { "⌄ Discover" } else { "⌄ Find" }
         },
-        false,
+        app.workspace_focus == WorkspaceFocus::Discover,
     );
     if app.image.is_some() {
         render_button(
@@ -3209,11 +3371,45 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         frame,
         actions[refresh_index],
         if wide { "↻ Refresh" } else { "↻ USB" },
-        false,
+        app.workspace_focus == WorkspaceFocus::Refresh,
     );
     app.hit_regions.downloads = Some(actions[0]);
     app.hit_regions.discover = Some(actions[1]);
     app.hit_regions.refresh = Some(actions[refresh_index]);
+    draw_workspace_steps(frame, app, header_rows[1]);
+}
+
+fn draw_workspace_steps(frame: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
+    let progress = workspace_progress(
+        app.image.as_ref(),
+        app.selected.and_then(|index| app.devices.get(index)),
+    );
+    let line = Line::from(vec![
+        step_span("1 Source", progress.source),
+        Span::styled("  ─────  ", Style::default().fg(BORDER)),
+        step_span("2 Target", progress.target),
+        Span::styled("  ─────  ", Style::default().fg(BORDER)),
+        step_span("3 Review & write", progress.review),
+    ]);
+    frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
+}
+
+fn step_span(label: &'static str, state: WorkspaceStepState) -> Span<'static> {
+    let (marker, style) = match state {
+        WorkspaceStepState::Complete => (
+            "✓",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        WorkspaceStepState::Active => (
+            "›",
+            Style::default()
+                .fg(Color::Black)
+                .bg(ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        WorkspaceStepState::Blocked => ("·", Style::default().fg(MUTED)),
+    };
+    Span::styled(format!(" {marker} {label} "), style)
 }
 
 fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line<'a>> {
@@ -3256,7 +3452,7 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .as_ref()
         .map(|image| {
             format!(
-                "{}\n{} • {}",
+                "{}\n{} • {}  ·  ✓ Inspected",
                 image.path.display(),
                 image.kind,
                 format_bytes(image.size)
@@ -3265,7 +3461,10 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .unwrap_or_else(|| {
             "ISO, IMG, RAW, or compressed disk image\nInspected before writing".into()
         });
-    let source_block = panel_block(" 1  Choose an image ");
+    let source_block = focused_panel_block(
+        " 1  Source · choose an image ",
+        app.workspace_focus == WorkspaceFocus::Source,
+    );
     let source_inner = source_block.inner(area);
     frame.render_widget(source_block, area);
     let source_columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(14)])
@@ -4210,7 +4409,10 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     app.hit_regions.windows_skusi_policy = None;
     app.hit_regions.windows_s_mode = None;
     app.hit_regions.windows_partition_scheme = None;
-    let block = panel_block(" Setup options ");
+    let block = focused_panel_block(
+        " Setup options ",
+        app.workspace_focus == WorkspaceFocus::Setup,
+    );
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let compact = area.width < 78;
@@ -4316,27 +4518,42 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let items = app
-        .devices
-        .iter()
-        .map(|device| {
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("{:<12}", device.path.display()),
-                    Style::default().fg(ACCENT),
-                ),
-                Span::raw(format!(
-                    " {:>9}  {}",
-                    format_bytes(device.capacity),
-                    device.display_name()
-                )),
-            ]))
-        })
-        .collect::<Vec<_>>();
-    let mut state = ListState::default().with_selected(Some(app.selected));
+    let items = if app.devices.is_empty() {
+        vec![ListItem::new("No removable drives detected").style(Style::default().fg(MUTED))]
+    } else {
+        app.devices
+            .iter()
+            .map(|device| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("{:<12}", device.path.display()),
+                        Style::default().fg(if device.is_eligible_target() {
+                            ACCENT
+                        } else {
+                            Color::LightRed
+                        }),
+                    ),
+                    Span::raw(format!(
+                        " {:>9}  {}  ·  {}",
+                        format_bytes(device.capacity),
+                        device.display_name(),
+                        target_eligibility_label(device)
+                    )),
+                ]))
+            })
+            .collect::<Vec<_>>()
+    };
+    let target_block = focused_panel_block(
+        " 2  Target · removable media ",
+        app.workspace_focus == WorkspaceFocus::Target,
+    );
+    let target_inner = target_block.inner(area);
+    frame.render_widget(target_block, area);
+    let target_rows =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(target_inner);
+    let mut state = ListState::default().with_selected(app.selected);
     frame.render_stateful_widget(
         List::new(items)
-            .block(panel_block(" 2  Choose a drive · removable media "))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(
@@ -4345,28 +4562,38 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                     .bg(Color::Rgb(21, 48, 47))
                     .add_modifier(Modifier::BOLD),
             ),
-        area,
+        target_rows[0],
         &mut state,
     );
-    let target_inner = area.inner(ratatui::layout::Margin {
-        vertical: 1,
-        horizontal: 1,
-    });
+    frame.render_widget(
+        Paragraph::new("Confirm the physical drive · erasure starts only after review")
+            .style(Style::default().fg(MUTED)),
+        target_rows[1],
+    );
     app.hit_regions.device_rows = (0..app.devices.len())
         .filter_map(|index| {
-            let y = target_inner.y.saturating_add(index as u16);
-            (y < target_inner.bottom())
-                .then_some((Rect::new(target_inner.x, y, target_inner.width, 1), index))
+            let y = target_rows[0].y.saturating_add(index as u16);
+            (y < target_rows[0].bottom()).then_some((
+                Rect::new(target_rows[0].x, y, target_rows[0].width, 1),
+                index,
+            ))
         })
         .collect();
 }
 
 fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let status_block = panel_block(" 3  Review & write ");
+    let status_block = focused_panel_block(
+        " 3  Review & write ",
+        app.workspace_focus == WorkspaceFocus::Review,
+    );
     let status_inner = status_block.inner(area);
     frame.render_widget(status_block, area);
-    let status_rows =
-        Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).split(status_inner);
+    let status_rows = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(1),
+        Constraint::Length(3),
+    ])
+    .split(status_inner);
     let progress_rows =
         if app.download_session.active_progress().is_some() && status_rows[0].height >= 2 {
             Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(status_rows[0])
@@ -4394,11 +4621,27 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             progress_rows[1],
         );
     }
+    let workspace = workspace_progress(
+        app.image.as_ref(),
+        app.selected.and_then(|index| app.devices.get(index)),
+    );
+    let help = if status_inner.width >= 100 {
+        format!(
+            "{}  ·  Tab next · Shift+Tab previous · Enter select · ? help · q quit",
+            workspace.status()
+        )
+    } else {
+        "Tab / Shift+Tab focus · Enter select · ? help · q quit".into()
+    };
+    frame.render_widget(
+        Paragraph::new(help).style(Style::default().fg(Color::Rgb(111, 130, 153))),
+        status_rows[1],
+    );
     let compact = status_inner.width < 62;
     if let Some(control) = app.download_session.active_control() {
         let actions = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
             .spacing(1)
-            .split(status_rows[1]);
+            .split(status_rows[2]);
         let state = control.state();
         render_button(
             frame,
@@ -4429,7 +4672,7 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     }
     let actions = Layout::horizontal([Constraint::Ratio(2, 3), Constraint::Ratio(1, 3)])
         .spacing(1)
-        .split(status_rows[1]);
+        .split(status_rows[2]);
     let readiness = app.review_readiness();
     let review_label = if readiness == ReviewReadiness::Ready {
         if compact {
@@ -4549,6 +4792,10 @@ fn panel_block<'a>(title: &'a str) -> Block<'a> {
         .style(Style::default().bg(PANEL))
 }
 
+fn focused_panel_block<'a>(title: &'a str, focused: bool) -> Block<'a> {
+    panel_block(title).border_style(Style::default().fg(if focused { ACCENT } else { BORDER }))
+}
+
 fn application_area(area: Rect) -> Rect {
     area.inner(ratatui::layout::Margin {
         horizontal: u16::from(area.width >= 72),
@@ -4561,7 +4808,7 @@ fn advanced_height(width: u16) -> u16 {
 }
 
 fn workspace_height(width: u16) -> u16 {
-    if width >= 82 { 10 } else { 18 }
+    if width >= 72 { 10 } else { 18 }
 }
 
 fn catalog_min_height(width: u16) -> u16 {
@@ -4664,8 +4911,8 @@ fn device_change_message(added: usize, removed: usize) -> String {
 #[cfg(test)]
 mod layout_tests {
     use super::{
-        advanced_height, application_area, brand_lockup, centered_button_area, grid_areas,
-        main_shell_layout, windows_option_columns, workspace_height,
+        WorkspaceFocus, advanced_height, application_area, brand_lockup, centered_button_area,
+        grid_areas, main_shell_layout, windows_option_columns, workspace_height,
     };
     use ratatui::layout::Rect;
 
@@ -4722,12 +4969,24 @@ mod layout_tests {
     #[test]
     fn main_shell_keeps_header_and_footer_anchored() {
         let area = Rect::new(1, 2, 118, 48);
-        let regions = main_shell_layout(area, 3, 6);
-        assert_eq!(regions[0], Rect::new(1, 2, 118, 3));
-        assert_eq!(regions[2].height, 6);
+        let regions = main_shell_layout(area, 5, 7);
+        assert_eq!(regions[0], Rect::new(1, 2, 118, 5));
+        assert_eq!(regions[2].height, 7);
         assert_eq!(regions[2].bottom(), area.bottom());
         assert_eq!(regions[1].y, regions[0].bottom() + 1);
         assert_eq!(regions[1].bottom() + 1, regions[2].y);
+    }
+
+    #[test]
+    fn workspace_focus_preserves_order_and_skips_unavailable_setup() {
+        assert_eq!(WorkspaceFocus::Source.next(false), WorkspaceFocus::Target);
+        assert_eq!(WorkspaceFocus::Target.next(false), WorkspaceFocus::Review);
+        assert_eq!(WorkspaceFocus::Target.next(true), WorkspaceFocus::Setup);
+        assert_eq!(
+            WorkspaceFocus::Review.previous(false),
+            WorkspaceFocus::Target
+        );
+        assert_eq!(WorkspaceFocus::Review.previous(true), WorkspaceFocus::Setup);
     }
 
     #[test]

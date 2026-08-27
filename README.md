@@ -3,9 +3,9 @@
 <p align="center"><strong>Create and verify bootable USB and SD drives.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz"><strong>Linux</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip"><strong>Windows</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.2/bootable-0.1.0-alpha.2-aarch64-apple-darwin.tar.gz"><strong>macOS</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-unknown-linux-gnu.tar.gz"><strong>Linux</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-x86_64-pc-windows-msvc.zip"><strong>Windows</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.0-alpha.3/bootable-0.1.0-alpha.3-aarch64-apple-darwin.tar.gz"><strong>macOS</strong></a> ·
   <a href="https://bootable.palash.dev/download.html">All downloads and checksums</a>
 </p>
 

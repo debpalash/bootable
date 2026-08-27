@@ -9,7 +9,8 @@ use bootable_core::{
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
     ImageKind, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog, PiImage,
     Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, WindowsPartitionScheme,
-    WriteCompletion, WriteOptions, format_bytes, review_readiness,
+    WorkspaceStepState, WriteCompletion, WriteOptions, format_bytes, review_readiness,
+    target_eligibility_label, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -339,9 +340,7 @@ impl BootableView {
                     .count();
                 (
                     devices,
-                    format!(
-                        "Watching for USB changes • {eligible} eligible target(s) • nothing is written while planning"
-                    ),
+                    format!("{eligible} eligible target(s) detected · choose an image to begin"),
                 )
             }
             Err(error) => (Vec::new(), error.to_string()),
@@ -358,7 +357,7 @@ impl BootableView {
             options: WriteOptions::default(),
             advanced: false,
             checksum_algorithm: ChecksumAlgorithm::Sha256,
-            catalog_open: true,
+            catalog_open: false,
             discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
             popular_distributions: Vec::new(),
@@ -394,7 +393,6 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     view.refresh_download_jobs(cx);
                     view.start_next_queued_download(cx);
-                    view.load_catalog(cx);
                 })
                 .ok();
             }
@@ -3385,6 +3383,15 @@ impl BootableView {
                             .flex_col()
                             .gap_2()
                             .child(div().text_sm().text_color(rgb(0xa9b8c9)).child(details))
+                            .when(self.image.is_some(), |details| {
+                                details.child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(0x5bd7c0))
+                                        .child("✓ Inspected"),
+                                )
+                            })
                             .child(
                                 div()
                                     .text_xs()
@@ -3710,15 +3717,7 @@ impl BootableView {
                 let selected = self.selected_device == Some(index);
                 let blocked = !device.is_eligible_target();
                 let border = if selected { 0x36d3b4 } else { 0x283345 };
-                let status = if device.system_disk {
-                    "System disk • blocked"
-                } else if !device.removable {
-                    "Internal disk • blocked"
-                } else if device.read_only {
-                    "Read-only • blocked"
-                } else {
-                    "Removable • eligible"
-                };
+                let status = target_eligibility_label(device);
                 div()
                     .id(("device", index))
                     .flex()
@@ -3734,8 +3733,7 @@ impl BootableView {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected_device = Some(index);
-                                this.status =
-                                    "Target selected; preview the plan before writing".into();
+                                this.status = "Target selected · confirm the physical drive before reviewing the erase plan".into();
                                 cx.notify();
                             }))
                     })
@@ -4059,12 +4057,12 @@ impl BootableView {
                                 if self.catalog_open {
                                     "Catalog ×"
                                 } else {
-                                    "Discover"
+                                    "Discover images"
                                 }
                             } else if self.catalog_open {
                                 "Close catalog"
                             } else {
-                                "Discover"
+                                "Discover images"
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_catalog(cx))),
                     )
@@ -4083,6 +4081,96 @@ impl BootableView {
                             .tooltip("Refresh removable drives")
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_devices(cx))),
                     ),
+            )
+    }
+
+    fn workspace_steps(&self) -> impl IntoElement {
+        let progress = workspace_progress(
+            self.image.as_ref(),
+            self.selected_device
+                .and_then(|index| self.devices.get(index)),
+        );
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .p_2()
+            .rounded_xl()
+            .border_1()
+            .border_color(rgb(0x243244))
+            .bg(rgb(0x0f1925))
+            .child(workspace_step("1", "Source", progress.source))
+            .child(div().flex_1().h(px(1.)).bg(rgb(0x243244)))
+            .child(workspace_step("2", "Target", progress.target))
+            .child(div().flex_1().h(px(1.)).bg(rgb(0x243244)))
+            .child(workspace_step("3", "Review & write", progress.review))
+    }
+
+    fn setup_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let bad_blocks = match self.options.bad_block_check.passes() {
+            0 => "Bad blocks off".into(),
+            passes => format!("Bad blocks {passes}x"),
+        };
+        div()
+            .id("setup-summary")
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .px_4()
+            .py_3()
+            .rounded_xl()
+            .border_1()
+            .border_color(rgb(0x243244))
+            .bg(rgb(0x111923))
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_advanced(cx)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(Icon::empty().path("ui/settings.svg"))
+                    .child("Setup options"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(0x8fa4bd))
+                    .child(format!("Verification on · {bad_blocks}")),
+            )
+    }
+
+    fn discovery_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("discovery-summary")
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .px_4()
+            .py_3()
+            .rounded_xl()
+            .border_1()
+            .border_color(rgb(0x243244))
+            .bg(rgb(0x111923))
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_catalog(cx)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(Icon::empty().path("ui/discover.svg"))
+                    .child("Discover images"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(0x8fa4bd))
+                    .child("All · Arch · Debian · Omarchy · Windows · Raspberry Pi"),
             )
     }
 
@@ -4144,6 +4232,9 @@ impl BootableView {
                     .overflow_y_scrollbar()
                     .child(self.target_cards(cx)),
             )
+            .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
+                "Confirm the physical drive before continuing · erasure starts only after review",
+            ))
     }
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -4193,6 +4284,16 @@ impl BootableView {
                             .text_sm()
                             .text_color(rgb(0xa9b8c9))
                             .child(self.status.clone())
+                            .child(
+                                div().text_xs().text_color(rgb(0x6f8299)).child(
+                                    workspace_progress(
+                                        self.image.as_ref(),
+                                        self.selected_device
+                                            .and_then(|index| self.devices.get(index)),
+                                    )
+                                    .status(),
+                                ),
+                            )
                             .when_some(
                                 self.download_session.active_progress(),
                                 |column, progress| {
@@ -4319,21 +4420,20 @@ impl Render for BootableView {
                         .max_w(px(1_720.))
                         .flex()
                         .flex_col()
-                        .when(
-                            !(self.catalog_open
-                                && !self.write_session.is_reviewing()
-                                && layout.wide),
-                            |shell| {
-                                shell.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .px_5()
-                                        .pt_4()
-                                        .pb_3()
-                                        .when(layout.compact, |header| header.px_3().pt_3().pb_2())
-                                        .child(self.header_bar(cx, layout.compact)),
-                                )
-                            },
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .px_5()
+                                .pt_4()
+                                .pb_3()
+                                .flex()
+                                .flex_col()
+                                .gap_3()
+                                .when(layout.compact, |header| header.px_3().pt_3().pb_2())
+                                .child(self.header_bar(cx, layout.compact))
+                                .when(!self.write_session.is_reviewing(), |header| {
+                                    header.child(self.workspace_steps())
+                                }),
                         )
                         .child(
                             div()
@@ -4357,9 +4457,6 @@ impl Render for BootableView {
                                                 .when(self.downloads_open, |panel| {
                                                     panel.child(self.download_history_card(cx))
                                                 })
-                                                .when(self.catalog_open, |panel| {
-                                                    panel.child(self.catalog_card(cx, layout))
-                                                })
                                                 .child(
                                                     div()
                                                         .flex()
@@ -4374,6 +4471,16 @@ impl Render for BootableView {
                                                     self.image.is_some() && self.advanced,
                                                     |panel| panel.child(self.advanced_card(cx)),
                                                 )
+                                                .when(
+                                                    self.image.is_some() && !self.advanced,
+                                                    |panel| panel.child(self.setup_summary(cx)),
+                                                )
+                                                .when(!self.catalog_open, |panel| {
+                                                    panel.child(self.discovery_summary(cx))
+                                                })
+                                                .when(self.catalog_open, |panel| {
+                                                    panel.child(self.catalog_card(cx, layout))
+                                                })
                                         }),
                                 ),
                         )
@@ -4397,6 +4504,48 @@ impl Render for BootableView {
                 root.child(self.write_confirmation_modal(cx))
             })
     }
+}
+
+fn workspace_step(
+    number: &'static str,
+    label: &'static str,
+    state: WorkspaceStepState,
+) -> impl IntoElement {
+    let (marker, color, background) = match state {
+        WorkspaceStepState::Complete => ("✓", 0x5bd7c0, 0x183932),
+        WorkspaceStepState::Active => (number, 0x07130f, 0x5bd7c0),
+        WorkspaceStepState::Blocked => ("·", 0x6f8299, 0x18212d),
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .px_2()
+        .py_1()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(24.))
+                .rounded_full()
+                .bg(rgb(background))
+                .text_xs()
+                .font_weight(FontWeight::BOLD)
+                .text_color(rgb(color))
+                .child(marker),
+        )
+        .child(
+            div()
+                .text_sm()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(if state == WorkspaceStepState::Blocked {
+                    0x6f8299
+                } else {
+                    0xe8f0f8
+                }))
+                .child(label),
+        )
 }
 
 fn review_value(label: &'static str, value: String) -> impl IntoElement {
