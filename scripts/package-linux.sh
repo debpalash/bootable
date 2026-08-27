@@ -38,6 +38,7 @@ install_payload() {
     "$destination/usr/share/polkit-1/actions/app.bootable.write-media.policy"
   install -D -m 0644 "$root/README.md" "$destination/usr/share/doc/bootable/README.md"
   install -D -m 0644 "$root/LICENSE" "$destination/usr/share/doc/bootable/LICENSE"
+  mkdir -p "$destination/usr/share/applications"
   sed 's|@EXEC@|/usr/bin/bootable-desktop|g' \
     "$root/packaging/app.bootable.Bootable.desktop" \
     > "$destination/usr/share/applications/app.bootable.Bootable.desktop"

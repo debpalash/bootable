@@ -27,7 +27,7 @@ path = "bootable"
 path = "bootable-helper"
 
 [nsis]
-install-mode = "perMachine"
+installer-mode = "perMachine"
 installer-icon = "../assets/bootable.ico"
 compression = "lzma"
 languages = ["English"]
