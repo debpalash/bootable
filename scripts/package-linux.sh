@@ -129,6 +129,10 @@ cp "$rpm_asset" "$output/bootable-${version}-1.x86_64.rpm"
 
 appdir="$work/Bootable.AppDir"
 install_payload "$appdir"
+# linuxdeploy accepts SVG icons but rejects the 1024px hicolor size that is
+# useful to native packages. Keep the high-resolution PNG in DEB/RPM and let
+# the AppImage use the scalable mark.
+rm -f "$appdir/usr/share/icons/hicolor/1024x1024/apps/bootable.png"
 sed 's|@EXEC@|bootable-desktop|g' \
   "$root/packaging/app.bootable.Bootable.desktop" \
   > "$appdir/usr/share/applications/app.bootable.Bootable.desktop"
@@ -140,7 +144,7 @@ install -m 0755 "$binary_dir/bootable-helper" "$appdir/usr/bin/bootable-helper"
   --executable "$appdir/usr/bin/bootable" \
   --executable "$appdir/usr/bin/bootable-helper" \
   --desktop-file "$appdir/usr/share/applications/app.bootable.Bootable.desktop" \
-  --icon-file "$appdir/usr/share/icons/hicolor/1024x1024/apps/bootable.png"
+  --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/bootable.svg"
 cat > "$appdir/AppRun" <<'EOF'
 #!/bin/sh
 set -eu
