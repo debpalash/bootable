@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "How Bootable protects disks during USB writes",
-  description: "See how Bootable filters removable targets, revalidates stable identity, reviews erasure, limits elevation, and handles cancellation.",
+  description: "See which drives Bootable allows, what you review before erasure, and when it requests administrator access.",
   ogTitle: "How Bootable protects disks",
-  ogDescription: "Removable-drive filtering, stable identity checks, explicit review, and narrow elevation.",
+  ogDescription: "Drive filtering, identity checks, write review, and administrator access.",
   ogType: "article",
   current: "guide",
   doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
@@ -17,40 +17,40 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">Target safety · privilege boundary</p><h1>The target is checked twice.</h1><p class="lede">Bootable filters drives before selection, binds confirmation to a reviewed plan, and revalidates the physical device before erasure.</p></header>
+        <header class="guide-hero"><p class="eyebrow">Drive safety</p><h1>How Bootable protects drives</h1><p class="lede">Bootable filters drives, shows the write plan, and checks the selected drive again before erasure.</p></header>
         <div class="guide-body">
           <div class="guide-content">
-            <h2 id="eligibility">A drive must be eligible</h2>
-            <p>The native platform adapter discovers whole removable devices. A target must be USB-attached or explicitly removable, writable, large enough for the planned operation, and separate from the running system root.</p>
-            <p>Loop devices and fixed disks are not made eligible for convenience. If an adapter cannot establish the required safety properties, the device stays out of the target list.</p>
+            <h2 id="eligibility">Allowed drives</h2>
+            <p>A drive must be whole, USB-attached or removable, writable, large enough, and separate from the system disk.</p>
+            <p>Fixed disks, partitions, and loop devices are not allowed.</p>
 
-            <h2 id="review">Erasure requires a reviewed plan</h2>
-            <p>Review shows the image, physical target, strategy, dependencies, ordered operations, and permanent consequences. Opening Review does not write anything. A separate acknowledgment unlocks the final erase-and-write action.</p>
-            <p>The CLI uses a plan-specific confirmation phrase derived from the device path and serial suffix.</p>
+            <h2 id="review">Review before erasure</h2>
+            <p>The review shows the image, drive, method, operations, and data loss. A separate confirmation starts the write.</p>
+            <p>The CLI requires a confirmation phrase for the selected drive.</p>
 
-            <h2 id="revalidation">Identity is checked again</h2>
-            <p>USB device paths can change after unplugging, reconnecting, or refreshing. Immediately before writing, Bootable discovers the target by stable ID again and compares its capacity and safety flags with the reviewed plan. Mounted child filesystems are then unmounted.</p>
-            <div class="guide-callout"><p><strong>Revalidation does not replace physical inspection.</strong> Confirm the device you can see and touch before authorizing erasure.</p></div>
+            <h2 id="revalidation">Drive identity check</h2>
+            <p>Before writing, Bootable finds the drive again by stable ID. It checks the capacity and safety flags, then unmounts its filesystems.</p>
+            <div class="guide-callout"><p><strong>Confirm the physical drive yourself.</strong> Software cannot tell which device you intend to erase.</p></div>
 
-            <h2 id="privilege">The interface remains unprivileged</h2>
-            <p>The interactive desktop app and TUI do not run their network client, catalog, image parser, or renderer as root or administrator. After review, they authenticate a fixed, protected helper that accepts the plan, checks the target again, writes, and reports progress.</p>
+            <h2 id="privilege">Administrator access</h2>
+            <p>The desktop app and TUI run as the current user. A fixed helper gets administrator access only after you approve the write.</p>
             <ul>
               <li>Linux uses a root-owned helper through PolicyKit.</li>
               <li>macOS uses a root-owned helper and private Unix socket.</li>
               <li>Windows validates the helper under <code>Program Files</code> and uses an authenticated loopback channel after UAC.</li>
             </ul>
-            <p>The Linux CLI can also be invoked directly as root. That path still uses the same target checks and plan-bound confirmation.</p>
+            <p>The Linux CLI uses the same drive checks when run as root.</p>
 
-            <h2 id="cancellation">Cancellation leaves an explicit result</h2>
-            <p>The stop action cancels on a controlled boundary, terminates managed media tools, and flushes completed raw output. Bootable reports the target as incomplete and requiring a full rewrite.</p>
+            <h2 id="cancellation">Cancellation</h2>
+            <p>Bootable stops managed tools, flushes raw output, and marks the drive incomplete. Rewrite the full image.</p>
 
-            <h2 id="limits">What the safety model cannot do</h2>
-            <p>No software can identify a physical USB drive for you. Bootable cannot make an untrusted operating-system image safe, guarantee firmware compatibility, or recover data after the final confirmation. Backups and physical target review remain required.</p>
+            <h2 id="limits">Limits</h2>
+            <p>Bootable cannot identify the intended physical drive, make an untrusted image safe, guarantee compatibility, or recover erased data. Keep backups.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/verify-bootable-usb">Verification scope and limits</a></li><li><a href="/write-iso-to-usb">The full ISO write sequence</a></li><li><a href="/terminal-usb-writer">TUI and CLI confirmation paths</a></li></ul></section>
-            <div class="guide-cta"><h2>Review the implementation</h2><p>The full safety model and platform checks are documented in the repository.</p><a class="button secondary" href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Read safety.md</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/verify-bootable-usb">Verification details</a></li><li><a href="/write-iso-to-usb">Write an ISO to USB</a></li><li><a href="/terminal-usb-writer">Terminal interface</a></li></ul></section>
+            <div class="guide-cta"><h2>Safety design</h2><p>Read the full drive checks and platform rules.</p><a class="button secondary" href="https://github.com/debpalash/bootable/blob/main/docs/safety.md">Read the safety design</a></div>
           </div>
-          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#eligibility">Drive eligibility</a></li><li><a href="#review">Reviewed plan</a></li><li><a href="#revalidation">Identity check</a></li><li><a href="#privilege">Privilege boundary</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#limits">Limits</a></li></ul></aside>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#eligibility">Allowed drives</a></li><li><a href="#review">Write review</a></li><li><a href="#revalidation">Identity check</a></li><li><a href="#privilege">Administrator access</a></li><li><a href="#cancellation">Cancellation</a></li><li><a href="#limits">Limits</a></li></ul></aside>
         </div>
       </article>
 </main>

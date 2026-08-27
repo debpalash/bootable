@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Write XZ, gzip, Zstandard, and bzip2 disk images — Bootable",
-  description: "Write XZ, gzip, Zstandard, and bzip2 disk images without manually extracting them, with expanded-size preflight and read-back verification.",
-  ogTitle: "Write compressed disk images directly",
-  ogDescription: "Expanded-size preflight, streaming decompression, cancellation, and read-back verification.",
+  description: "Write XZ, gzip, Zstandard, and bzip2 disk images without extracting them first. Check the expanded size and verify the write.",
+  ogTitle: "Write compressed disk images",
+  ogDescription: "Check the expanded size, write the image, and verify the result.",
   ogType: "article",
   current: "guide",
   doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
@@ -17,37 +17,36 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">XZ · gzip · Zstandard · bzip2</p><h1>Write compressed disk images directly.</h1><p class="lede">Bootable measures the expanded image, streams it to removable media, and verifies the expanded target bytes.</p></header>
+        <header class="guide-hero"><p class="eyebrow">XZ · gzip · Zstandard · bzip2</p><h1>Write compressed disk images</h1><p class="lede">Write a compressed image without extracting it first.</p></header>
         <div class="guide-body">
           <div class="guide-content">
             <h2 id="formats">Supported formats</h2>
-            <p>Bootable recognizes XZ, gzip, Zstandard, and bzip2 around raw disk images and hybrid ISOs. You can open a local file or use a catalog download. Manual extraction is not required.</p>
+            <p>Bootable supports XZ, gzip, Zstandard, and bzip2 files that contain raw disk images or hybrid ISOs.</p>
 
-            <h2 id="preflight">Expanded-size preflight</h2>
-            <p>The compressed file size is not used for drive capacity checks. Bootable fully measures the decompressed stream during inspection, then builds the write plan with the expanded byte count.</p>
-            <p>This extra inspection pass catches truncated or invalid compressed sources before the target is erased and prevents a small archive from being planned against a card that cannot hold its contents.</p>
+            <h2 id="preflight">Check the expanded size</h2>
+            <p>Bootable measures the expanded image before choosing a drive. Invalid or truncated files fail before erasure.</p>
 
             <h2 id="write">Streaming write</h2>
             <ol>
               <li>Open the compressed image and wait for inspection.</li>
               <li>Select a removable drive larger than the measured expanded size.</li>
-              <li>Review both the source file and expanded byte count.</li>
+              <li>Review the source file and expanded size.</li>
               <li>Confirm erasure and start the write.</li>
               <li>Leave the media connected through read-back verification.</li>
             </ol>
-            <p>Decompression feeds the writer directly. Bootable does not need to keep a second, fully extracted image beside the archive.</p>
+            <p>Bootable decompresses the file while writing. It does not create an extracted copy.</p>
 
-            <h2 id="integrity">Two different integrity checks</h2>
-            <p>A publisher checksum, when available, validates the compressed file you downloaded. Post-write verification validates the expanded byte stream written to the target. These checks cover different stages and are reported separately.</p>
+            <h2 id="integrity">Integrity checks</h2>
+            <p>A publisher checksum checks the compressed download. Read-back checks the expanded bytes on the drive.</p>
 
             <h2 id="failure">Cancellation and failure</h2>
-            <p>A decompression error stops the operation. Cancellation is checked during inspection and writing. Any interrupted target is marked incomplete and needs a full rewrite.</p>
-            <div class="guide-callout"><p><strong>Keep enough local free space for the download.</strong> Manual extraction is unnecessary, but the compressed source still needs a complete local file.</p></div>
+            <p>A decompression error stops the write. A cancelled or failed drive is marked incomplete and needs a full rewrite.</p>
+            <div class="guide-callout"><p><strong>Keep enough space for the compressed download.</strong> Bootable still needs the complete source file.</p></div>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/raspberry-pi-image-writer">Write a Raspberry Pi image</a></li><li><a href="/write-iso-to-usb">Write a local ISO to USB</a></li><li><a href="/verify-bootable-usb">Compare checksum and read-back results</a></li></ul></section>
-            <div class="guide-cta"><h2>Write compressed media</h2><p>Supported in both the desktop app and terminal interface.</p><a class="button primary" href="/download">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/raspberry-pi-image-writer">Write a Raspberry Pi image</a></li><li><a href="/write-iso-to-usb">Write an ISO to USB</a></li><li><a href="/verify-bootable-usb">Verification details</a></li></ul></section>
+            <div class="guide-cta"><h2>Install Bootable</h2><p>Use the desktop app or TUI.</p><a class="button primary" href="/download">View install steps</a></div>
           </div>
-          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#formats">Formats</a></li><li><a href="#preflight">Expanded-size check</a></li><li><a href="#write">Streaming write</a></li><li><a href="#integrity">Integrity checks</a></li><li><a href="#failure">Failure handling</a></li></ul></aside>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#formats">Formats</a></li><li><a href="#preflight">Expanded size</a></li><li><a href="#write">Write the image</a></li><li><a href="#integrity">Integrity checks</a></li><li><a href="#failure">Failures</a></li></ul></aside>
         </div>
       </article>
 </main>

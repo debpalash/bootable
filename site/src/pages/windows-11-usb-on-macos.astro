@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Create a Windows 11 bootable USB on macOS — Bootable",
-  description: "Create Windows 11 USB installer media on Apple Silicon macOS with FAT32, split WIM support, native disk handling, and verification.",
+  description: "Create a Windows 11 USB installer on Apple Silicon macOS. Includes FAT32, split WIM files, and media checks.",
   ogTitle: "Create a Windows 11 bootable USB on macOS",
-  ogDescription: "Native disk handling, FAT32 media, split WIM support, and boot-tree checks.",
+  ogDescription: "Create FAT32 Windows media and split oversized WIM files on macOS.",
   ogType: "article",
   current: "guide",
   doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
@@ -17,14 +17,14 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">Windows installer · macOS</p><h1>Create a Windows 11 USB on macOS.</h1><p class="lede">Bootable uses native macOS disk tools, a fixed root-owned helper, and wimlib to build verified FAT32 installer media.</p></header>
+        <header class="guide-hero"><p class="eyebrow">Windows installer · macOS</p><h1>Create a Windows 11 USB on macOS</h1><p class="lede">Create FAT32 installer media from a Windows ISO. Split oversized WIM files when needed.</p></header>
         <div class="guide-body">
           <div class="guide-content">
-            <h2 id="support">Current macOS support</h2>
-            <p>The alpha supports Apple Silicon. It discovers whole removable devices, excludes the macOS root disk, unmounts the selected target, and writes through its raw device path.</p>
-            <p>For Windows installer media, the source ISO is mounted read-only. Bootable creates GPT or MBR FAT32 media with <code>diskutil</code> and copies the validated setup tree.</p>
+            <h2 id="support">macOS support</h2>
+            <p>The alpha supports Apple Silicon. It accepts whole removable drives and rejects the macOS system disk.</p>
+            <p>Bootable mounts the ISO read-only. It creates GPT or MBR FAT32 media with <code>diskutil</code>.</p>
 
-            <h2 id="requirements">Before you start</h2>
+            <h2 id="requirements">Requirements</h2>
             <ul>
               <li>An Apple Silicon Mac.</li>
               <li>A trusted Windows 11 ISO.</li>
@@ -33,27 +33,27 @@ const page = {
             </ul>
             <div class="guide-commands"><pre><code>brew install wimlib
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui</code></pre></div>
-            <div class="guide-callout"><p><strong>The alpha is not signed or notarized.</strong> macOS may show a security warning. Review the installer and release SHA-256 file before running it.</p></div>
+            <div class="guide-callout"><p><strong>The alpha is not signed or notarized.</strong> Verify the release SHA-256 file before running it.</p></div>
 
-            <h2 id="helper">Install the protected helper</h2>
-            <p>The installer places the fixed helper at <code>/Library/PrivilegedHelperTools/app.bootable.helper</code> after administrator authentication. The desktop app remains unprivileged. Bootable rejects a helper that is not protected by root ownership.</p>
+            <h2 id="helper">Write helper</h2>
+            <p>The installer adds the root-owned helper at <code>/Library/PrivilegedHelperTools/app.bootable.helper</code>. The desktop app runs without administrator access.</p>
 
             <h2 id="steps">Create the installer</h2>
             <ol>
               <li>Open the Windows 11 ISO in Bootable.</li>
               <li>Select the USB drive by its physical model and capacity.</li>
-              <li>Choose GPT or MBR and any required Windows setup options.</li>
-              <li>Review the source, target, operations, dependencies, and permanent erasure.</li>
-              <li>Confirm the reviewed plan and authenticate when macOS asks.</li>
-              <li>Keep the drive connected through the final boot-tree check.</li>
+              <li>Choose GPT or MBR and the Windows setup options.</li>
+              <li>Review the source, drive, operations, and erasure warning.</li>
+              <li>Confirm erasure and authenticate.</li>
+              <li>Keep the drive connected until the media check finishes.</li>
             </ol>
 
-            <h2 id="verification">What happens after copying</h2>
-            <p>Bootable checks the UEFI boot tree, Windows setup payload, split WIM sequence, and FAT32 size rules. Cancellation terminates controlled media tools and marks the drive incomplete so it is not mistaken for finished media.</p>
-            <p>The structural check does not guarantee that Windows Setup will complete on every target computer.</p>
+            <h2 id="verification">Media checks</h2>
+            <p>Bootable checks the UEFI files, setup payload, split WIM parts, and FAT32 limits. A cancelled write is marked incomplete.</p>
+            <p>This does not guarantee that Windows Setup will finish.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/verify-bootable-usb">Understand the verification result</a></li><li><a href="/safe-usb-writer">Review the macOS safety boundary</a></li><li><a href="/windows-11-usb-on-linux">Create the same media on Linux</a></li></ul></section>
-            <div class="guide-cta"><h2>Install Bootable on macOS</h2><p>The current macOS build supports Apple Silicon.</p><a class="button primary" href="/download">View install commands</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/verify-bootable-usb">Verification details</a></li><li><a href="/safe-usb-writer">Drive safety</a></li><li><a href="/windows-11-usb-on-linux">Windows USB on Linux</a></li></ul></section>
+            <div class="guide-cta"><h2>Install on macOS</h2><p>Available for Apple Silicon.</p><a class="button primary" href="/download">View macOS install steps</a></div>
           </div>
           <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#support">macOS support</a></li><li><a href="#requirements">Requirements</a></li><li><a href="#helper">Protected helper</a></li><li><a href="#steps">Create the installer</a></li><li><a href="#verification">Verification</a></li></ul></aside>
         </div>

@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Bootable FAQ — Safety, verification, and supported media",
-  description: "Straight answers about Bootable's disk safeguards, verification scope, Windows 11 media, image formats, administrator access, cancellation, and alpha limits.",
+  description: "Answers about supported files, drive safety, verification, Windows media, administrator access, and alpha limits.",
   ogTitle: "Bootable FAQ",
-  ogDescription: "Safety, verification, supported media, administrator access, and current limits.",
+  ogDescription: "Supported files, safety, verification, access, and limits.",
   ogType: "website",
   current: "faq",
   footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "Download", href: "/download" }, { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
@@ -17,66 +17,66 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <header class="guide-hero">
-        <p class="eyebrow">Frequently asked questions</p>
-        <h1>Short answers. Exact limits.</h1>
-        <p class="lede">Disk safety, verification scope, and current limits.</p>
+        <p class="eyebrow">Help</p>
+        <h1>Frequently asked questions</h1>
+        <p class="lede">Supported files, safety, verification, and limits.</p>
       </header>
 
       <section class="guide-index faq-list" aria-label="Questions and answers">
         <article>
           <h2>What does Bootable write?</h2>
-          <p>ISO, IMG, and RAW images; XZ, gzip, Zstandard, and bzip2 archives; and extracted FAT32 Windows installer media. Sources can be local files or downloads from the built-in catalog.</p>
+          <p>ISO, IMG, RAW, XZ, gzip, Zstandard, and bzip2 files. It also creates FAT32 Windows installer media. Open a local file or use the catalog.</p>
         </article>
         <article>
           <h2>Can it erase an internal disk?</h2>
-          <p>Bootable rejects fixed disks, the running system disk, partitions, read-only media, and write plans that do not fit the expanded image. It accepts whole USB-attached or explicitly removable disks, then rechecks the stable target identity immediately before writing. This is alpha software: always verify the physical device named in the review.</p>
+          <p>Bootable rejects fixed, system, partition, read-only, and undersized targets. It accepts whole USB or removable drives. It checks the drive identity again before writing. Always confirm the physical drive yourself.</p>
         </article>
         <article>
           <h2>Why does writing require administrator access?</h2>
-          <p>Operating systems restrict raw disk access. Interactive writes elevate only a fixed, protected helper after the write plan is approved. The desktop, TUI, catalog, downloads, and image parsing stay unelevated.</p>
+          <p>Raw disk writes require administrator access. Only the fixed write helper is elevated. The interface, downloads, catalog, and image parser are not.</p>
         </article>
         <article>
           <h2>What does “verified” mean?</h2>
           <div>
             <ul>
-              <li>A publisher checksum match proves the source bytes match the publisher's checksum file.</li>
-              <li>Raw read-back proves the written range matches the expanded source stream.</li>
-              <li>A Windows boot-tree audit checks UEFI files, installer payloads, split-WIM parts, and FAT32 limits.</li>
+              <li>A publisher checksum confirms that the source matches the published hash.</li>
+              <li>Raw read-back confirms that the written range matches the source.</li>
+              <li>A Windows media check confirms required UEFI and installer files.</li>
             </ul>
-            <p>None of these proves that every firmware or operating-system installation will succeed.</p>
+            <p>These checks do not guarantee that the drive will boot or installation will finish.</p>
           </div>
         </article>
         <article>
           <h2>Can it create a Windows 11 USB on Linux or macOS?</h2>
-          <p>Yes. Bootable creates GPT or MBR media with one FAT32 partition and splits an oversized <code>install.wim</code>. Linux needs <code>wimtools</code>; macOS needs <code>wimlib</code>. Current Windows media targets UEFI, not legacy BIOS.</p>
+          <p>Yes. Bootable creates GPT or MBR FAT32 media and splits oversized <code>install.wim</code> files. Linux needs <code>wimtools</code>. macOS needs <code>wimlib</code>. Only UEFI is supported.</p>
         </article>
         <article>
           <h2>Which Windows setup choices are available?</h2>
-          <p>Hardware-requirement bypass, offline-account path, named local account, host regional settings, privacy defaults, automatic BitLocker control, quality-of-life policies, CA 2023 boot files, SkuSiPolicy revocations, and S Mode. Each choice appears in the reviewed write plan.</p>
+          <p>Hardware bypass, offline or local account, region, privacy, BitLocker, quality-of-life policies, CA 2023 boot files, SkuSiPolicy, and S Mode. The review shows every selected option.</p>
         </article>
         <article>
           <h2>What happens if I cancel a write?</h2>
-          <p>Bootable stops at a controlled boundary, terminates media tools it started, and marks the target incomplete. Do not boot or reuse that media. Start a full write again.</p>
+          <p>Bootable stops and marks the drive incomplete. Rewrite the full image before using it.</p>
         </article>
         <article>
           <h2>Are the desktop and terminal apps equivalent?</h2>
-          <p>Yes. GUI and TUI use the same labels, section order, plans, progress stages, cancellation, errors, and retry behavior. Both call the same core and protected helper.</p>
+          <p>Yes. The GUI and TUI have the same features, plans, progress, errors, and retry behavior.</p>
         </article>
         <article>
           <h2>Is Bootable a drop-in replacement for Rufus or Etcher?</h2>
-          <p>It covers the common raw and compressed image workflow across Linux, Windows, and macOS, and it can construct UEFI Windows installer media on all three. It is not feature-for-feature complete: persistence, multiboot, DOS media, Windows To Go, legacy-BIOS helpers, and general-purpose formatting are not implemented. Bootable is independent and is not affiliated with Rufus, balena, or Etcher.</p>
+          <p>Not fully. Bootable writes raw and compressed images and creates UEFI Windows media on Linux, Windows, and macOS. It does not support persistence, multiboot, DOS, Windows To Go, legacy BIOS, or general formatting. Bootable is not affiliated with Rufus, balena, or Etcher.</p>
         </article>
         <article>
           <h2>What is not implemented?</h2>
-          <p>Legacy BIOS helpers for constructed Windows media, Linux persistence, Windows To Go, DOS media, and multiboot. Windows RAW backup is also unavailable. See the <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">roadmap</a> before depending on a planned feature.</p>
+          <p>Legacy BIOS Windows media, persistence, Windows To Go, DOS, and multiboot. Windows RAW backup is also unavailable. See the <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">roadmap</a>.</p>
         </article>
         <article>
           <h2>Why does the operating system warn about Bootable?</h2>
-          <p>The alpha executables are not code-signed and the macOS build is not notarized. Release archives include SHA-256 sidecars and GitHub build provenance, but those do not remove SmartScreen or Gatekeeper warnings.</p>
+          <p>The alpha is not code-signed. The macOS build is not notarized. SHA-256 files and GitHub provenance verify the release but do not prevent system warnings.</p>
         </article>
         <article>
           <h2>How should I report a failed write?</h2>
-          <p>Use the <a href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">alpha report</a>. Include version, platform, interface, image name and version, target model and capacity, failed stage, and exact error. Remove disk serial numbers, usernames, and private paths.</p>
+          <p>Open an <a href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">issue</a>. Include the version, platform, interface, image, drive model and capacity, failed stage, and error. Remove serial numbers and private paths.</p>
         </article>
       </section>
 </main>

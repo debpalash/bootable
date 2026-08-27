@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Write a Raspberry Pi image to an SD card — Bootable",
-  description: "Find, download, write, and verify Raspberry Pi IMG and compressed disk images on removable SD cards and USB media.",
+  description: "Download or open a Raspberry Pi image, write it to an SD card, and verify the written bytes.",
   ogTitle: "Write a Raspberry Pi image to an SD card",
-  ogDescription: "Catalog downloads, compressed images, expanded-size checks, and read-back verification.",
+  ogDescription: "Choose a Raspberry Pi image, write it to SD, and verify it.",
   ogType: "article",
   current: "guide",
   doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
@@ -17,16 +17,16 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">Raspberry Pi · IMG · SD</p><h1>Write a Raspberry Pi image to an SD card.</h1><p class="lede">Browse Pi images or open a local IMG, write the expanded bytes, and verify the target before removing it.</p></header>
+        <header class="guide-hero"><p class="eyebrow">Raspberry Pi · IMG · SD</p><h1>Write a Raspberry Pi image to SD</h1><p class="lede">Choose an image, write it to an SD card, and verify the written bytes.</p></header>
         <div class="guide-body">
           <div class="guide-content">
             <h2 id="source">Choose a Raspberry Pi image</h2>
-            <p>Open the Raspberry Pi catalog in Bootable, search the available images, and queue a download. You can pause, resume, cancel, or retry the job. A local <code>.img</code>, <code>.raw</code>, or supported compressed file works through the same inspection path.</p>
-            <p>When a publisher checksum file is available, Bootable verifies the downloaded file before allowing it into a write plan. The interface distinguishes a verified checksum from an HTTPS-only download.</p>
+            <p>Use the Raspberry Pi catalog or open a local <code>.img</code>, <code>.raw</code>, or compressed file. Downloads can be paused, resumed, cancelled, or retried.</p>
+            <p>Bootable verifies a publisher checksum when available. Otherwise, it labels the download HTTPS-only.</p>
 
-            <h2 id="capacity">Check the real capacity</h2>
-            <p>Compressed files can be much smaller than the disk image they contain. Bootable measures the full expanded length before review and checks that the expanded image fits the card.</p>
-            <p>Bootable also provides destructive bad-block and fake-capacity tests. Run those only on expendable media; the test itself overwrites the selected device.</p>
+            <h2 id="capacity">Check capacity</h2>
+            <p>Bootable measures the expanded image and checks that it fits the card.</p>
+            <p>Bad-block and fake-capacity tests erase the card. Use expendable media.</p>
 
             <h2 id="steps">Write the card</h2>
             <ol>
@@ -36,18 +36,18 @@ const page = {
               <li>Review the expanded size, physical target, and permanent erasure.</li>
               <li>Write and wait for read-back verification.</li>
             </ol>
-            <div class="guide-callout"><p><strong>Check the adapter and card.</strong> The selected target is the entire removable device. Existing partitions and files will be erased.</p></div>
+            <div class="guide-callout"><p><strong>The whole card will be erased.</strong> Check the card and reader before writing.</p></div>
 
-            <h2 id="verification">What gets compared</h2>
-            <p>For compressed media, Bootable hashes the expanded stream sent to the card. It then reads the same byte range back from the card and compares SHA-256. Verification covers the written bytes, not whether a specific Pi model supports the image.</p>
+            <h2 id="verification">Verify the write</h2>
+            <p>Bootable reads back the written range and compares SHA-256. This does not confirm that the image supports your Pi model.</p>
 
             <h2 id="after">After the write</h2>
-            <p>Wait for the safe-removal result before disconnecting the reader. If the write was cancelled or the verification failed, rewrite the entire image. Do not treat an interrupted card as bootable.</p>
+            <p>Wait for the safe-removal result. Rewrite the full image after a cancellation or verification failure.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/compressed-image-writer">How compressed image streaming works</a></li><li><a href="/verify-bootable-usb">Read-back verification explained</a></li><li><a href="/write-iso-to-usb">Write an ISO to USB</a></li></ul></section>
-            <div class="guide-cta"><h2>Use Bootable for SD media</h2><p>Choose the native desktop app or mouse-enabled terminal interface.</p><a class="button primary" href="/download">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/compressed-image-writer">Write compressed images</a></li><li><a href="/verify-bootable-usb">Verification details</a></li><li><a href="/write-iso-to-usb">Write an ISO to USB</a></li></ul></section>
+            <div class="guide-cta"><h2>Install Bootable</h2><p>Use the desktop app or TUI.</p><a class="button primary" href="/download">View install steps</a></div>
           </div>
-          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#source">Choose an image</a></li><li><a href="#capacity">Capacity checks</a></li><li><a href="#steps">Write the card</a></li><li><a href="#verification">Verification</a></li><li><a href="#after">After the write</a></li></ul></aside>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#source">Choose an image</a></li><li><a href="#capacity">Check capacity</a></li><li><a href="#steps">Write the card</a></li><li><a href="#verification">Verify the write</a></li><li><a href="#after">Safe removal</a></li></ul></aside>
         </div>
       </article>
 </main>

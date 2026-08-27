@@ -11,9 +11,10 @@ const { links } = Astro.props;
 <footer>
   <div class="footer-brand">
     <img src="/favicon.svg" width="30" height="30" alt="">
-    <span><strong>Bootable</strong><small>Made in the open · Apache-2.0</small></span>
+    <span><strong>bootable</strong><small>A small, open-source boot media writer.</small></span>
   </div>
   <span class="footer-links">
     {links.map((link) => <a href={link.href}>{link.label}</a>)}
   </span>
+  <small class="footer-license">Rust · Apache-2.0</small>
 </footer>

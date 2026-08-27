@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Download Bootable — Linux, Windows, and macOS",
-  description: "Download Bootable v0.1.0-alpha.2 for Linux x86-64, Windows x86-64, or macOS Apple Silicon. Archive sizes, SHA-256 files, install commands, and known limits.",
+  description: "Download Bootable v0.1.0-alpha.2 for Linux x86-64, Windows x86-64, or Apple Silicon macOS. Includes checksums and install steps.",
   ogTitle: "Download Bootable v0.1.0-alpha.2",
-  ogDescription: "Direct archives, checksums, install commands, requirements, and current alpha limits.",
+  ogDescription: "Downloads, checksums, install steps, and alpha limits.",
   ogType: "website",
   current: "download",
   footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.0-alpha.2" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
@@ -18,8 +18,8 @@ const page = {
   <Breadcrumbs crumbs={page.crumbs} />
       <header class="guide-hero">
         <p class="eyebrow">Current release · 18 August 2026</p>
-        <h1>Download Bootable.</h1>
-        <p class="lede">v0.1.0-alpha.2. Desktop, TUI, CLI, and write helper included.</p>
+        <h1>Download Bootable</h1>
+        <p class="lede">Includes the desktop app, TUI, CLI, and write helper.</p>
       </header>
 
       <div class="guide-body">
@@ -51,12 +51,12 @@ const page = {
             </table>
           </div>
           <div class="guide-callout">
-            <p><strong>Unsigned alpha.</strong> Binaries are not signed; macOS is not notarized. Use expendable media. Check the target before erasure.</p>
+            <p><strong>Unsigned alpha.</strong> macOS is not notarized. Test with a drive you can erase. Check the drive before writing.</p>
           </div>
 
           <h2 id="install">Install</h2>
           <h3>Linux or macOS</h3>
-          <p>The installer downloads the matching archive, verifies its SHA-256 sidecar, and asks for administrator authentication only when it installs the write helper.</p>
+          <p>The installer downloads and verifies the archive. It asks for administrator access to install the write helper.</p>
           <div class="guide-commands"><pre><code># Desktop
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui
 
@@ -65,16 +65,16 @@ curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --tui
 
 # Both
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --all</code></pre></div>
-          <p>Review <a href="https://github.com/debpalash/bootable/blob/main/scripts/install.sh">install.sh</a> before piping it to a shell. Set <code>BOOTABLE_SKIP_PRIVILEGED_HELPER=1</code> for a non-writing install.</p>
+          <p>Review <a href="https://github.com/debpalash/bootable/blob/main/scripts/install.sh">install.sh</a> first. Set <code>BOOTABLE_SKIP_PRIVILEGED_HELPER=1</code> to install without write access.</p>
 
           <h3>Windows</h3>
-          <p>Download the ZIP and SHA-256 file above, verify the archive, extract it, then run:</p>
+          <p>Download the ZIP and SHA-256 file. Verify and extract the ZIP. Then run:</p>
           <div class="guide-commands"><pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Variant All</code></pre></div>
-          <p>The installer copies Bootable under <code>Program Files</code>. The interface remains unelevated; UAC appears when an approved write starts.</p>
+          <p>Bootable installs under <code>Program Files</code>. UAC appears only for approved writes.</p>
 
-          <h2 id="integrity">Verify the archive yourself</h2>
-          <p>The sidecar proves the downloaded archive matches the release file. GitHub build provenance ties that archive to the release workflow. It is not a substitute for platform code signing.</p>
-          <h3>Linux, macOS, and GitHub provenance</h3>
+          <h2 id="integrity">Verify the archive</h2>
+          <p>The SHA-256 file checks the archive. GitHub provenance links it to the release workflow. Neither replaces code signing.</p>
+          <h3>Linux and macOS</h3>
           <div class="guide-commands"><pre><code># Linux
 sha256sum -c bootable-*.sha256
 
@@ -84,7 +84,7 @@ shasum -a 256 -c bootable-*.sha256
 # GitHub provenance; use the archive you downloaded
 gh attestation verify bootable-0.1.0-alpha.2-x86_64-unknown-linux-gnu.tar.gz \
   --repo debpalash/bootable</code></pre></div>
-          <h3>Windows PowerShell</h3>
+          <h3>Windows</h3>
           <div class="guide-commands"><pre><code>$asset = "bootable-0.1.0-alpha.2-x86_64-pc-windows-msvc.zip"
 $expected = (Get-Content "$asset.sha256" -Raw).Split(" ")[0]
 $actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
@@ -92,24 +92,24 @@ if ($actual -ne $expected) {'{'} throw "SHA-256 mismatch" {'}'}</code></pre></di
 
           <h2 id="requirements">Platform support</h2>
           <ul class="status-list">
-            <li><strong>Linux x86-64</strong><span>Raw/compressed images, Windows installers, and RAW backup. Split WIM and CA 2023 operations require <code>wimtools</code>.</span></li>
-            <li><strong>Windows 10+ x86-64</strong><span>Raw/compressed images and Windows installers. RAW backup is unavailable.</span></li>
-            <li><strong>macOS Apple Silicon</strong><span>Raw/compressed images, Windows installers, and RAW backup. Split WIM and CA 2023 operations require <code>wimlib</code>.</span></li>
+            <li><strong>Linux x86-64</strong><span>Raw and compressed images, Windows installers, and RAW backup. Some Windows operations require <code>wimtools</code>.</span></li>
+            <li><strong>Windows 10+ x86-64</strong><span>Raw and compressed images, plus Windows installers. No RAW backup.</span></li>
+            <li><strong>macOS Apple Silicon</strong><span>Raw and compressed images, Windows installers, and RAW backup. Some Windows operations require <code>wimlib</code>.</span></li>
           </ul>
 
           <h2 id="limits">Known limits</h2>
           <ul>
             <li>Only the newest published alpha receives fixes.</li>
-            <li>Constructed Windows installer media targets UEFI; legacy BIOS helpers are not implemented.</li>
-            <li>Linux persistence, Windows To Go, DOS media, and multiboot are not implemented.</li>
-            <li>Release packages are limited to the three platform and architecture pairs listed above.</li>
-            <li>Verification checks source bytes, written bytes, or the Windows boot tree. It does not prove an operating-system installation will finish.</li>
+            <li>Windows installer media supports UEFI, not legacy BIOS.</li>
+            <li>No persistence, Windows To Go, DOS media, or multiboot.</li>
+            <li>Only the platforms listed above have release builds.</li>
+            <li>Verification does not prove an operating-system installation will finish.</li>
           </ul>
 
           <div class="guide-cta">
-            <h2>Something failed?</h2>
-            <p>Include the Bootable version, host platform, interface, image name and version, target model and capacity, failed stage, and visible error. Remove serial numbers and private paths.</p>
-            <a class="button primary" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Open an alpha report</a>
+            <h2>Report a problem</h2>
+            <p>Include the version, platform, interface, image, drive model and capacity, failed stage, and error. Remove serial numbers and private paths.</p>
+            <a class="button primary" href="https://github.com/debpalash/bootable/issues/new?template=alpha-report.yml">Create an issue</a>
           </div>
         </article>
 

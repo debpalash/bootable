@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Write an ISO to a USB drive and verify it — Bootable",
-  description: "Write a bootable ISO to removable USB media with target review, checksum support, cancellation, and byte read-back verification.",
+  description: "Write an ISO to a removable USB drive. Review the drive, write the image, and verify the written bytes.",
   ogTitle: "Write an ISO to USB and verify it",
-  ogDescription: "Inspect the image, confirm the physical target, write, and read back the result.",
+  ogDescription: "Choose an ISO and USB drive, then write and verify it.",
   ogType: "article",
   current: "guide",
   doc: { label: "Validation", href: "https://github.com/debpalash/bootable/blob/main/docs/validation.md" },
@@ -17,38 +17,38 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">ISO · USB</p><h1>Write an ISO to USB and verify it.</h1><p class="lede">Bootable inspects the image, limits target selection to removable drives, and reads raw writes back before reporting success.</p></header>
+        <header class="guide-hero"><p class="eyebrow">ISO · USB</p><h1>Write an ISO to USB</h1><p class="lede">Choose an ISO and removable drive. Write the image and verify the written bytes.</p></header>
         <div class="guide-body">
           <div class="guide-content">
-            <h2 id="inspection">Image inspection decides the method</h2>
-            <p>Open a local ISO or choose an image from the catalog. Bootable inspects it before a target can be reviewed. A hybrid Linux or Unix ISO normally uses a raw byte-for-byte write. A Windows installer ISO uses the FAT32 construction path instead.</p>
-            <p>If the download has a publisher checksum sidecar or manifest, Bootable selects the strongest supported digest and refuses a mismatch. When no checksum is available, the interface states that clearly.</p>
+            <h2 id="inspection">Choose an ISO</h2>
+            <p>Open a local ISO or choose one from the catalog. Linux and Unix hybrid ISOs use a raw write. Windows installer ISOs use the FAT32 media process.</p>
+            <p>Bootable verifies a publisher checksum when available. A mismatch blocks writing.</p>
 
             <h2 id="target">Select the physical drive</h2>
-            <p>Insert the USB drive and identify it by model, capacity, device path, and any available serial suffix. Fixed disks, read-only devices, and drives containing the running system root are not eligible.</p>
-            <div class="guide-callout"><p><strong>Target selection is destructive.</strong> Capacity alone is not enough to identify a drive. Check the physical device before confirming erasure.</p></div>
+            <p>Identify the drive by model, capacity, path, and serial suffix. Fixed, read-only, and system drives are not listed.</p>
+            <div class="guide-callout"><p><strong>The selected drive will be erased.</strong> Confirm the physical drive before writing.</p></div>
 
             <h2 id="steps">Write the ISO</h2>
             <ol>
               <li>Choose the ISO and wait for inspection to finish.</li>
               <li>Select the removable USB drive.</li>
-              <li>Open Review and check the write strategy, ordered operations, and target identity.</li>
-              <li>Acknowledge permanent erasure.</li>
+              <li>Review the write method, operations, and drive identity.</li>
+              <li>Confirm erasure.</li>
               <li>Start the write and keep the drive connected through verification.</li>
             </ol>
-            <p>Immediately before opening the target, the helper discovers it again by stable ID and compares its capacity and safety flags with the reviewed plan.</p>
+            <p>The write helper checks the drive identity and capacity again before writing.</p>
 
-            <h2 id="readback">Read-back verification</h2>
-            <p>For a raw write, Bootable hashes the image bytes while streaming, flushes the target, then reads back exactly the written image length and compares SHA-256. Extra space after the image on a larger drive is not part of the comparison.</p>
-            <p>A matching result confirms that the intended byte range reached the target. It does not prove that the image supports every firmware or computer.</p>
+            <h2 id="readback">Verify the write</h2>
+            <p>Bootable hashes the image while writing. It reads back the written range and compares SHA-256. Unused space is not checked.</p>
+            <p>A match does not guarantee that the image will boot on every computer.</p>
 
             <h2 id="cancel">Cancellation</h2>
-            <p>Cancellation stops at a controlled boundary, flushes completed raw output, and marks the media incomplete. Rewrite the full image before trying to boot it.</p>
+            <p>A cancelled write is marked incomplete. Rewrite the full image before using the drive.</p>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/compressed-image-writer">Write XZ, gzip, Zstandard, and bzip2 images</a></li><li><a href="/verify-bootable-usb">Understand each verification layer</a></li><li><a href="/safe-usb-writer">How the target is protected</a></li></ul></section>
-            <div class="guide-cta"><h2>Write from the desktop or terminal</h2><p>Both interfaces use the same inspection, review, write, and verification path.</p><a class="button primary" href="/download">Download Bootable</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/compressed-image-writer">Write compressed images</a></li><li><a href="/verify-bootable-usb">Verification details</a></li><li><a href="/safe-usb-writer">Drive safety</a></li></ul></section>
+            <div class="guide-cta"><h2>Install Bootable</h2><p>Use the desktop app or TUI.</p><a class="button primary" href="/download">View install steps</a></div>
           </div>
-          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#inspection">Image inspection</a></li><li><a href="#target">Target selection</a></li><li><a href="#steps">Write the ISO</a></li><li><a href="#readback">Read-back check</a></li><li><a href="#cancel">Cancellation</a></li></ul></aside>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#inspection">Choose an ISO</a></li><li><a href="#target">Choose a drive</a></li><li><a href="#steps">Write the ISO</a></li><li><a href="#readback">Verify the write</a></li><li><a href="#cancel">Cancellation</a></li></ul></aside>
         </div>
       </article>
 </main>

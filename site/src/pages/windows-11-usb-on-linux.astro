@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Create a Windows 11 bootable USB on Linux — Bootable",
-  description: "Create verified Windows 11 USB installer media on Linux with FAT32, split WIM support, setup options, and boot-tree checks.",
+  description: "Create a Windows 11 USB installer on Linux. Includes FAT32, split WIM files, setup options, and media checks.",
   ogTitle: "Create a Windows 11 bootable USB on Linux",
-  ogDescription: "FAT32 media, split WIM support, setup options, and verification.",
+  ogDescription: "Create FAT32 Windows media and split oversized WIM files on Linux.",
   ogType: "article",
   current: "guide",
   doc: { label: "Safety", href: "https://github.com/debpalash/bootable/blob/main/docs/safety.md" },
@@ -20,47 +20,47 @@ const page = {
         <header class="guide-hero">
           <p class="eyebrow">Windows installer · Linux</p>
           <h1>Create a Windows 11 USB on Linux.</h1>
-          <p class="lede">Bootable builds a FAT32 Windows installer from an ISO, splits oversized WIM files, and checks the finished boot tree.</p>
+          <p class="lede">Create FAT32 installer media from a Windows ISO. Split oversized WIM files when needed.</p>
         </header>
 
         <div class="guide-body">
           <div class="guide-content">
-            <h2 id="result">What Bootable creates</h2>
-            <p>Bootable inspects the Windows ISO and creates one FAT32 Microsoft Basic Data partition on the selected removable drive. You can choose GPT or MBR. Current Windows media targets UEFI boot; legacy BIOS helpers are not implemented.</p>
-            <p>If <code>install.wim</code> is too large for FAT32, Bootable uses <code>wimlib-imagex</code> to create <code>install.swm</code> and numbered parts. It then checks the UEFI files, Windows payload, split set, and FAT32 file-size limits.</p>
+            <h2 id="result">Output</h2>
+            <p>Bootable creates one FAT32 partition using GPT or MBR. The installer supports UEFI, not legacy BIOS.</p>
+            <p>If <code>install.wim</code> is too large for FAT32, Bootable splits it into <code>install.swm</code> parts.</p>
 
-            <h2 id="requirements">Before you start</h2>
+            <h2 id="requirements">Requirements</h2>
             <ul>
-              <li>A Windows 11 ISO from a source you trust.</li>
+              <li>A trusted Windows 11 ISO.</li>
               <li>An expendable USB drive large enough for the ISO contents.</li>
               <li><code>wimtools</code> for oversized WIM payloads and CA 2023 boot files.</li>
-              <li>Administrator authentication for the protected write helper.</li>
+              <li>Administrator access for the write helper.</li>
             </ul>
-            <p>On Debian or Ubuntu:</p>
+            <p>Debian or Ubuntu:</p>
             <div class="guide-commands"><pre><code>sudo apt install wimtools
 curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --gui</code></pre></div>
-            <div class="guide-callout"><p><strong>The USB drive will be erased.</strong> Bootable excludes fixed and system disks, but you must still confirm the physical device before writing.</p></div>
+            <div class="guide-callout"><p><strong>The USB drive will be erased.</strong> Confirm the physical drive before writing.</p></div>
 
             <h2 id="steps">Create the installer</h2>
             <ol>
               <li>Open Bootable and choose the Windows 11 ISO.</li>
               <li>Insert the USB drive and select it by model and capacity.</li>
               <li>Choose GPT or MBR and review any Windows setup options.</li>
-              <li>Open Review. Check the source, target, partitioning, file operations, and erasure warning.</li>
-              <li>Acknowledge the consequences and start the write.</li>
-              <li>Wait for the boot-tree verification and safe-removal result.</li>
+              <li>Review the source, drive, partition scheme, operations, and erasure warning.</li>
+              <li>Confirm erasure and start the write.</li>
+              <li>Wait for the media check and safe-removal result.</li>
             </ol>
-            <p>Windows setup options are explicit. Bootable shows them in the reviewed plan and does not silently apply hardware, account, privacy, BitLocker, regional, or policy changes.</p>
+            <p>The review shows every hardware, account, privacy, BitLocker, region, and policy option.</p>
 
-            <h2 id="verification">What verification covers</h2>
-            <p>Before erasure, Bootable checks the installer tree, regular files, answer-file collisions, and FAT32 limits. After copying, it checks UEFI boot files, the Windows setup payload, and every split WIM part.</p>
-            <p>This confirms the required media structure. It does not prove that setup will complete on every PC.</p>
+            <h2 id="verification">Media checks</h2>
+            <p>Before erasure, Bootable checks the installer files and FAT32 limits. After copying, it checks the UEFI files, setup payload, and split WIM parts.</p>
+            <p>This does not guarantee that Windows Setup will finish.</p>
 
             <section class="related-guides">
               <h2>Related guides</h2>
-              <ul><li><a href="/verify-bootable-usb">What Bootable verifies</a></li><li><a href="/safe-usb-writer">How target protection works</a></li><li><a href="/terminal-usb-writer">Use the terminal interface</a></li></ul>
+              <ul><li><a href="/verify-bootable-usb">Verification details</a></li><li><a href="/safe-usb-writer">Drive safety</a></li><li><a href="/terminal-usb-writer">Terminal interface</a></li></ul>
             </section>
-            <div class="guide-cta"><h2>Install Bootable on Linux</h2><p>Desktop and terminal builds are available for Linux x86-64.</p><a class="button primary" href="/download">View install commands</a></div>
+            <div class="guide-cta"><h2>Install on Linux</h2><p>Available for Linux x86-64.</p><a class="button primary" href="/download">View Linux install steps</a></div>
           </div>
 
           <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#result">What it creates</a></li><li><a href="#requirements">Requirements</a></li><li><a href="#steps">Create the installer</a></li><li><a href="#verification">Verification</a></li></ul></aside>

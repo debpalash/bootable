@@ -4,9 +4,9 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
   title: "Write bootable USB media from a terminal — Bootable TUI",
-  description: "Use Bootable's mouse-enabled terminal interface to discover images, review removable targets, write media, and verify results.",
+  description: "Install and use Bootable's terminal interface to choose images and drives, write media, and verify results.",
   ogTitle: "Write boot media from a terminal",
-  ogDescription: "A mouse-enabled TUI with the same write plans and safety states as the desktop app.",
+  ogDescription: "A keyboard and mouse TUI with the same features as the desktop app.",
   ogType: "article",
   current: "guide",
   doc: { label: "UI parity", href: "https://github.com/debpalash/bootable/blob/main/docs/ui-parity.md" },
@@ -17,15 +17,15 @@ const page = {
 <main class="guide-main">
   <Breadcrumbs crumbs={page.crumbs} />
       <article>
-        <header class="guide-hero"><p class="eyebrow">Ratatui · mouse · keyboard</p><h1>Write boot media from a terminal.</h1><p class="lede">Bootable's TUI supports catalog browsing, downloads, target review, writing, cancellation, and verification without a desktop window.</p></header>
+        <header class="guide-hero"><p class="eyebrow">TUI · mouse · keyboard</p><h1>Write boot media from a terminal</h1><p class="lede">Use the full write workflow without a desktop window.</p></header>
         <div class="guide-body">
           <div class="guide-content">
             <h2 id="install">Install the TUI</h2>
             <div class="guide-commands"><pre><code>curl -fsSL https://bootable.palash.dev/install.sh | sh -s -- --tui
 bootable</code></pre></div>
-            <p>Linux x86-64 and macOS Apple Silicon use the Unix installer. Windows users can install the TUI from the release ZIP with <code>install.ps1 -Variant Tui</code>.</p>
+            <p>This command supports Linux x86-64 and Apple Silicon macOS. On Windows, run <code>install.ps1 -Variant Tui</code> from the release ZIP.</p>
 
-            <h2 id="workflow">One terminal workflow</h2>
+            <h2 id="workflow">Write workflow</h2>
             <ol>
               <li>Discover a catalog image or choose a local file.</li>
               <li>Wait for inspection and checksum status.</li>
@@ -33,22 +33,22 @@ bootable</code></pre></div>
               <li>Review the source, target, strategy, operations, and consequences.</li>
               <li>Confirm erasure, follow progress, and wait for verification.</li>
             </ol>
-            <p>Mouse clicks, wheel scrolling, and keyboard navigation reach the same controls. The terminal layout reflows for available geometry but keeps the Source → Target → Review order.</p>
+            <p>Use the keyboard or mouse. The layout changes with terminal size but keeps the same section order.</p>
 
-            <h2 id="parity">Desktop and TUI parity</h2>
-            <p>The TUI and GPUI desktop app consume the same core sessions and plans. Loading, cached, empty, failure, retry, cancellation, and stale-response states have matching behavior. Write progress includes phase, percentage, transferred bytes, throughput, ETA, elapsed time, verification, and safe-removal result.</p>
+            <h2 id="parity">Desktop and TUI features</h2>
+            <p>The TUI and desktop app use the same plans, states, errors, and retries. Both show progress, speed, ETA, verification, and safe removal.</p>
 
-            <h2 id="privilege">Writing without running the TUI as root</h2>
-            <p>The interactive TUI stays unprivileged. After the destructive consequences are acknowledged, it launches the fixed protected helper and asks the operating system for administrator authentication. Catalog and download code never enters the helper process.</p>
+            <h2 id="privilege">Administrator access</h2>
+            <p>Run the TUI as your normal user. After you approve a write, the fixed helper requests administrator access.</p>
 
             <h2 id="cli">CLI commands</h2>
-            <p>The <code>bootable</code> binary also exposes non-interactive commands. Run <code>bootable --help</code> for the commands supported by the installed version. Destructive CLI writes require the exact plan-bound confirmation phrase; never hard-code a device path in automation.</p>
-            <div class="guide-callout"><p><strong>Do not launch the whole TUI with sudo.</strong> Install the protected helper and let Bootable request elevation only for the reviewed write.</p></div>
+            <p>Run <code>bootable --help</code> to list commands. CLI writes require the confirmation phrase for the selected drive. Do not hard-code a drive path.</p>
+            <div class="guide-callout"><p><strong>Do not run the TUI with sudo.</strong> Let the write helper request access when needed.</p></div>
 
-            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/safe-usb-writer">Privilege and target safety</a></li><li><a href="/write-iso-to-usb">Write and verify a local ISO</a></li><li><a href="/windows-11-usb-on-linux">Create Windows media from Linux</a></li></ul></section>
-            <div class="guide-cta"><h2>Install the terminal build</h2><p>Use <code>--all</code> if you also want the desktop interface.</p><a class="button primary" href="/download">View install commands</a></div>
+            <section class="related-guides"><h2>Related guides</h2><ul><li><a href="/safe-usb-writer">Drive safety</a></li><li><a href="/write-iso-to-usb">Write an ISO to USB</a></li><li><a href="/windows-11-usb-on-linux">Windows USB on Linux</a></li></ul></section>
+            <div class="guide-cta"><h2>Install the TUI</h2><p>Use <code>--all</code> to install the desktop app too.</p><a class="button primary" href="/download">View TUI install steps</a></div>
           </div>
-          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#install">Install</a></li><li><a href="#workflow">Workflow</a></li><li><a href="#parity">Interface parity</a></li><li><a href="#privilege">Elevation</a></li><li><a href="#cli">CLI commands</a></li></ul></aside>
+          <aside class="guide-aside"><strong>On this page</strong><ul><li><a href="#install">Install</a></li><li><a href="#workflow">Write workflow</a></li><li><a href="#parity">TUI features</a></li><li><a href="#privilege">Administrator access</a></li><li><a href="#cli">CLI commands</a></li></ul></aside>
         </div>
       </article>
 </main>

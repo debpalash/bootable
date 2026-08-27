@@ -11,15 +11,14 @@ const homeHref = home ? '#top' : '/';
 <header class="site-header">
   <a class="brand" href={homeHref} aria-label="Bootable home">
     <img src="/favicon.svg" alt="" width="34" height="34">
-    <span>Bootable</span>
-    <small>Public alpha</small>
+    <span>bootable</span>
+    <small>alpha.2</small>
   </a>
   <nav aria-label="Primary navigation">
-    {!home && <a class="nav-home" href="/">Home</a>}
-    <a class="nav-compare" href={home ? '#compare' : '/#compare'}>Compare</a>
-    <a href="/features" aria-current={current === 'features' ? 'page' : undefined}>Features</a>
-    <a href="/guides" aria-current={current === 'guides' || current === 'guide' ? 'page' : undefined}>Guides</a>
-    <a class="nav-source" href="https://github.com/debpalash/bootable">Source</a>
-    <a class="nav-download" href="/download" aria-current={current === 'download' ? 'page' : undefined}>Download</a>
+    {!home && <a class="nav-home" href="/">home</a>}
+    <a href="/features" aria-current={current === 'features' ? 'page' : undefined}>features</a>
+    <a href="/guides" aria-current={current === 'guides' || current === 'guide' ? 'page' : undefined}>guides</a>
+    <a class="nav-source" href="https://github.com/debpalash/bootable">source ↗</a>
+    <a class="nav-download" href="/download" aria-current={current === 'download' ? 'page' : undefined}>download ↓</a>
   </nav>
 </header>

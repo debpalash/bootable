@@ -39,7 +39,7 @@ const docs = (name: string) => `${GITHUB}/blob/main/docs/${name}`;
 const slug = Astro.url.pathname.replace(/\/$/, '').slice(1);
 const url = new URL(slug, Astro.site ?? 'https://bootable.palash.dev');
 const image = new URL('social-card.png', Astro.site ?? 'https://bootable.palash.dev');
-const imageAlt = 'Bootable — checked before, verified after';
+const imageAlt = 'Bootable USB and SD image writer';
 
 const footerLinks: FooterLink[] = footerProp ?? (home
   ? [
@@ -102,7 +102,7 @@ const footerLinks: FooterLink[] = footerProp ?? (home
           <meta property="og:image:alt" content={imageAlt}>
           <meta name="twitter:card" content="summary_large_image">
           <meta name="twitter:title" content="Bootable — Rufus and Balena Etcher alternative">
-          <meta name="twitter:description" content="Write ISO, IMG, and compressed disk images to USB and SD, build Windows installer media, and verify every write by reading it back.">
+          <meta name="twitter:description" content="Write and verify USB and SD images on Linux, Windows, and macOS.">
           <meta name="twitter:image" content={image.href}>
           <meta name="twitter:image:alt" content={imageAlt}>
         </>
