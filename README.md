@@ -33,15 +33,21 @@ locked until you select an eligible removable drive. Bootable never selects a dr
 
 <table>
   <tr>
-    <th width="50%">Desktop GUI</th>
-    <th width="50%">Terminal TUI</th>
+    <th>Desktop GUI</th>
   </tr>
   <tr>
     <td><img alt="Bootable desktop GUI showing image discovery and removable-drive setup" src="docs/screenshots/gui-demo.gif"></td>
-    <td><img alt="Bootable TUI showing the Source, Target, and Review workspace" src="docs/screenshots/tui-demo.gif"></td>
   </tr>
   <tr>
     <td align="center">Pointer and keyboard</td>
+  </tr>
+  <tr>
+    <th>Terminal TUI</th>
+  </tr>
+  <tr>
+    <td><img alt="Bootable TUI showing the Source, Target, and Review workspace" src="docs/screenshots/tui-demo.gif"></td>
+  </tr>
+  <tr>
     <td align="center">Keyboard and mouse</td>
   </tr>
 </table>
