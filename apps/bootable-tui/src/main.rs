@@ -10,8 +10,9 @@ use bootable_core::{
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
     DownloadStatus, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog,
     Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, format_bytes,
-    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
+    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, catalog_search_summary,
+    distribution_matches_query, format_bytes, removable_media_status, review_readiness,
+    target_eligibility_label, workspace_progress,
 };
 use clap::{Args, Parser, Subcommand};
 use crossterm::event::{
@@ -1162,7 +1163,10 @@ impl App {
                         if !self.catalog_query.is_empty() {
                             self.distributions = directory;
                             self.catalog_selected = 0;
-                            self.status = "Search catalog ready".into();
+                            self.status = catalog_search_summary(
+                                &self.catalog_query,
+                                self.filtered_distribution_indices().len(),
+                            );
                         }
                     }
                     Err(error) => {
@@ -1607,7 +1611,14 @@ impl App {
             match code {
                 KeyCode::Esc | KeyCode::Enter => {
                     self.catalog_searching = false;
-                    self.status = "Search applied • scroll for more matching results".into();
+                    self.status = if self.catalog_query.is_empty() {
+                        "Search closed · showing DistroWatch six-month popularity".into()
+                    } else {
+                        catalog_search_summary(
+                            &self.catalog_query,
+                            self.filtered_distribution_indices().len(),
+                        )
+                    };
                 }
                 KeyCode::Backspace => {
                     self.catalog_query.pop();
@@ -1627,7 +1638,7 @@ impl App {
         }
         if code == KeyCode::Char('/') {
             self.catalog_searching = true;
-            self.status = "Type to search • Enter applies • Esc leaves search".into();
+            self.status = "Type to search · results update live · Esc leaves search".into();
             return;
         }
         if code == KeyCode::Char('r') {
@@ -1811,18 +1822,11 @@ impl App {
     }
 
     fn filtered_distribution_indices(&self) -> Vec<usize> {
-        let query = self.catalog_query.to_lowercase();
         self.distributions
             .iter()
             .enumerate()
             .filter(|(_, distribution)| {
-                query.is_empty()
-                    || distribution.name.to_lowercase().contains(&query)
-                    || distribution.slug.to_lowercase().contains(&query)
-                    || distribution
-                        .based_on
-                        .as_deref()
-                        .is_some_and(|value| value.to_lowercase().contains(&query))
+                distribution_matches_query(distribution, &self.catalog_query)
             })
             .map(|(index, _)| index)
             .collect()
@@ -1866,6 +1870,12 @@ impl App {
             }
             self.distribution_directory.clone()
         };
+        if !self.catalog_query.is_empty() && !self.distribution_directory.is_empty() {
+            self.status = catalog_search_summary(
+                &self.catalog_query,
+                self.filtered_distribution_indices().len(),
+            );
+        }
         if let Some(index) = self.filtered_distribution_indices().first() {
             self.catalog_selected = *index;
         }
@@ -2582,7 +2592,8 @@ impl App {
                         && contains(self.hit_regions.catalog_search, point)
                     {
                         self.catalog_searching = true;
-                        self.status = "Type to search • Enter applies • Esc leaves search".into();
+                        self.status =
+                            "Type to search · results update live · Esc leaves search".into();
                     } else if contains(self.hit_regions.source_distrowatch, point) {
                         self.show_quick_access(QuickAccess::All);
                     } else if contains(self.hit_regions.source_arch, point) {
@@ -2959,7 +2970,7 @@ fn draw_collapsed_discovery(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     render_button(
         frame,
         area,
-        "+  Discover images · All · Arch · Debian · Omarchy · Windows · Raspberry Pi",
+        "+  Discover images · Browse trusted catalogs · Open →",
         app.workspace_focus == WorkspaceFocus::Discover,
     );
     app.hit_regions.discover = Some(area);
@@ -3486,7 +3497,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
     if !wide {
         return vec![Line::from(vec![
             Span::styled(
-                " USB♨  BOOTABLE α ",
+                format!(" USB♨  BOOTABLE v{} ", env!("CARGO_PKG_VERSION")),
                 Style::default()
                     .fg(Color::Black)
                     .bg(ACCENT)
@@ -3502,7 +3513,7 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                "  BOOTABLE α",
+                format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION")),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -3788,7 +3799,7 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let search_value = if app.discovery_session.quick_access() == QuickAccess::Windows {
         "Windows installer workflow · select an ISO to unlock every setup checkbox".into()
     } else if app.catalog_query.is_empty() {
-        "Search distributions…  / to type".into()
+        "Search by name, slug, or base family…  / to type".into()
     } else {
         format!(
             "{}{}",
@@ -3816,7 +3827,28 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let actions = Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)])
         .spacing(1)
         .split(rows[2]);
-    render_button(frame, actions[0], "↻  Retry", false);
+    let active_state = match app.discovery_session.source() {
+        DiscoverySource::RaspberryPi => app.discovery_session.state(CatalogFacet::RaspberryPi),
+        DiscoverySource::DistroWatch if !app.catalog_query.is_empty() => {
+            app.discovery_session.state(CatalogFacet::Directory)
+        }
+        DiscoverySource::DistroWatch => match app.discovery_session.quick_access() {
+            QuickAccess::Arch => app.discovery_session.state(CatalogFacet::Arch),
+            QuickAccess::Debian => app.discovery_session.state(CatalogFacet::Debian),
+            _ => app.discovery_session.state(CatalogFacet::Popular),
+        },
+    };
+    let refresh_label = if active_state.is_failed()
+        || app
+            .discovery_session
+            .state(CatalogFacet::Details)
+            .is_failed()
+    {
+        "↻  Retry"
+    } else {
+        "↻  Refresh"
+    };
+    render_button(frame, actions[0], refresh_label, false);
     let open_page_fallback = app.discovery_session.source() == DiscoverySource::DistroWatch
         && app.discovery_session.quick_access() != QuickAccess::Windows
         && app.catalog_releases.is_empty()
@@ -4075,7 +4107,7 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
                 app.discovery_session.state(CatalogFacet::Directory),
                 CatalogState::Ready { .. } | CatalogState::Empty
             ) {
-            "No matching distributions".into()
+            catalog_search_summary(&app.catalog_query, 0)
         } else if !app.catalog_query.is_empty() {
             app.discovery_session
                 .state(CatalogFacet::Directory)
@@ -4087,13 +4119,34 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     } else {
         matching_indices
             .iter()
-            .filter_map(|index| app.distributions.get(*index))
-            .map(|distribution| {
-                ListItem::new(if distribution.rank == 0 {
-                    format!(" ·  {:<26} DistroWatch", distribution.name)
+            .filter_map(|index| {
+                app.distributions
+                    .get(*index)
+                    .map(|distribution| (*index, distribution))
+            })
+            .map(|(index, distribution)| {
+                let action = if app.catalog_selected == index {
+                    "Selected"
+                } else {
+                    "Select →"
+                };
+                ListItem::new(if !app.catalog_query.is_empty() {
+                    let rank = if distribution.rank == 0 {
+                        "·".into()
+                    } else {
+                        distribution.rank.to_string()
+                    };
+                    format!(
+                        "{:>2}  {:<18} {:<12} {action}",
+                        rank,
+                        distribution.name,
+                        distribution.based_on.as_deref().unwrap_or("Independent")
+                    )
+                } else if distribution.rank == 0 {
+                    format!(" ·  {:<22} {action}", distribution.name)
                 } else {
                     format!(
-                        "{:>2}  {:<20} {:>5}",
+                        "{:>2}  {:<16} {:>5}/day  {action}",
                         distribution.rank, distribution.name, distribution.hits_per_day
                     )
                 })
@@ -4135,9 +4188,19 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         .with_selected((!matching_indices.is_empty()).then_some(selected_position));
     let mut release_state = ListState::default()
         .with_selected((!app.catalog_releases.is_empty()).then_some(app.release_selected));
+    let distribution_title = if !app.catalog_query.is_empty() {
+        " Search results "
+    } else {
+        match app.discovery_session.quick_access() {
+            QuickAccess::Arch => " Arch-based ",
+            QuickAccess::Debian => " Debian-based ",
+            QuickAccess::Omarchy => " Omarchy ",
+            _ => " Popular · six months ",
+        }
+    };
     frame.render_stateful_widget(
         List::new(distributions)
-            .block(panel_block(" Popular distributions "))
+            .block(panel_block(distribution_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -4254,8 +4317,13 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .position(|(index, _)| *index == app.pi_image_selected)
         .unwrap_or_default();
     let image_items = if visible_images.is_empty() {
-        let message = if app.pi_catalog.is_some() {
-            "No compatible images".into()
+        let message = if app.pi_catalog.is_some() && !app.catalog_query.is_empty() {
+            format!(
+                "No Raspberry Pi images match “{}”",
+                app.catalog_query.trim()
+            )
+        } else if app.pi_catalog.is_some() {
+            "No compatible Raspberry Pi images found".into()
         } else {
             app.discovery_session
                 .state(CatalogFacet::RaspberryPi)
@@ -4590,13 +4658,21 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let items = if app.devices.is_empty() {
         vec![
-            ListItem::new("Connect a removable USB drive, then refresh")
+            ListItem::new("Connect a removable USB or SD drive, then refresh")
                 .style(Style::default().fg(MUTED)),
         ]
     } else {
         app.devices
             .iter()
-            .map(|device| {
+            .enumerate()
+            .map(|(index, device)| {
+                let action = if !device.is_eligible_target() {
+                    "Blocked"
+                } else if app.selected == Some(index) {
+                    "Selected"
+                } else {
+                    "Select →"
+                };
                 ListItem::new(Line::from(vec![
                     Span::styled(
                         format!("{:<12}", device.path.display()),
@@ -4607,7 +4683,7 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                         }),
                     ),
                     Span::raw(format!(
-                        " {:>9}  {}  ·  {}",
+                        " {:>9}  {}  ·  {}  ·  {action}",
                         format_bytes(device.capacity),
                         device.display_name(),
                         target_eligibility_label(device)
@@ -4926,10 +5002,13 @@ fn windows_option_columns(width: u16) -> usize {
 
 fn draw_terminal_too_small(frame: &mut ratatui::Frame<'_>, area: Rect) {
     frame.render_widget(
-        Paragraph::new("┌┬┬┐  BOOTABLE α\n╰♨─╯\n\nResize to at least 44 × 22\nq  Quit")
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::White))
-            .block(panel_block(" Terminal too small ")),
+        Paragraph::new(format!(
+            "┌┬┬┐  BOOTABLE v{}\n╰♨─╯\n\nResize to at least 44 × 22\nq  Quit",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::White))
+        .block(panel_block(" Terminal too small ")),
         area,
     );
 }
@@ -5076,7 +5155,11 @@ mod layout_tests {
     fn terminal_brand_matches_the_download_to_drive_logo() {
         let lines = brand_lockup(true, "Create boot media", "Deliberate writing");
         assert_eq!(lines.len(), 2);
-        assert!(lines[0].to_string().contains("┌┬┬┐  BOOTABLE α"));
+        assert!(
+            lines[0]
+                .to_string()
+                .contains(&format!("┌┬┬┐  BOOTABLE v{}", env!("CARGO_PKG_VERSION")))
+        );
         assert!(lines[1].to_string().contains("╰♨─╯"));
     }
 

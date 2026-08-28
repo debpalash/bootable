@@ -85,6 +85,50 @@ pub struct DistributionBundle {
     pub warnings: Vec<String>,
 }
 
+/// Match the catalog fields exposed by both interactive adapters.
+///
+/// One- and two-character terms match word prefixes only. This keeps live
+/// typeahead useful without treating `om` as a match inside `ChromeOS`.
+pub fn distribution_matches_query(distribution: &DistributionSummary, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+
+    let fields = [
+        Some(distribution.name.as_str()),
+        Some(distribution.slug.as_str()),
+        distribution.based_on.as_deref(),
+    ];
+    query.split_whitespace().all(|term| {
+        fields
+            .iter()
+            .flatten()
+            .any(|field| catalog_field_matches(field, term))
+    })
+}
+
+pub fn catalog_search_summary(query: &str, matches: usize) -> String {
+    let query = query.trim();
+    match matches {
+        0 => format!("No distributions match “{query}” · try a name or base family"),
+        1 => format!("1 distribution matches “{query}” · name, slug, or base family"),
+        matches => {
+            format!("{matches} distributions match “{query}” · name, slug, or base family")
+        }
+    }
+}
+
+fn catalog_field_matches(field: &str, term: &str) -> bool {
+    let field = field.to_lowercase();
+    if term.chars().count() > 2 {
+        return field.contains(term);
+    }
+    field
+        .split(|character: char| !character.is_alphanumeric())
+        .any(|word| word.starts_with(term))
+}
+
 pub(crate) fn popular_distributions(limit: usize) -> Result<Vec<DistributionSummary>> {
     let html = fetch_text(POPULARITY_URL)?;
     parse_popularity(&html, limit)
@@ -1384,6 +1428,40 @@ mod tests {
         assert_eq!(entries[0].slug, "arch");
         assert_eq!(entries[1].slug, "omarchy");
         assert_eq!(entries[1].rank, 0);
+    }
+
+    #[test]
+    fn short_catalog_queries_match_word_prefixes_not_incidental_substrings() {
+        let omarchy =
+            distribution_summary(18, "Omarchy".into(), "omarchy", 100, Some("Arch".into()));
+        let chromeos =
+            distribution_summary(29, "ChromeOS".into(), "chromeos", 80, Some("Gentoo".into()));
+        let fydeos = distribution_summary(
+            40,
+            "FydeOS".into(),
+            "fydeos",
+            60,
+            Some("Gentoo, ChromeOS".into()),
+        );
+
+        assert!(distribution_matches_query(&omarchy, "om"));
+        assert!(!distribution_matches_query(&chromeos, "om"));
+        assert!(!distribution_matches_query(&fydeos, "om"));
+        assert!(distribution_matches_query(&chromeos, "rome"));
+        assert!(distribution_matches_query(&fydeos, "chrome"));
+        assert!(distribution_matches_query(&omarchy, "om arch"));
+    }
+
+    #[test]
+    fn search_summary_names_the_query_and_fields() {
+        assert_eq!(
+            catalog_search_summary("om", 0),
+            "No distributions match “om” · try a name or base family"
+        );
+        assert_eq!(
+            catalog_search_summary("om", 1),
+            "1 distribution matches “om” · name, slug, or base family"
+        );
     }
 
     #[test]

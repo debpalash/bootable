@@ -26,7 +26,10 @@ mod write_session;
 
 use std::path::Path;
 
-pub use catalog::{DistributionBundle, DistributionDetails, DistributionSummary, IsoRelease};
+pub use catalog::{
+    DistributionBundle, DistributionDetails, DistributionSummary, IsoRelease,
+    catalog_search_summary, distribution_matches_query,
+};
 pub use catalog_cache::{CacheMode, CatalogFetch, CatalogOrigin, CatalogState};
 pub use checksum::{Checksum, ChecksumAlgorithm};
 pub use discovery_session::{CatalogFacet, DiscoverySession, DiscoverySource, QuickAccess};
