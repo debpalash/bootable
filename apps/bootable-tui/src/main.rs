@@ -77,6 +77,9 @@ enum Commands {
         index: usize,
         #[arg(long, value_name = "ISO_FILE")]
         output: Option<PathBuf>,
+        /// Emit newline-delimited JSON progress for graphical clients.
+        #[arg(long)]
+        json_progress: bool,
     },
     /// List official Raspberry Pi Imager images.
     PiImages {
@@ -174,7 +177,8 @@ fn main() -> Result<()> {
             slug,
             index,
             output,
-        }) => download_release(&engine, &slug, index, output),
+            json_progress,
+        }) => download_release(&engine, &slug, index, output, json_progress),
         Some(Commands::PiImages {
             device,
             limit,
@@ -290,19 +294,37 @@ fn download_release(
     slug: &str,
     index: usize,
     output: Option<PathBuf>,
+    json_progress: bool,
 ) -> Result<()> {
-    let details = engine.distribution_details(slug)?;
-    let releases = resolve_releases(engine, &details)?;
-    let release = releases
-        .get(index)
-        .with_context(|| format!("release index {index} is out of range"))?;
-    let destination = output.unwrap_or_else(|| PathBuf::from(&release.name));
-    let mut reporter = ProgressReporter::default();
-    let report = engine.download_iso(release, &destination, |progress| reporter.print(progress))?;
-    println!("Ready to write: {}", report.path.display());
-    println!("Kind: {}", report.kind);
-    println!("Size: {}", format_bytes(report.size));
-    Ok(())
+    let mut reporter = ProgressReporter::new(json_progress);
+    let result = (|| {
+        let details = engine.distribution_details(slug)?;
+        let releases = resolve_releases(engine, &details)?;
+        let release = releases
+            .get(index)
+            .with_context(|| format!("release index {index} is out of range"))?;
+        let destination = output.unwrap_or_else(|| PathBuf::from(&release.name));
+        engine
+            .download_iso(release, &destination, |progress| reporter.print(progress))
+            .map_err(anyhow::Error::from)
+    })();
+
+    match result {
+        Ok(report) => {
+            if json_progress {
+                reporter.finished();
+            } else {
+                println!("Ready to write: {}", report.path.display());
+                println!("Kind: {}", report.kind);
+                println!("Size: {}", format_bytes(report.size));
+            }
+            Ok(())
+        }
+        Err(error) => {
+            reporter.failed(&error.to_string());
+            Err(error)
+        }
+    }
 }
 
 fn resolve_releases(engine: &Bootable, details: &DistributionDetails) -> Result<Vec<IsoRelease>> {
@@ -5073,6 +5095,28 @@ mod layout_tests {
         assert!(matches!(
             cli.command,
             Some(Commands::Write {
+                json_progress: true,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn download_json_progress_is_an_explicit_client_mode() {
+        let cli = Cli::try_parse_from([
+            "bootable",
+            "download",
+            "cachyos",
+            "--index",
+            "1",
+            "--output",
+            "image.iso",
+            "--json-progress",
+        ])
+        .expect("valid catalog client invocation");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Download {
                 json_progress: true,
                 ..
             })
