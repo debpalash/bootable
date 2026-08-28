@@ -248,6 +248,30 @@ pub fn target_eligibility_label(device: &Device) -> &'static str {
     }
 }
 
+/// A compact, interface-neutral summary of the removable media inventory.
+///
+/// Discovery deliberately excludes fixed disks on supported platforms. Keep
+/// this wording shared so the desktop and terminal interfaces expose the same
+/// connection state without implying that a target was selected.
+pub fn removable_media_status(devices: &[Device]) -> String {
+    let connected = devices.len();
+    let ready = devices
+        .iter()
+        .filter(|device| device.is_eligible_target())
+        .count();
+
+    match (connected, ready) {
+        (0, _) => "No removable drives connected".into(),
+        (1, 1) => "1 removable drive ready".into(),
+        (connected, ready) if connected == ready => {
+            format!("{connected} removable drives ready")
+        }
+        (1, 0) => "1 removable drive connected · none eligible".into(),
+        (connected, 0) => format!("{connected} removable drives connected · none eligible"),
+        (connected, ready) => format!("{connected} removable drives connected · {ready} ready"),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WriteStrategy {
     RawVerified,
@@ -666,6 +690,42 @@ mod tests {
         assert_eq!(
             target_eligibility_label(&blocked),
             "Internal disk · blocked"
+        );
+    }
+
+    #[test]
+    fn removable_media_status_reports_connection_and_eligibility() {
+        let mut ready = Device {
+            id: DeviceId::new("usb"),
+            path: PathBuf::from("/dev/test"),
+            vendor: None,
+            model: None,
+            serial: None,
+            transport: Some("usb".into()),
+            capacity: 1,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        };
+
+        assert_eq!(removable_media_status(&[]), "No removable drives connected");
+        assert_eq!(
+            removable_media_status(std::slice::from_ref(&ready)),
+            "1 removable drive ready"
+        );
+        ready.read_only = true;
+        assert_eq!(
+            removable_media_status(std::slice::from_ref(&ready)),
+            "1 removable drive connected · none eligible"
+        );
+
+        let mut second = ready.clone();
+        second.id = DeviceId::new("usb-2");
+        second.read_only = false;
+        assert_eq!(
+            removable_media_status(&[ready, second]),
+            "2 removable drives connected · 1 ready"
         );
     }
 

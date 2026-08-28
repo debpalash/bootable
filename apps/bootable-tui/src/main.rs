@@ -10,8 +10,8 @@ use bootable_core::{
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
     DownloadStatus, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog,
     Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, format_bytes, review_readiness,
-    target_eligibility_label, workspace_progress,
+    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, format_bytes,
+    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
 };
 use clap::{Args, Parser, Subcommand};
 use crossterm::event::{
@@ -761,14 +761,11 @@ impl App {
         let devices_result = engine.discover_devices();
         let (devices, status) = match devices_result {
             Ok(devices) => {
-                let eligible = devices
-                    .iter()
-                    .filter(|device| device.is_eligible_target())
-                    .count();
-                (
-                    devices,
-                    format!("{eligible} eligible target(s) detected · choose an image to begin"),
-                )
+                let status = format!(
+                    "{} · choose an image to begin",
+                    removable_media_status(&devices)
+                );
+                (devices, status)
             }
             Err(error) => (Vec::new(), error.to_string()),
         };
@@ -4570,7 +4567,10 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let items = if app.devices.is_empty() {
-        vec![ListItem::new("No removable drives detected").style(Style::default().fg(MUTED))]
+        vec![
+            ListItem::new("Connect a removable USB drive, then refresh")
+                .style(Style::default().fg(MUTED)),
+        ]
     } else {
         app.devices
             .iter()
@@ -4600,8 +4600,16 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let target_inner = target_block.inner(area);
     frame.render_widget(target_block, area);
-    let target_rows =
-        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(target_inner);
+    let target_rows = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(1),
+        Constraint::Length(1),
+    ])
+    .split(target_inner);
+    frame.render_widget(
+        Paragraph::new(removable_media_status(&app.devices)).style(Style::default().fg(ACCENT)),
+        target_rows[0],
+    );
     let mut state = ListState::default().with_selected(app.selected);
     frame.render_stateful_widget(
         List::new(items)
@@ -4613,19 +4621,19 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                     .bg(Color::Rgb(21, 48, 47))
                     .add_modifier(Modifier::BOLD),
             ),
-        target_rows[0],
+        target_rows[1],
         &mut state,
     );
     frame.render_widget(
         Paragraph::new("Confirm the physical drive · erasure starts only after review")
             .style(Style::default().fg(MUTED)),
-        target_rows[1],
+        target_rows[2],
     );
     app.hit_regions.device_rows = (0..app.devices.len())
         .filter_map(|index| {
-            let y = target_rows[0].y.saturating_add(index as u16);
-            (y < target_rows[0].bottom()).then_some((
-                Rect::new(target_rows[0].x, y, target_rows[0].width, 1),
+            let y = target_rows[1].y.saturating_add(index as u16);
+            (y < target_rows[1].bottom()).then_some((
+                Rect::new(target_rows[1].x, y, target_rows[1].width, 1),
                 index,
             ))
         })
