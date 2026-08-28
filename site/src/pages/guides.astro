@@ -3,10 +3,10 @@ import Layout from '../layouts/Layout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 
 const page = {
-  title: "Bootable guides — USB, SD card, and Windows installer media",
-  description: "Steps for writing ISO, IMG, Raspberry Pi, compressed, and Windows installer media with Bootable.",
+  title: "Bootable guides — USB, SD card, Windows, and Omarchy",
+  description: "Steps for writing ISO, IMG, Raspberry Pi, compressed, and Windows installer media, plus installing the Omarchy plugin.",
   ogTitle: "Bootable guides",
-  ogDescription: "Guides for USB, SD, Windows installers, safety, and verification.",
+  ogDescription: "Guides for USB, SD, Windows installers, Omarchy, safety, and verification.",
   ogType: "website",
   current: "guides",
   crumbs: [{ label: "Home", href: "/" }, { label: "Guides" }],
@@ -62,6 +62,11 @@ const page = {
             <span>TUI · CLI</span>
             <h3>Write boot media from a terminal</h3>
             <p>Install and use the TUI or CLI.</p>
+          </a>
+          <a class="guide-card" href="/omarchy-plugin">
+            <span>Omarchy · Quickshell</span>
+            <h3>Install the Omarchy bar plugin</h3>
+            <p>Discover images and follow safe media writes from the Omarchy bar.</p>
           </a>
         </div>
       </section>

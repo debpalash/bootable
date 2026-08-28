@@ -13,6 +13,7 @@ on:
       - 'docs/screenshots/gui-discover.png'
       - 'docs/screenshots/gui-demo.gif'
       - 'docs/screenshots/gui-toolbar.png'
+      - 'docs/screenshots/omarchy-plugin.png'
       - 'docs/screenshots/tui-main.png'
       - 'docs/screenshots/tui-demo.gif'
   workflow_dispatch:

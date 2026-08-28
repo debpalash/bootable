@@ -11,6 +11,7 @@ site/public/bootable-logo.svg
 site/public/bootable-logo-animated.svg
 site/public/gui-*.png
 site/public/gui-*.gif
+site/public/omarchy-plugin.png
 site/public/tui-*.png
 site/public/tui-*.gif
 site/public/install.sh

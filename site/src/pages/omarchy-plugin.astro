@@ -1,0 +1,98 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+
+const page = {
+  title: "Install the Bootable plugin for Omarchy",
+  description: "Install and use the Bootable Omarchy bar plugin to discover images, review removable drives, and follow download and write progress.",
+  ogTitle: "Bootable for Omarchy",
+  ogDescription: "Discover images and follow safe Bootable media writes from the Omarchy bar.",
+  ogType: "article",
+  current: "guide",
+  doc: { label: "Plugin source", href: "https://github.com/debpalash/omarchy-bootable" },
+  crumbs: [{ label: "Home", href: "/" }, { label: "Guides", href: "/guides.html" }, { label: "Omarchy plugin" }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+      <article>
+        <header class="guide-hero">
+          <p class="eyebrow">Omarchy · Quickshell plugin</p>
+          <h1>Run Bootable from the Omarchy bar</h1>
+          <p class="lede">Search the image catalog, choose a local image, review removable drives, and follow progress without leaving the bar.</p>
+        </header>
+        <div class="guide-body">
+          <div class="guide-content">
+            <h2 id="preview">Compact media workflow</h2>
+            <figure class="media-stage media-stage-cool">
+              <div class="shot-header"><span>Omarchy plugin</span><span>Pointer + keyboard</span></div>
+              <div class="shot-frame">
+                <img
+                  src="/omarchy-plugin.png"
+                  alt="Bootable Omarchy bar plugin offering local image and catalog discovery choices"
+                  width="553"
+                  height="699"
+                  fetchpriority="high"
+                >
+              </div>
+              <figcaption>Bootable in the Omarchy bar, with removable-drive status visible before a source is selected.</figcaption>
+            </figure>
+
+            <h2 id="requirements">Requirements</h2>
+            <ul>
+              <li>Omarchy 4 or newer with the Quickshell plugin API.</li>
+              <li>Bootable 0.1.4 or newer with its CLI client modes, root-owned write helper, and Polkit policy for the complete in-panel workflow.</li>
+              <li><code>bootable-desktop</code> is optional and enables the full GUI shortcut.</li>
+            </ul>
+            <div class="guide-callout">
+              <p><strong>Install Bootable before the plugin.</strong> Use a compatible package from the <a href="https://github.com/debpalash/bootable/releases">Bootable releases page</a>. The plugin checks the CLI and helper without changing them.</p>
+            </div>
+
+            <h2 id="install">Install and enable</h2>
+            <p>Run this as your normal user:</p>
+            <div class="guide-commands"><pre><code>omarchy plugin add https://github.com/debpalash/omarchy-bootable.git --enable --yes</code></pre></div>
+            <p>The Bootable icon appears in the right side of the Omarchy bar. Click it to open the panel; no shell restart is normally required.</p>
+
+            <h2 id="use">Use the panel</h2>
+            <ol>
+              <li>Press <code>C</code> to choose a local image or <code>S</code> to search Bootable's distribution catalog.</li>
+              <li>Select an image or release and wait for its inspection or verified download.</li>
+              <li>Select an eligible removable drive. Internal, system, read-only, and otherwise blocked disks cannot be chosen.</li>
+              <li>Review Bootable's exact erase plan and acknowledge it separately before writing.</li>
+              <li>Follow preparation, writing, syncing, and verification progress in the panel.</li>
+            </ol>
+            <p>Press <code>R</code> to refresh drives, <code>G</code> for the full GUI, <code>T</code> for the TUI, or <code>A</code> for AI troubleshooting.</p>
+
+            <h2 id="safety">Write safety</h2>
+            <p>The plugin delegates inspection, drive discovery, planning, writing, and verification to Bootable. It never auto-selects a target. Bootable checks the selected drive again before its fixed helper writes, and an active write continues if the panel closes.</p>
+
+            <h2 id="manage">Update or remove</h2>
+            <div class="guide-commands"><pre><code># Update
+omarchy plugin update io.github.debpalash.bootable
+
+# Remove
+omarchy plugin remove io.github.debpalash.bootable</code></pre></div>
+            <p>Removal deletes the Omarchy-managed plugin checkout and settings. It does not remove Bootable or change disks and system packages.</p>
+
+            <div class="guide-cta">
+              <h2>Read the plugin documentation</h2>
+              <p>See the full shortcut list, dependency notes, permissions, and source.</p>
+              <a class="button primary" href="https://github.com/debpalash/omarchy-bootable">Open the plugin repository</a>
+            </div>
+          </div>
+          <aside class="guide-aside">
+            <strong>On this page</strong>
+            <ul>
+              <li><a href="#preview">Preview</a></li>
+              <li><a href="#requirements">Requirements</a></li>
+              <li><a href="#install">Install</a></li>
+              <li><a href="#use">Use the panel</a></li>
+              <li><a href="#safety">Write safety</a></li>
+              <li><a href="#manage">Update or remove</a></li>
+            </ul>
+          </aside>
+        </div>
+      </article>
+</main>
+</Layout>

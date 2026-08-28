@@ -52,6 +52,27 @@ locked until you select an eligible removable drive. Bootable never selects a dr
   </tr>
 </table>
 
+Omarchy plugin
+--------------
+
+The [Bootable for Omarchy](https://github.com/debpalash/omarchy-bootable) plugin puts image
+discovery, removable-drive review, and live download/write progress in the Omarchy bar. It keeps
+the full desktop GUI and TUI one click away.
+
+<p align="center"><img alt="Bootable Omarchy bar plugin offering local image and catalog discovery choices" src="docs/screenshots/omarchy-plugin.png" width="553"></p>
+
+Install Bootable first. The complete in-panel workflow requires Omarchy 4 or newer and Bootable
+0.1.4 or newer. Then install and enable the plugin:
+
+```sh
+omarchy plugin add https://github.com/debpalash/omarchy-bootable.git --enable --yes
+```
+
+Click the Bootable icon in the right side of the bar. The plugin never selects a target
+automatically; choosing a removable drive and approving its erase plan remain separate actions.
+See the [Omarchy plugin guide](https://bootable.palash.dev/omarchy-plugin.html) for usage, updates,
+removal, and requirements.
+
 > [!CAUTION]
 > Bootable is unsigned. Check the selected drive, keep backups, and use media you can erase.
 
