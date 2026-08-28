@@ -9,8 +9,8 @@ use bootable_core::{
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
     ImageKind, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog, PiImage,
     Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, WindowsPartitionScheme,
-    WorkspaceStepState, WriteCompletion, WriteOptions, format_bytes, review_readiness,
-    target_eligibility_label, workspace_progress,
+    WorkspaceStepState, WriteCompletion, WriteOptions, format_bytes, removable_media_status,
+    review_readiness, target_eligibility_label, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -334,14 +334,11 @@ impl BootableView {
             });
         let (devices, status) = match engine.discover_devices() {
             Ok(devices) => {
-                let eligible = devices
-                    .iter()
-                    .filter(|device| device.is_eligible_target())
-                    .count();
-                (
-                    devices,
-                    format!("{eligible} eligible target(s) detected · choose an image to begin"),
-                )
+                let status = format!(
+                    "{} · choose an image to begin",
+                    removable_media_status(&devices)
+                );
+                (devices, status)
             }
             Err(error) => (Vec::new(), error.to_string()),
         };
@@ -4223,7 +4220,7 @@ impl BootableView {
                         div()
                             .text_xs()
                             .text_color(rgb(0x6f8299))
-                            .child("Auto-detecting removable media"),
+                            .child(removable_media_status(&self.devices)),
                     ),
             )
             .child(
