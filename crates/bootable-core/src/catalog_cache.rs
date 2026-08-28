@@ -67,6 +67,10 @@ impl CatalogState {
         matches!(self, Self::Loading)
     }
 
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::Failed(_))
+    }
+
     pub fn from_fetch<T>(fetch: &CatalogFetch<T>, empty: bool) -> Self {
         if empty {
             Self::Empty

@@ -25,6 +25,8 @@ unused space may separate those regions but must not appear after an arbitrary d
 
 Neither adapter implicitly selects a target. Keyboard navigation, mouse input, or pointer input must
 produce an explicit selection, and blocked/internal/system/read-only drives remain unselectable.
+Both adapters show the same removable-media inventory summary before the device rows, followed by
+the physical path, display name, capacity, eligibility, and explicit Select/Selected state.
 
 ## Shared discovery states
 
@@ -39,6 +41,11 @@ produce an explicit selection, and blocked/internal/system/read-only drives rema
 Both adapters use `DiscoverySession`, `CatalogState`, `CatalogFetch`, and `CacheMode` from
 `bootable-core`. The session suppresses duplicate loads and rejects a response whose distribution
 slug is no longer selected.
+
+Distribution search is live in both adapters and covers the name, slug, and base family. One- and
+two-character terms match word prefixes so a query such as `om` finds Omarchy without treating the
+middle of ChromeOS as an equally useful result. Empty results repeat the query, and failed states
+rename the refresh action to Retry.
 
 ## Cache rules
 

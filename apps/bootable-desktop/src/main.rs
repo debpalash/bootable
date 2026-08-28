@@ -9,8 +9,9 @@ use bootable_core::{
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
     ImageKind, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog, PiImage,
     Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, WindowsPartitionScheme,
-    WorkspaceStepState, WriteCompletion, WriteOptions, format_bytes, removable_media_status,
-    review_readiness, target_eligibility_label, workspace_progress,
+    WorkspaceStepState, WriteCompletion, WriteOptions, catalog_search_summary,
+    distribution_matches_query, format_bytes, removable_media_status, review_readiness,
+    target_eligibility_label, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -298,7 +299,7 @@ impl BootableView {
         let engine = Bootable::native();
         let catalog_search = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Search distributions and images…")
+                .placeholder("Search by name, slug, or base family…")
                 .clean_on_escape()
         });
         let search_subscription = cx.subscribe(&catalog_search, |view, input, event, cx| {
@@ -488,10 +489,12 @@ impl BootableView {
             self.load_distribution_directory(cx);
         } else {
             self.distributions = self.distribution_directory.clone();
-            self.status = format!(
-                "Searching {} distributions from DistroWatch",
-                self.distribution_directory.len()
-            );
+            let matches = self
+                .distributions
+                .iter()
+                .filter(|distribution| distribution_matches_query(distribution, query))
+                .count();
+            self.status = catalog_search_summary(query, matches);
             cx.notify();
         }
     }
@@ -517,13 +520,20 @@ impl BootableView {
                                 fetch.value.is_empty(),
                             );
                             let directory = fetch.value;
-                            let count = directory.len();
                             view.distribution_directory = directory.clone();
                             if !view.catalog_search_query(cx).is_empty()
                                 && view.discovery_session.source() == DiscoverySource::DistroWatch
                             {
                                 view.distributions = directory;
-                                view.status = format!("Searching {count} distributions");
+                                let query = view.catalog_search_query(cx);
+                                let matches = view
+                                    .distributions
+                                    .iter()
+                                    .filter(|distribution| {
+                                        distribution_matches_query(distribution, &query)
+                                    })
+                                    .count();
+                                view.status = catalog_search_summary(&query, matches);
                             }
                         }
                         Err(error) => {
@@ -2128,15 +2138,7 @@ impl BootableView {
             .distributions
             .iter()
             .enumerate()
-            .filter(|(_, distribution)| {
-                query.is_empty()
-                    || distribution.name.to_lowercase().contains(&query)
-                    || distribution.slug.to_lowercase().contains(&query)
-                    || distribution
-                        .based_on
-                        .as_deref()
-                        .is_some_and(|value| value.to_lowercase().contains(&query))
-            })
+            .filter(|(_, distribution)| distribution_matches_query(distribution, &query))
             .take(self.catalog_visible)
             .map(|(index, distribution)| {
                 let selected = self.selected_distribution == Some(index);
@@ -2199,13 +2201,26 @@ impl BootableView {
                                     )),
                             ),
                     )
-                    .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                        if distribution.rank == 0 {
-                            "Directory".into()
-                        } else {
-                            format!("{} / day", distribution.hits_per_day)
-                        },
-                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_end()
+                            .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
+                                if distribution.rank == 0 {
+                                    "Directory".into()
+                                } else {
+                                    format!("{} / day", distribution.hits_per_day)
+                                },
+                            ))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(if selected { 0x5bd7c0 } else { 0x8fc7ff }))
+                                    .child(if selected { "Selected" } else { "Select →" }),
+                            ),
+                    )
             })
             .collect::<Vec<_>>();
         let releases = self
@@ -2289,7 +2304,7 @@ impl BootableView {
                 distribution_state,
                 CatalogState::Ready { .. } | CatalogState::Empty
             ) {
-            "No matching distributions".into()
+            catalog_search_summary(&query, 0)
         } else {
             distribution_state.short_label("distributions")
         };
@@ -2303,6 +2318,26 @@ impl BootableView {
             self.discovery_session
                 .state(CatalogFacet::Details)
                 .short_label("ISO releases")
+        };
+        let distribution_heading = if !query.is_empty() {
+            "SEARCH RESULTS"
+        } else {
+            match self.discovery_session.quick_access() {
+                QuickAccess::Arch => "ARCH-BASED",
+                QuickAccess::Debian => "DEBIAN-BASED",
+                QuickAccess::Omarchy => "OMARCHY",
+                _ => "POPULAR · SIX MONTHS",
+            }
+        };
+        let refresh_label = if distribution_state.is_failed()
+            || self
+                .discovery_session
+                .state(CatalogFacet::Details)
+                .is_failed()
+        {
+            "Retry"
+        } else {
+            "Refresh"
         };
 
         div()
@@ -2349,7 +2384,8 @@ impl BootableView {
                         Button::new("reload-catalog")
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
-                            .tooltip("Reload DistroWatch data")
+                            .label(refresh_label)
+                            .tooltip("Refresh DistroWatch data")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.retry_discovery(cx);
                             })),
@@ -2376,7 +2412,7 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0x8fa4bd))
-                                    .child("POPULAR · SIX MONTHS"),
+                                    .child(distribution_heading),
                             )
                             .child(
                                 div()
@@ -3121,8 +3157,10 @@ impl BootableView {
             .discovery_session
             .state(CatalogFacet::RaspberryPi)
             .short_label("Raspberry Pi images");
-        let image_message = if self.pi_catalog.is_some() {
-            "No compatible image found".into()
+        let image_message = if self.pi_catalog.is_some() && !query.is_empty() {
+            format!("No Raspberry Pi images match “{query}”")
+        } else if self.pi_catalog.is_some() {
+            "No compatible Raspberry Pi images found".into()
         } else {
             pi_message.clone()
         };
@@ -3159,7 +3197,18 @@ impl BootableView {
                         Button::new("reload-pi-catalog")
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
-                            .tooltip("Reload Raspberry Pi catalog")
+                            .label(
+                                if self
+                                    .discovery_session
+                                    .state(CatalogFacet::RaspberryPi)
+                                    .is_failed()
+                                {
+                                    "Retry"
+                                } else {
+                                    "Refresh"
+                                },
+                            )
+                            .tooltip("Refresh Raspberry Pi catalog")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.show_raspberry_pi_with(CacheMode::Refresh, cx);
                             })),
@@ -3706,6 +3755,18 @@ impl BootableView {
     }
 
     fn target_cards(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.devices.is_empty() {
+            return div()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(rgb(0x1f2c3c))
+                .bg(rgb(0x0d151f))
+                .text_sm()
+                .text_color(rgb(0x8fa4bd))
+                .child("Connect a removable USB or SD drive, then refresh")
+                .into_any_element();
+        }
         let cards = self
             .devices
             .iter()
@@ -3755,15 +3816,40 @@ impl BootableView {
                     )
                     .child(
                         div()
-                            .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(0x9ec9c1))
-                            .child(format_bytes(device.capacity)),
+                            .flex()
+                            .flex_col()
+                            .items_end()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0x9ec9c1))
+                                    .child(format_bytes(device.capacity)),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(if blocked { 0xf29a9a } else { 0x8fc7ff }))
+                                    .child(if blocked {
+                                        "Blocked"
+                                    } else if selected {
+                                        "Selected"
+                                    } else {
+                                        "Select →"
+                                    }),
+                            ),
                     )
             })
             .collect::<Vec<_>>();
 
-        div().flex().flex_col().gap_3().children(cards)
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .children(cards)
+            .into_any_element()
     }
 
     fn download_history_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3993,7 +4079,7 @@ impl BootableView {
                                             .text_sm()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(rgb(0xe5b95f))
-                                            .child("α"),
+                                            .child(format!("v{}", env!("CARGO_PKG_VERSION"))),
                                     ),
                             )
                             .when(!compact, |brand| {
@@ -4167,7 +4253,7 @@ impl BootableView {
                 div()
                     .text_sm()
                     .text_color(rgb(0x8fa4bd))
-                    .child("All · Arch · Debian · Omarchy · Windows · Raspberry Pi"),
+                    .child("Browse trusted catalogs · Open →"),
             )
     }
 
@@ -4219,7 +4305,8 @@ impl BootableView {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(0x6f8299))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x5bd7c0))
                             .child(removable_media_status(&self.devices)),
                     ),
             )
@@ -4405,7 +4492,7 @@ impl Render for BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child("α"),
+                                    .child(format!("v{}", env!("CARGO_PKG_VERSION"))),
                             ),
                     ),
             )
@@ -4617,6 +4704,7 @@ fn main() {
                     titlebar: Some(titlebar),
                     app_id: Some("app.bootable.Bootable".into()),
                     window_decorations: Some(WindowDecorations::Client),
+                    window_background: WindowBackgroundAppearance::Opaque,
                     ..WindowOptions::default()
                 };
                 cx.open_window(options, |window, cx| {
