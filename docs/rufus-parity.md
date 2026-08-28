@@ -18,7 +18,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | Raw write verification | byte-range SHA-256 | phase, speed, ETA, verification | phase, speed, ETA, verification | Implemented on Linux |
 | Windows installer creation | GPT/FAT32 + split WIM | consequence modal + narrow helper + live write | consequence modal + narrow helper + live write | Implemented on Linux, Windows, and macOS |
 | Windows 11 TPM/Secure Boot/RAM bypass | guarded answer file | flag + clickable toggle | clickable toggle | Implemented |
-| Runtime UEFI boot validation | reproducible read-only QEMU/OVMF harness + RGB frame assertion | same script | same script | Implemented in CI with a deterministic UEFI fixture |
+| Runtime UEFI boot validation | Bootable write/verify → disposable virtual USB → QEMU/OVMF + RGB frame assertion | same script | same script | Implemented locally and in CI with a deterministic UEFI fixture |
 | Bad-block/fake-drive test | 1/2/4 destructive patterns | flag + clickable cycle | clickable cycle | Implemented on Linux |
 | Partition scheme and target firmware choices | GPT or MBR + UEFI | clickable cycle | native select box | Partial: legacy BIOS remains |
 | FAT/FAT32/NTFS/UDF/exFAT/ext formatting | Windows FAT32 only | automatic only | automatic only | Planned |

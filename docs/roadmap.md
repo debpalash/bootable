@@ -15,6 +15,7 @@
 - [x] Cancellation at safe boundaries and resumable UI progress
 - [x] Root-only loop-device integration harness using synthetic images without changing discovery policy
 - [x] CI assertion for the read-only OVMF/QEMU screenshot harness using a deterministic UEFI fixture
+- [x] Production writer → disposable virtual USB → OVMF/QEMU end-to-end assertion
 - Signed release artifacts and udev-driven hotplug refresh
 
 ## 0.3 — native adapters
