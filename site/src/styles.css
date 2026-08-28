@@ -1962,7 +1962,7 @@ h1,
 
 .preview-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-bottom: 9px;
 }
@@ -1986,14 +1986,16 @@ h1,
 }
 
 #hero-gui:checked ~ .preview-tabs label[for="hero-gui"],
-#hero-tui:checked ~ .preview-tabs label[for="hero-tui"] {
+#hero-tui:checked ~ .preview-tabs label[for="hero-tui"],
+#hero-omarchy:checked ~ .preview-tabs label[for="hero-omarchy"] {
   border-color: var(--text);
   background: var(--text);
   color: var(--surface);
 }
 
 #hero-gui:focus-visible ~ .preview-tabs label[for="hero-gui"],
-#hero-tui:focus-visible ~ .preview-tabs label[for="hero-tui"] {
+#hero-tui:focus-visible ~ .preview-tabs label[for="hero-tui"],
+#hero-omarchy:focus-visible ~ .preview-tabs label[for="hero-omarchy"] {
   outline: 3px solid rgba(8, 122, 87, 0.32);
   outline-offset: 2px;
 }
@@ -2004,8 +2006,22 @@ h1,
 }
 
 #hero-gui:checked ~ .preview-panels .preview-panel-gui,
-#hero-tui:checked ~ .preview-panels .preview-panel-tui {
+#hero-tui:checked ~ .preview-panels .preview-panel-tui,
+#hero-omarchy:checked ~ .preview-panels .preview-panel-omarchy {
   display: block;
+}
+
+.omarchy-preview-frame {
+  display: grid;
+  place-items: center;
+  background: #171827;
+}
+
+.omarchy-preview-frame img {
+  width: auto;
+  max-width: 100%;
+  max-height: 474px;
+  margin-inline: auto;
 }
 
 .preview-command,
@@ -2038,6 +2054,10 @@ h1,
 .install-both {
   padding-top: 9px;
   border-top: 1px dotted var(--line);
+}
+
+#hero-omarchy:checked ~ .install-both {
+  display: none;
 }
 
 .product-proof {

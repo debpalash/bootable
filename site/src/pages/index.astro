@@ -17,8 +17,8 @@ const page = {
           <p class="eyebrow"><span></span> Cross-platform Rufus and Etcher alternative</p>
           <h1 id="hero-title">Create bootable USB drives.</h1>
           <p class="lede">
-            Find and download images from DistroWatch. Write them from the GUI or TUI.
-            Verify the drive after writing.
+            Find and download images from DistroWatch. Write them from the GUI, TUI, or Omarchy
+            bar. Verify the drive after writing.
           </p>
           <div class="actions">
             <a class="button primary" href="/download">Download Bootable</a>
@@ -36,10 +36,12 @@ const page = {
           <legend>Choose an interface</legend>
           <input class="preview-choice" type="radio" name="hero-interface" id="hero-gui" checked>
           <input class="preview-choice" type="radio" name="hero-interface" id="hero-tui">
+          <input class="preview-choice" type="radio" name="hero-interface" id="hero-omarchy">
 
           <div class="preview-tabs">
             <label for="hero-gui">Desktop GUI</label>
             <label for="hero-tui">Terminal TUI</label>
+            <label for="hero-omarchy">Omarchy plugin</label>
           </div>
 
           <div class="preview-panels">
@@ -79,10 +81,28 @@ const page = {
                 <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --tui</code>
               </figcaption>
             </figure>
+
+            <figure class="preview-panel preview-panel-omarchy">
+              <div class="shot-frame omarchy-preview-frame">
+                <img
+                  src="/omarchy-plugin.png"
+                  alt="Bootable Omarchy bar plugin offering local image and catalog discovery choices"
+                  width="553"
+                  height="699"
+                  loading="lazy"
+                >
+              </div>
+              <figcaption class="preview-command">
+                <span>Install Bootable</span>
+                <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --all</code>
+                <span>Install the plugin</span>
+                <code>omarchy plugin add https://github.com/debpalash/omarchy-bootable.git --enable --yes</code>
+              </figcaption>
+            </figure>
           </div>
 
           <div class="install-both">
-            <span>Install both</span>
+            <span>Install GUI + TUI</span>
             <code>curl -fsSL bootable.palash.dev/install.sh | sh -s -- --all</code>
           </div>
         </fieldset>
