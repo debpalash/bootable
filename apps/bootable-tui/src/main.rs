@@ -128,6 +128,9 @@ enum Commands {
         target: String,
         #[arg(long, value_name = "EXACT_PHRASE")]
         confirm: Option<String>,
+        /// Emit newline-delimited JSON progress events for trusted clients.
+        #[arg(long)]
+        json_progress: bool,
         #[command(flatten)]
         windows: WindowsArgs,
         #[arg(long, default_value = "off", value_name = "off|1|2|4")]
@@ -207,6 +210,7 @@ fn main() -> Result<()> {
             image,
             target,
             confirm,
+            json_progress,
             windows,
             bad_block_check,
         }) => write_image(
@@ -214,6 +218,7 @@ fn main() -> Result<()> {
             image,
             &target,
             confirm,
+            json_progress,
             write_options(windows, bad_block_check),
         ),
         None if io::stdout().is_terminal() => run_tui(engine, cli.image),
@@ -451,19 +456,30 @@ fn write_image(
     image: PathBuf,
     target: &str,
     confirmation: Option<String>,
+    json_progress: bool,
     options: WriteOptions,
 ) -> Result<()> {
     let plan = engine.prepare_with_options(image, target, options)?;
     let Some(confirmation) = confirmation else {
         render_plan_text(&plan);
         bail!(
-            "nothing was written; repeat with --confirm '{}' as root/admin",
+            "nothing was written; repeat with --confirm '{}'",
             plan.confirmation_phrase
         );
     };
-    let mut reporter = ProgressReporter::default();
-    engine.write(&plan, &confirmation, |progress| reporter.print(progress))?;
-    Ok(())
+    let mut reporter = ProgressReporter::new(json_progress);
+    let result =
+        engine.write_with_privilege(&plan, &confirmation, |progress| reporter.print(progress));
+    match result {
+        Ok(()) => {
+            reporter.finished();
+            Ok(())
+        }
+        Err(error) => {
+            reporter.failed(&error.to_string());
+            Err(error.into())
+        }
+    }
 }
 
 fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteOptions {
@@ -491,9 +507,18 @@ fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteO
 struct ProgressReporter {
     phase: Option<ProgressPhase>,
     percentage: Option<u64>,
+    json: bool,
 }
 
 impl ProgressReporter {
+    fn new(json: bool) -> Self {
+        Self {
+            phase: None,
+            percentage: None,
+            json,
+        }
+    }
+
     fn print(&mut self, progress: Progress) {
         let percentage = progress
             .total
@@ -504,6 +529,13 @@ impl ProgressReporter {
         if !phase_changed && !percentage_changed {
             return;
         }
+        if self.json {
+            println!("{}", progress_event_json(&progress));
+            let _ = io::Write::flush(&mut io::stdout());
+            self.phase = Some(progress.phase);
+            self.percentage = percentage;
+            return;
+        }
         let amount = percentage
             .map(|value| format!("{value:>3}%"))
             .unwrap_or_else(|| "...".into());
@@ -511,6 +543,25 @@ impl ProgressReporter {
         self.phase = Some(progress.phase);
         self.percentage = percentage;
     }
+
+    fn finished(&self) {
+        if self.json {
+            println!("{{\"event\":\"finished\"}}");
+        }
+    }
+
+    fn failed(&self, message: &str) {
+        if self.json {
+            println!(
+                "{}",
+                serde_json::json!({ "event": "failed", "data": { "message": message } })
+            );
+        }
+    }
+}
+
+fn progress_event_json(progress: &Progress) -> String {
+    serde_json::json!({ "event": "progress", "data": progress }).to_string()
 }
 
 fn render_plan_text(plan: &WritePlan) {
@@ -4911,9 +4962,11 @@ fn device_change_message(added: usize, removed: usize) -> String {
 #[cfg(test)]
 mod layout_tests {
     use super::{
-        WorkspaceFocus, advanced_height, application_area, brand_lockup, centered_button_area,
-        grid_areas, main_shell_layout, windows_option_columns, workspace_height,
+        Cli, Commands, Progress, ProgressPhase, WorkspaceFocus, advanced_height, application_area,
+        brand_lockup, centered_button_area, grid_areas, main_shell_layout, progress_event_json,
+        windows_option_columns, workspace_height,
     };
+    use clap::Parser;
     use ratatui::layout::Rect;
 
     #[test]
@@ -4995,5 +5048,41 @@ mod layout_tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].to_string().contains("┌┬┬┐  BOOTABLE α"));
         assert!(lines[1].to_string().contains("╰♨─╯"));
+    }
+
+    #[test]
+    fn write_json_progress_is_an_explicit_client_mode() {
+        let cli = Cli::try_parse_from([
+            "bootable",
+            "write",
+            "image.iso",
+            "/dev/removable",
+            "--confirm",
+            "ERASE /dev/removable TEST",
+            "--json-progress",
+        ])
+        .expect("valid client invocation");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Write {
+                json_progress: true,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn progress_events_are_stable_newline_json_payloads() {
+        let event = progress_event_json(&Progress {
+            phase: ProgressPhase::Writing,
+            completed: 25,
+            total: Some(100),
+            message: "Writing and verifying".into(),
+        });
+        let value: serde_json::Value = serde_json::from_str(&event).expect("valid JSON");
+        assert_eq!(value["event"], "progress");
+        assert_eq!(value["data"]["phase"], "Writing");
+        assert_eq!(value["data"]["completed"], 25);
+        assert_eq!(value["data"]["total"], 100);
     }
 }

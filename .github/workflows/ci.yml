@@ -54,7 +54,7 @@ jobs:
       - run: cargo build --release --workspace
 
   qemu-uefi-smoke:
-    name: Read-only UEFI smoke assertion
+    name: Bootable write → virtual USB → UEFI
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -69,9 +69,16 @@ jobs:
           BOOTABLE_QEMU_WAIT_SECONDS: 10
           BOOTABLE_QEMU_COLOR_TOLERANCE: 64
         run: scripts/qemu-uefi-smoke.sh --cdrom /tmp/bootable-uefi-fixture.iso /tmp/bootable-uefi-fixture.png 0000aa
+      - name: Write, verify, and boot a disposable virtual USB
+        env:
+          BOOTABLE_QEMU_WAIT_SECONDS: 10
+          BOOTABLE_QEMU_COLOR_TOLERANCE: 64
+        run: scripts/qemu-usb-write-uefi-smoke.sh /tmp/bootable-uefi-fixture.iso /tmp/bootable-qemu-usb.png 0000aa
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: qemu-uefi-smoke-frame
-          path: /tmp/bootable-uefi-fixture.png
+          path: |
+            /tmp/bootable-uefi-fixture.png
+            /tmp/bootable-qemu-usb.png
           if-no-files-found: warn

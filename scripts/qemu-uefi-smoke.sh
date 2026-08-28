@@ -2,7 +2,7 @@
 set -eu
 
 usage() {
-  echo "usage: qemu-uefi-smoke.sh [--cdrom|--disk] IMAGE [SCREENSHOT.png] [EXPECTED_RGB]" >&2
+  echo "usage: qemu-uefi-smoke.sh [--cdrom|--disk|--usb] IMAGE [SCREENSHOT.png] [EXPECTED_RGB]" >&2
   echo "       EXPECTED_RGB is six hexadecimal digits; tolerance defaults to 48/channel" >&2
   exit 2
 }
@@ -12,7 +12,7 @@ image="${2:-}"
 screenshot="${3:-qemu-uefi-smoke.png}"
 expected_rgb="${4:-}"
 case "$mode" in
-  --cdrom|--disk) ;;
+  --cdrom|--disk|--usb) ;;
   *) usage ;;
 esac
 [ -n "$image" ] || usage
@@ -32,8 +32,24 @@ for command in qemu-system-x86_64 socat; do
   }
 done
 
-ovmf_code="${BOOTABLE_OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
-ovmf_vars="${BOOTABLE_OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
+ovmf_code="${BOOTABLE_OVMF_CODE:-}"
+ovmf_vars="${BOOTABLE_OVMF_VARS:-}"
+if [ -z "$ovmf_code" ]; then
+  for candidate in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/edk2/x64/OVMF_CODE.4m.fd; do
+    if [ -r "$candidate" ]; then
+      ovmf_code="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$ovmf_vars" ]; then
+  for candidate in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/edk2/x64/OVMF_VARS.4m.fd; do
+    if [ -r "$candidate" ]; then
+      ovmf_vars="$candidate"
+      break
+    fi
+  done
+fi
 [ -r "$ovmf_code" ] && [ -r "$ovmf_vars" ] || {
   echo "OVMF firmware was not found; set BOOTABLE_OVMF_CODE and BOOTABLE_OVMF_VARS" >&2
   exit 1
@@ -72,6 +88,11 @@ set -- \
 
 if [ "$mode" = "--cdrom" ]; then
   set -- "$@" -drive "file=$image,media=cdrom,format=raw,readonly=on"
+elif [ "$mode" = "--usb" ]; then
+  set -- "$@" \
+    -device qemu-xhci,id=bootable-xhci \
+    -drive "if=none,id=bootable-usb,file=$image,format=raw,readonly=on" \
+    -device usb-storage,drive=bootable-usb,removable=true,bootindex=1
 else
   set -- "$@" -drive "file=$image,if=virtio,format=raw,readonly=on"
 fi
