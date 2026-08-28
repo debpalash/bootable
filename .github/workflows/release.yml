@@ -51,7 +51,8 @@ jobs:
       - name: Install build and packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-x11-dev pkg-config rpm
+          sudo apt-get install -y \
+            libfontconfig1-dev libxkbcommon-x11-dev pkg-config rpm xauth xvfb
       - name: Download pinned AppImage tools
         shell: bash
         run: |

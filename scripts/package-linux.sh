@@ -138,13 +138,18 @@ sed 's|@EXEC@|bootable-desktop|g' \
   > "$appdir/usr/share/applications/app.bootable.Bootable.desktop"
 # The adjacent helper lets the runtime retain its fixed-name fallback inside the AppImage.
 install -m 0755 "$binary_dir/bootable-helper" "$appdir/usr/bin/bootable-helper"
-"$linuxdeploy" \
+# linuxdeploy bundles an older strip that rejects RELR sections found in
+# current distro libraries. Dependency deployment does not require stripping.
+NO_STRIP=1 "$linuxdeploy" \
   --appdir "$appdir" \
   --executable "$appdir/usr/bin/bootable-desktop" \
   --executable "$appdir/usr/bin/bootable" \
   --executable "$appdir/usr/bin/bootable-helper" \
   --desktop-file "$appdir/usr/share/applications/app.bootable.Bootable.desktop" \
   --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/bootable.svg"
+# linuxdeploy points AppRun at the desktop executable. Remove that symlink before
+# writing the dispatcher, or shell redirection replaces the desktop binary.
+rm -f "$appdir/AppRun"
 cat > "$appdir/AppRun" <<'EOF'
 #!/bin/sh
 set -eu
