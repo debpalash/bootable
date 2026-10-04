@@ -1705,7 +1705,7 @@ impl BootableView {
 
     fn preview_plan(&mut self, cx: &mut Context<Self>) {
         let Some(image) = self.image.clone() else {
-            self.status = "Choose an image first".into();
+            self.status = self.t().text(Message::StatusImageChooseFirst).into();
             cx.notify();
             return;
         };
@@ -1714,7 +1714,7 @@ impl BootableView {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a target drive first".into();
+            self.status = self.t().text(Message::StatusTargetChooseFirst).into();
             cx.notify();
             return;
         };
@@ -1725,7 +1725,7 @@ impl BootableView {
             Ok(plan) => {
                 self.catalog_open = false;
                 self.write_session.open(plan);
-                "Reviewing the write plan • nothing has been written".into()
+                self.t().text(Message::StatusReviewOpen).into()
             }
             Err(error) => error.to_string(),
         };
@@ -1742,7 +1742,7 @@ impl BootableView {
 
     fn close_review(&mut self, cx: &mut Context<Self>) {
         if !self.write_session.close() {
-            self.status = "Writing is active • do not close the app or unplug the target".into();
+            self.status = self.t().text(Message::StatusWriteActive).into();
             cx.notify();
             return;
         }
@@ -1752,14 +1752,14 @@ impl BootableView {
 
     fn open_write_confirmation(&mut self, cx: &mut Context<Self>) {
         if self.write_session.open_confirmation() {
-            self.status = "Review the target changes and consequences before writing".into();
+            self.status = self.t().text(Message::StatusReviewConsequences).into();
             cx.notify();
         }
     }
 
     fn close_write_confirmation(&mut self, cx: &mut Context<Self>) {
         self.write_session.close_confirmation();
-        self.status = "Write cancelled before erasure • the target is unchanged".into();
+        self.status = self.t().text(Message::StatusWriteCancelled).into();
         cx.notify();
     }
 
@@ -1772,7 +1772,7 @@ impl BootableView {
                 return;
             }
         };
-        self.status = "Write started • do not unplug the target".into();
+        self.status = self.t().text(Message::StatusWriteStarted).into();
         cx.notify();
 
         let (sender, receiver) = mpsc::unbounded();
@@ -1808,10 +1808,18 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     match update {
                         WriteUpdate::Progress(progress) => {
-                            view.status = view.write_session.apply_progress(progress);
+                            // The phase name is localized here; the step text is
+                            // produced by core and stays English for now.
+                            view.status = format!(
+                                "{} • {}",
+                                progress.phase.label_in(view.locale),
+                                progress.message
+                            );
+                            view.write_session.apply_progress(progress);
                         }
                         WriteUpdate::Finished(completion) => {
-                            view.status = view.write_session.finish(completion);
+                            view.status = completion.status_in(view.locale);
+                            view.write_session.finish(completion);
                         }
                     }
                     cx.notify();
@@ -1824,14 +1832,13 @@ impl BootableView {
 
     fn cancel_write(&mut self, cx: &mut Context<Self>) {
         if self.write_session.cancel() {
-            self.status =
-                "Stopping safely • flushing completed writes; the media will remain incomplete"
-                    .into();
+            self.status = self.t().text(Message::StatusWriteStopping).into();
             cx.notify();
         }
     }
 
     fn review_card(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let plan = self
             .write_session
             .plan()
@@ -1856,9 +1863,14 @@ impl BootableView {
                     .py_3()
                     .rounded_lg()
                     .bg(rgb(0x0d151f))
-                    .child(format!("{}. {}", index + 1, step.title))
+                    .child(div().flex_1().min_w(px(0.)).child(format!(
+                        "{}. {}",
+                        index + 1,
+                        step.title
+                    )))
                     .child(
                         div()
+                            .flex_shrink_0()
                             .text_xs()
                             .text_color(if step.destructive {
                                 rgb(0xe5b95f)
@@ -1866,9 +1878,9 @@ impl BootableView {
                                 rgb(0x8fa4bd)
                             })
                             .child(if step.destructive {
-                                "ERASES DATA"
+                                t.heading(Message::ReviewStepErases)
                             } else {
-                                "safe"
+                                t.text(Message::ReviewStepSafe).to_string()
                             }),
                     )
             })
@@ -1883,29 +1895,31 @@ impl BootableView {
             .border_color(rgb(0x243244))
             .bg(rgb(0x111923))
             .child(
+                div().flex().items_start().justify_between().gap_4().child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xl()
+                                .font_weight(FontWeight::BOLD)
+                                .child(t.text(Message::ReviewTitle)),
+                        )
+                        .child(div().text_sm().text_color(rgb(0x8fa4bd)).child(t.text(
+                            if self.write_session.active() {
+                                Message::ReviewSubtitleWriting
+                            } else {
+                                Message::ReviewSubtitle
+                            },
+                        ))),
+                ),
+            )
+            .child(
                 div()
-                    .flex()
-                    .items_start()
-                    .justify_between()
-                    .gap_4()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_xl()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Review write plan"),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(0x8fa4bd))
-                                    .child("Nothing is written until a separate destructive confirmation succeeds."),
-                            ),
-                    ),
+                    .text_sm()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(t.text(Message::ReviewPlanSummary)),
             )
             .child(
                 div()
@@ -1913,7 +1927,7 @@ impl BootableView {
                     .grid_cols(2)
                     .gap_3()
                     .child(review_value(
-                        "SOURCE",
+                        t.heading(Message::ReviewFieldSource),
                         format!(
                             "{}\n{} • {}",
                             plan.image.path.display(),
@@ -1922,7 +1936,7 @@ impl BootableView {
                         ),
                     ))
                     .child(review_value(
-                        "TARGET",
+                        t.heading(Message::ReviewFieldTarget),
                         format!(
                             "{}\n{} • {}",
                             plan.target.path.display(),
@@ -1930,11 +1944,13 @@ impl BootableView {
                             format_bytes(plan.target.capacity)
                         ),
                     ))
-                    .child(review_value("METHOD", plan.strategy.to_string()))
                     .child(review_value(
-                        "CONSEQUENCE",
-                        "All existing data and partitions on the selected target will be erased"
-                            .into(),
+                        t.heading(Message::ReviewFieldMethod),
+                        plan.strategy.to_string(),
+                    ))
+                    .child(review_value(
+                        t.heading(Message::ReviewFieldConsequence),
+                        t.text(Message::ReviewConsequence).into(),
                     )),
             )
             .child(
@@ -1946,7 +1962,7 @@ impl BootableView {
                         div()
                             .text_sm()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("Ordered operations"),
+                            .child(t.text(Message::ReviewOrderedOperations)),
                     )
                     .children(step_rows),
             )
@@ -1965,27 +1981,45 @@ impl BootableView {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
                             .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xb6a17a))
+                                    .child(t.heading(Message::ReviewPermanentChanges)),
+                            )
                             .child(
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child(if self.write_session.active() {
-                                        "Writing and verification are active"
+                                    .child(t.text(if self.write_session.active() {
+                                        Message::ReviewStateWriting
                                     } else {
-                                        "One final confirmation is required"
-                                    }),
+                                        Message::ReviewStateFinalConfirm
+                                    })),
                             )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(0xb6a17a))
-                                    .child(if self.write_session.active() {
-                                        "Do not close the app, power off, or unplug the target drive."
-                                    } else {
-                                        "Review the exact target changes and irreversible consequences before writing."
-                                    }),
+                            .child(div().text_xs().text_color(rgb(0xb6a17a)).child(t.text(
+                                if self.write_session.active() {
+                                    Message::ReviewWarningWriting
+                                } else {
+                                    Message::ReviewWarningIdle
+                                },
+                            )))
+                            .when(
+                                !self.write_session.active()
+                                    && self.write_session.completion().is_none(),
+                                |column| {
+                                    column.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0xb6a17a))
+                                            .child(t.text(Message::ReviewHintOpenConfirmation)),
+                                    )
+                                },
                             ),
                     ),
             )
@@ -2008,6 +2042,8 @@ impl BootableView {
                                 .justify_between()
                                 .child(
                                     div()
+                                        .flex_1()
+                                        .min_w(px(0.))
                                         .text_sm()
                                         .font_weight(FontWeight::BOLD)
                                         .child(format!(
@@ -2018,6 +2054,7 @@ impl BootableView {
                                 )
                                 .child(
                                     div()
+                                        .flex_shrink_0()
                                         .text_xs()
                                         .text_color(rgb(0x8fa4bd))
                                         .child(progress.metrics(elapsed)),
@@ -2040,29 +2077,14 @@ impl BootableView {
                 )
             })
             .when_some(self.write_session.completion(), |panel, completion| {
-                let (title, message, color) = match completion {
-                    WriteCompletion::Succeeded => (
-                        "Write complete",
-                        "The image was written and verified. The removable drive can now be safely removed."
-                            .to_string(),
-                        0x5bd7c0,
-                    ),
-                    WriteCompletion::AuthenticationDenied => (
-                        "Write cancelled before erasure",
-                        "Administrator authentication was cancelled or denied.".into(),
-                        0xf0cc7d,
-                    ),
-                    WriteCompletion::Cancelled => (
-                        "Write stopped safely",
-                        "The media is incomplete and must be rewritten before use.".into(),
-                        0xf29a9a,
-                    ),
-                    WriteCompletion::Failed(error) => (
-                        "Write failed",
-                        error.clone(),
-                        0xf29a9a,
-                    ),
+                let color = match completion {
+                    WriteCompletion::Succeeded => 0x5bd7c0,
+                    WriteCompletion::AuthenticationDenied => 0xf0cc7d,
+                    WriteCompletion::Cancelled | WriteCompletion::Failed(_) => 0xf29a9a,
                 };
+                // A failure body is core's error text, shown as received.
+                let title = completion.title_in(self.locale);
+                let message = completion.detail_in(self.locale);
                 panel.child(
                     div()
                         .flex()
@@ -2086,16 +2108,17 @@ impl BootableView {
     }
 
     fn review_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let write_succeeded = self.write_session.succeeded();
-        let action_label = if self.write_session.active() {
-            "Stop safely"
+        let action_label = t.text(if self.write_session.active() {
+            Message::ReviewActionStopSafely
         } else if write_succeeded {
-            "Written & verified"
+            Message::ReviewActionWritten
         } else if self.write_session.completion().is_some() {
-            "Review & retry"
+            Message::ReviewActionRetry
         } else {
-            "Review consequences"
-        };
+            Message::ReviewActionConsequences
+        });
         div()
             .flex()
             .items_center()
@@ -2110,28 +2133,31 @@ impl BootableView {
             .child(
                 div()
                     .flex_1()
+                    .min_w(px(0.))
                     .text_sm()
                     .text_color(rgb(if self.write_session.active() {
                         0xe5b95f
                     } else {
                         0xa9b8c9
                     }))
-                    .child(if self.write_session.active() {
-                        "Writing and verification are active · do not unplug the target"
+                    .child(t.text(if self.write_session.active() {
+                        Message::ReviewStatusWriting
                     } else if write_succeeded {
-                        "Complete · the written media passed byte verification"
+                        Message::ReviewStatusComplete
                     } else {
-                        "Review the physical target and permanent changes before writing"
-                    }),
+                        Message::ReviewStatusReview
+                    })),
             )
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
+                    .justify_end()
                     .items_center()
                     .gap_2()
                     .child(
                         Button::new("review-back")
-                            .label("Back")
+                            .label(t.text(Message::ActionBack))
                             .disabled(self.write_session.active())
                             .on_click(cx.listener(|this, _, _, cx| this.close_review(cx))),
                     )
@@ -2152,6 +2178,7 @@ impl BootableView {
     }
 
     fn write_confirmation_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let plan = self
             .write_session
             .plan()
@@ -2182,40 +2209,48 @@ impl BootableView {
                             .text_color(rgb(if step.destructive { 0xf29a9a } else { 0x5bd7c0 }))
                             .child((index + 1).to_string()),
                     )
-                    .child(div().flex_1().text_sm().child(step.title.clone()))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .text_sm()
+                            .child(step.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
                             .text_xs()
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(if step.destructive { 0xf29a9a } else { 0x8fa4bd }))
                             .child(if step.destructive {
-                                "ERASES DATA"
+                                t.heading(Message::ReviewStepErases)
                             } else {
-                                "verifies"
+                                t.text(Message::ReviewStepVerifies).to_string()
                             }),
                     )
             })
             .collect::<Vec<_>>();
         let consequences = [
-            "Every existing file and partition on this physical drive will be permanently erased.",
-            "Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below.",
-            "Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media.",
-            "Bootable rechecks the target identity immediately before erasure and verifies the result afterward.",
+            Message::ConfirmConsequenceErase,
+            Message::ConfirmConsequenceWrongDrive,
+            Message::ConfirmConsequenceInterrupted,
+            Message::ConfirmConsequenceRecheck,
         ]
         .into_iter()
+        .map(|message| t.text(message))
         .map(|message| {
             div()
                 .flex()
                 .items_start()
                 .gap_3()
+                .child(div().mt_1().size(px(7.)).rounded_full().bg(rgb(0xe5b95f)))
                 .child(
                     div()
-                        .mt_1()
-                        .size(px(7.))
-                        .rounded_full()
-                        .bg(rgb(0xe5b95f)),
+                        .flex_1()
+                        .text_sm()
+                        .text_color(rgb(0xc7b58f))
+                        .child(message),
                 )
-                .child(div().flex_1().text_sm().text_color(rgb(0xc7b58f)).child(message))
         })
         .collect::<Vec<_>>();
 
@@ -2253,23 +2288,26 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .gap_1()
                                     .child(
                                         div()
                                             .text_xl()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(rgb(0xf0cc7d))
-                                            .child("Confirm permanent changes"),
+                                            .child(t.text(Message::ConfirmTitle)),
                                     )
                                     .child(
                                         div()
                                             .text_sm()
                                             .text_color(rgb(0x8fa4bd))
-                                            .child("Review what Bootable will change and what can go wrong."),
+                                            .child(t.text(Message::ConfirmSubtitle)),
                                     ),
                             )
                             .child(
                                 div()
+                                    .flex_shrink_0()
                                     .px_3()
                                     .py_1()
                                     .rounded_full()
@@ -2277,7 +2315,7 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xf29a9a))
-                                    .child("PERMANENT"),
+                                    .child(t.heading(Message::ConfirmBadge)),
                             ),
                     )
                     .child(
@@ -2300,7 +2338,7 @@ impl BootableView {
                                         div()
                                             .text_xs()
                                             .text_color(rgb(0xb6a17a))
-                                            .child("PHYSICAL TARGET"),
+                                            .child(t.heading(Message::ConfirmPhysicalTarget)),
                                     )
                                     .child(
                                         div()
@@ -2332,7 +2370,7 @@ impl BootableView {
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Changes to this drive"),
+                                    .child(t.text(Message::ConfirmChanges)),
                             )
                             .children(change_rows),
                     )
@@ -2349,14 +2387,14 @@ impl BootableView {
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child("Consequences"),
+                                    .child(t.text(Message::ConfirmConsequences)),
                             )
                             .children(consequences),
                     )
                     .child(
                         Checkbox::new("acknowledge-write-consequences")
                             .checked(self.write_session.acknowledged())
-                            .label("I checked the physical target and understand that all of its existing data will be permanently erased.")
+                            .label(t.text(Message::ConfirmAck))
                             .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                 this.write_session.set_acknowledged(*checked);
                                 cx.notify();
@@ -2365,12 +2403,13 @@ impl BootableView {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .justify_end()
                             .gap_3()
                             .child(
                                 Button::new("cancel-confirm-write")
-                                    .label("Cancel")
+                                    .label(t.text(Message::ActionCancel))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.close_write_confirmation(cx)
                                     })),
@@ -2378,7 +2417,11 @@ impl BootableView {
                             .child(
                                 Button::new("confirm-write")
                                     .danger()
-                                    .label("Confirm erase & write")
+                                    .label(t.text(if self.write_session.can_confirm() {
+                                        Message::ConfirmSubmit
+                                    } else {
+                                        Message::ConfirmAcknowledgeFirst
+                                    }))
                                     .disabled(!self.write_session.can_confirm())
                                     .on_click(cx.listener(|this, _, _, cx| this.start_write(cx))),
                             ),
@@ -5363,7 +5406,7 @@ fn workspace_step(
         )
 }
 
-fn review_value(label: &'static str, value: String) -> impl IntoElement {
+fn review_value(label: String, value: String) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -5467,9 +5510,7 @@ fn main() {
                                 control.cancel();
                                 view.status = "Stopping write safely • close again after completed writes are flushed".into();
                             } else {
-                                view.status =
-                                    "Writing is active • do not close the app or unplug the target"
-                                        .into();
+                                view.status = view.t().text(Message::StatusWriteActive).into();
                             }
                             cx.notify();
                         });
