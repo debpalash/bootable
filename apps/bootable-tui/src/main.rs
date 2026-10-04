@@ -10,12 +10,13 @@ use bootable_core::{
     BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogFetch, CatalogState,
     ChecksumAlgorithm, Device, DiscoverySession, DiscoverySource, DistributionBundle,
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
-    DownloadStatus, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message,
-    OperationState, PiCatalog, Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness,
-    ReviewedWriteSession, Strings, WorkspaceProgress, WorkspaceStepState, WriteCompletion,
-    WriteOptions, WritePlan, catalog_search_summary, device_details_in, distribution_matches_query,
-    format_bytes, help_intro, help_sections, removable_media_status_in, review_readiness,
-    target_eligibility_label, target_eligibility_label_in, workspace_progress,
+    DownloadStatus, ImageReport, IntegrityState, IsoRelease, Locale, ManagedDownloadSession,
+    Message, OperationControl, OperationState, PiCatalog, Preferences, Progress, ProgressPhase,
+    QuickAccess, ReviewReadiness, ReviewedWriteSession, Strings, WorkspaceProgress,
+    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, catalog_search_summary,
+    device_details_in, distribution_matches_query, format_bytes, help_intro, help_sections,
+    removable_media_status_in, review_readiness, target_eligibility_label,
+    target_eligibility_label_in, workspace_progress,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
@@ -86,6 +87,10 @@ enum Commands {
         /// Emit newline-delimited JSON progress for graphical clients.
         #[arg(long)]
         json_progress: bool,
+        /// Refuse the download unless the publisher's checksum manifest carries
+        /// a verified signature from a key Bootable pins (exit 4 otherwise).
+        #[arg(long)]
+        require_signature: bool,
     },
     /// List official Raspberry Pi Imager images.
     PiImages {
@@ -162,6 +167,12 @@ enum Commands {
         /// Where to save a downloaded catalog image.
         #[arg(long, value_name = "ISO_FILE")]
         output: Option<PathBuf>,
+        /// Refuse a catalog download unless the publisher's checksum manifest
+        /// carries a verified signature from a pinned key (exit 4 otherwise).
+        /// Only valid with a catalog slug; a local image has no publisher
+        /// signature to check, so combining the two is a usage error.
+        #[arg(long)]
+        require_signature: bool,
         #[arg(long, value_name = "EXACT_PHRASE")]
         confirm: Option<String>,
         /// Emit newline-delimited JSON progress events for trusted clients.
@@ -275,7 +286,9 @@ fn core_exit_status(error: &bootable_core::Error) -> ExitStatus {
 /// Core reports verification failures as message text on a few variants.
 fn is_verification_message(message: &str) -> bool {
     let message = message.to_ascii_lowercase();
-    message.contains("verification failed") || message.contains("mismatch")
+    message.contains("verification failed")
+        || message.contains("mismatch")
+        || message.contains("signature is required")
 }
 
 fn exit_status(error: &anyhow::Error) -> ExitStatus {
@@ -330,7 +343,19 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let engine = Bootable::native();
+    let require_signature = matches!(
+        &cli.command,
+        Some(
+            Commands::Download {
+                require_signature: true,
+                ..
+            } | Commands::Flash {
+                require_signature: true,
+                ..
+            }
+        )
+    );
+    let engine = Bootable::native().require_signature(require_signature);
     match cli.command {
         Some(Commands::Catalog { limit, json }) => print_catalog(&engine, limit, json),
         Some(Commands::Releases { slug, json }) => print_releases(&engine, &slug, json),
@@ -339,6 +364,7 @@ fn run(cli: Cli) -> Result<()> {
             index,
             output,
             json_progress,
+            require_signature: _,
         }) => download_release(&engine, &slug, index, output, json_progress),
         Some(Commands::PiImages {
             device,
@@ -391,6 +417,7 @@ fn run(cli: Cli) -> Result<()> {
             target,
             index,
             output,
+            require_signature,
             confirm,
             json_progress,
             windows,
@@ -402,6 +429,7 @@ fn run(cli: Cli) -> Result<()> {
                 target,
                 index,
                 output,
+                require_signature,
                 confirm,
                 json_progress,
                 options: write_options(windows, bad_block_check),
@@ -495,13 +523,15 @@ fn download_release(
     });
 
     match result {
-        Ok(report) => {
+        Ok(FetchedImage { report, integrity }) => {
             if json_progress {
+                reporter.integrity(&integrity);
                 reporter.finished();
             } else {
                 println!("Ready to write: {}", report.path.display());
                 println!("Kind: {}", report.kind);
                 println!("Size: {}", format_bytes(report.size));
+                reporter.integrity(&integrity);
             }
             Ok(())
         }
@@ -512,6 +542,21 @@ fn download_release(
     }
 }
 
+/// A downloaded catalog image and how well it was authenticated.
+struct FetchedImage {
+    report: ImageReport,
+    integrity: IntegrityState,
+}
+
+/// The machine-readable integrity summary shared by every JSON surface.
+fn integrity_json(integrity: &IntegrityState) -> serde_json::Value {
+    serde_json::json!({
+        "label": integrity.label(),
+        "signature_verified": integrity.is_signature_verified(),
+        "signature_expected_but_unverified": integrity.signature_expected_but_unverified(),
+    })
+}
+
 /// Resolve a catalog slug to a release, then download and verify it.
 fn fetch_catalog_image(
     engine: &Bootable,
@@ -519,7 +564,7 @@ fn fetch_catalog_image(
     index: usize,
     output: Option<PathBuf>,
     progress: &mut dyn FnMut(Progress),
-) -> Result<ImageReport> {
+) -> Result<FetchedImage> {
     let details = engine.distribution_details(slug)?;
     let releases = resolve_releases(engine, &details)?;
     let release = releases.get(index).ok_or_else(|| {
@@ -529,7 +574,13 @@ fn fetch_catalog_image(
         ))
     })?;
     let destination = output.unwrap_or_else(|| PathBuf::from(&release.name));
-    Ok(engine.download_iso(release, &destination, progress)?)
+    let (report, integrity) = engine.download_iso_with_integrity(
+        release,
+        &destination,
+        &OperationControl::new(),
+        progress,
+    )?;
+    Ok(FetchedImage { report, integrity })
 }
 
 fn resolve_releases(engine: &Bootable, details: &DistributionDetails) -> Result<Vec<IsoRelease>> {
@@ -688,7 +739,7 @@ trait WriteBackend {
         index: usize,
         output: Option<PathBuf>,
         progress: &mut dyn FnMut(Progress),
-    ) -> Result<ImageReport>;
+    ) -> Result<FetchedImage>;
     fn prepare(&self, image: PathBuf, target: &str, options: WriteOptions) -> Result<WritePlan>;
     fn write(
         &self,
@@ -722,7 +773,7 @@ impl WriteBackend for Bootable {
         index: usize,
         output: Option<PathBuf>,
         progress: &mut dyn FnMut(Progress),
-    ) -> Result<ImageReport> {
+    ) -> Result<FetchedImage> {
         fetch_catalog_image(self, slug, index, output, progress)
     }
 
@@ -748,8 +799,17 @@ fn write_image(
     json_progress: bool,
     options: WriteOptions,
 ) -> Result<()> {
-    let plan = backend.prepare(image, target, options)?;
+    let plan = backend
+        .prepare(image, target, options)
+        .map_err(|error| report_failure(json_progress, error))?;
     confirmed_write(backend, &plan, confirmation, json_progress)
+}
+
+/// Emit the terminal `failed` event (JSON mode only) and hand the error back,
+/// so early failures obey the same one-terminal-event contract as later ones.
+fn report_failure(json_progress: bool, error: anyhow::Error) -> anyhow::Error {
+    ProgressReporter::new(json_progress).failed(&error.to_string(), exit_status(&error));
+    error
 }
 
 /// The single confirmation gate shared by `write` and `flash`: nothing is
@@ -763,8 +823,7 @@ fn confirmed_write(
     let mut reporter = ProgressReporter::new(json_progress);
     let Some(confirmation) = confirmation else {
         if json_progress {
-            println!(
-                "{}",
+            emit_line(
                 serde_json::json!({
                     "event": "confirmation_required",
                     "data": {
@@ -772,6 +831,7 @@ fn confirmed_write(
                         "plan": plan,
                     },
                 })
+                .to_string(),
             );
         } else {
             render_plan_text(plan);
@@ -808,6 +868,7 @@ struct FlashRequest {
     target: String,
     index: usize,
     output: Option<PathBuf>,
+    require_signature: bool,
     confirm: Option<String>,
     json_progress: bool,
     options: WriteOptions,
@@ -836,21 +897,39 @@ fn flash_image(backend: &impl WriteBackend, request: FlashRequest) -> Result<()>
         target,
         index,
         output,
+        require_signature,
         confirm,
         json_progress,
         options,
     } = request;
     let mut reporter = ProgressReporter::new(json_progress);
+    // Every failure before the write gate reports exactly one terminal event.
     let image = match classify_source(&source, Path::new(&source).exists()) {
-        FlashSource::Image(path) => path,
+        FlashSource::Image(path) => {
+            if require_signature {
+                return Err(report_failure(
+                    json_progress,
+                    CliError::Usage(
+                        "--require-signature only applies to catalog downloads; a local \
+                         image has no publisher signature to check"
+                            .into(),
+                    )
+                    .into(),
+                ));
+            }
+            path
+        }
         FlashSource::Catalog(slug) => {
             // Refuse a missing or ineligible target before a large download.
-            backend.check_target(&target)?;
-            let report = backend
+            backend
+                .check_target(&target)
+                .map_err(|error| report_failure(json_progress, error))?;
+            let FetchedImage { report, integrity } = backend
                 .fetch(&slug, index, output, &mut |progress| {
                     reporter.print(progress)
                 })
-                .inspect_err(|error| reporter.failed(&error.to_string(), exit_status(error)))?;
+                .map_err(|error| report_failure(json_progress, error))?;
+            reporter.integrity(&integrity);
             if confirm.is_none() && !json_progress {
                 eprintln!(
                     "Image kept at {}; pass that path instead of the slug to skip the download.",
@@ -862,7 +941,7 @@ fn flash_image(backend: &impl WriteBackend, request: FlashRequest) -> Result<()>
     };
     let plan = backend
         .prepare(image, &target, options)
-        .inspect_err(|error| reporter.failed(&error.to_string(), exit_status(error)))?;
+        .map_err(|error| report_failure(json_progress, error))?;
     confirmed_write(backend, &plan, confirm, json_progress)?;
     if !json_progress {
         println!(
@@ -923,7 +1002,7 @@ impl ProgressReporter {
             return;
         }
         if self.json {
-            println!("{}", progress_event_json(&progress));
+            emit_line(progress_event_json(&progress));
             let _ = io::Write::flush(&mut io::stdout());
             self.phase = Some(progress.phase);
             self.percentage = percentage;
@@ -939,14 +1018,25 @@ impl ProgressReporter {
 
     fn finished(&self) {
         if self.json {
-            println!("{{\"event\":\"finished\"}}");
+            emit_line("{\"event\":\"finished\"}".into());
+        }
+    }
+
+    /// One line (or `integrity` event) saying how the image was authenticated.
+    fn integrity(&self, integrity: &IntegrityState) {
+        if self.json {
+            emit_line(
+                serde_json::json!({ "event": "integrity", "data": integrity_json(integrity) })
+                    .to_string(),
+            );
+        } else {
+            println!("Integrity: {}", integrity.label());
         }
     }
 
     fn failed(&self, message: &str, status: ExitStatus) {
         if self.json {
-            println!(
-                "{}",
+            emit_line(
                 serde_json::json!({
                     "event": "failed",
                     "data": {
@@ -955,9 +1045,28 @@ impl ProgressReporter {
                         "exit_code": status.code(),
                     },
                 })
+                .to_string(),
             );
         }
     }
+}
+
+/// Write one newline-delimited JSON event to stdout. Tests record the events
+/// per thread instead so they can assert on the exact stream.
+#[cfg(not(test))]
+fn emit_line(line: String) {
+    println!("{line}");
+}
+
+#[cfg(test)]
+fn emit_line(line: String) {
+    CAPTURED_EVENTS.with(|events| events.borrow_mut().push(line));
+}
+
+#[cfg(test)]
+thread_local! {
+    static CAPTURED_EVENTS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 fn progress_event_json(progress: &Progress) -> String {
@@ -7755,9 +7864,33 @@ mod cli_tests {
     use clap_complete::Shell;
 
     use super::{
-        Cli, CliError, Commands, ExitStatus, FlashRequest, FlashSource, WriteBackend,
-        classify_source, error_json, exit_status, flash_image, wants_json_errors, write_image,
+        CAPTURED_EVENTS, Cli, CliError, Commands, ExitStatus, FetchedImage, FlashRequest,
+        FlashSource, IntegrityState, ProgressReporter, WriteBackend, classify_source, error_json,
+        exit_status, flash_image, integrity_json, wants_json_errors, write_image,
     };
+
+    /// The JSON events a command wrote to stdout on this thread, parsed.
+    fn take_events() -> Vec<serde_json::Value> {
+        CAPTURED_EVENTS
+            .with(|events| std::mem::take(&mut *events.borrow_mut()))
+            .iter()
+            .map(|line| serde_json::from_str(line).expect("each event is one JSON value"))
+            .collect()
+    }
+
+    fn event_names(events: &[serde_json::Value]) -> Vec<&str> {
+        events
+            .iter()
+            .map(|event| event["event"].as_str().expect("event name"))
+            .collect()
+    }
+
+    fn is_terminal(event: &serde_json::Value) -> bool {
+        matches!(
+            event["event"].as_str(),
+            Some("finished" | "failed" | "confirmation_required")
+        )
+    }
 
     const PHRASE: &str = "ERASE /dev/fake TEST";
 
@@ -7803,6 +7936,9 @@ mod cli_tests {
     struct FakeBackend {
         eligible: bool,
         write_error: Option<fn() -> Error>,
+        fetch_error: Option<fn() -> Error>,
+        prepare_error: Option<fn() -> Error>,
+        integrity: Option<IntegrityState>,
         fetches: RefCell<Vec<String>>,
         prepares: RefCell<Vec<(PathBuf, String)>>,
         writes: RefCell<Vec<String>>,
@@ -7832,9 +7968,18 @@ mod cli_tests {
             _index: usize,
             _output: Option<PathBuf>,
             _progress: &mut dyn FnMut(Progress),
-        ) -> Result<ImageReport> {
+        ) -> Result<FetchedImage> {
             self.fetches.borrow_mut().push(slug.into());
-            Ok(fake_plan(PathBuf::from(format!("{slug}.iso")), "/dev/fake").image)
+            if let Some(error) = self.fetch_error {
+                return Err(error().into());
+            }
+            Ok(FetchedImage {
+                report: fake_plan(PathBuf::from(format!("{slug}.iso")), "/dev/fake").image,
+                integrity: self
+                    .integrity
+                    .clone()
+                    .unwrap_or(IntegrityState::TransferChecked),
+            })
         }
 
         fn prepare(
@@ -7843,6 +7988,9 @@ mod cli_tests {
             target: &str,
             _options: WriteOptions,
         ) -> Result<WritePlan> {
+            if let Some(error) = self.prepare_error {
+                return Err(error().into());
+            }
             self.prepares
                 .borrow_mut()
                 .push((image.clone(), target.into()));
@@ -7869,6 +8017,7 @@ mod cli_tests {
             target: "/dev/fake".into(),
             index: 0,
             output: None,
+            require_signature: false,
             confirm: confirm.map(Into::into),
             json_progress: true,
             options: WriteOptions::default(),
@@ -8151,6 +8300,226 @@ mod cli_tests {
             ])
             .is_err()
         );
+    }
+
+    fn download_refusal() -> Error {
+        Error::InvalidDownload(
+            "a verified publisher signature is required but this image has only: Publisher \
+             checksum verified"
+                .into(),
+        )
+    }
+
+    #[test]
+    fn require_signature_parses_on_download_and_flash_and_defaults_off() {
+        let on = |cli: Cli| match cli.command {
+            Some(
+                Commands::Download {
+                    require_signature, ..
+                }
+                | Commands::Flash {
+                    require_signature, ..
+                },
+            ) => require_signature,
+            other => panic!("unexpected command {other:?}"),
+        };
+        assert!(!on(parse(&["bootable", "download", "ubuntu"])));
+        assert!(on(parse(&[
+            "bootable",
+            "download",
+            "ubuntu",
+            "--require-signature"
+        ])));
+        assert!(!on(parse(&["bootable", "flash", "ubuntu", "/dev/x"])));
+        assert!(on(parse(&[
+            "bootable",
+            "flash",
+            "ubuntu",
+            "/dev/x",
+            "--require-signature",
+            "--json-progress"
+        ])));
+        // Only the commands that fetch catalog images take the flag.
+        assert!(
+            Cli::try_parse_from([
+                "bootable",
+                "write",
+                "a.iso",
+                "/dev/x",
+                "--require-signature"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn signature_refusals_exit_with_the_verification_code() {
+        assert_eq!(
+            exit_status(&download_refusal().into()),
+            ExitStatus::Verification
+        );
+        let rejected = Error::InvalidDownload(
+            "signature verification failed for https://example.org/SHA256SUMS".into(),
+        );
+        assert_eq!(exit_status(&rejected.into()), ExitStatus::Verification);
+        // An unrelated refusal keeps the generic code.
+        assert_eq!(
+            exit_status(&Error::InvalidDownload("not an ISO".into()).into()),
+            ExitStatus::Error
+        );
+    }
+
+    #[test]
+    fn json_progress_signature_refusal_emits_one_failed_event_with_code_4() {
+        take_events();
+        let backend = FakeBackend {
+            eligible: true,
+            fetch_error: Some(download_refusal),
+            ..FakeBackend::default()
+        };
+        let mut flash = request("ubuntu", Some(PHRASE));
+        flash.require_signature = true;
+        let error = flash_image(&backend, flash).expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Verification);
+        assert!(backend.prepares.borrow().is_empty());
+        assert!(backend.writes.borrow().is_empty());
+        let events = take_events();
+        assert_eq!(event_names(&events), ["failed"]);
+        assert_eq!(events[0]["data"]["kind"], "verification_failed");
+        assert_eq!(events[0]["data"]["exit_code"], 4);
+        assert!(
+            events[0]["data"]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("signature is required"))
+        );
+    }
+
+    #[test]
+    fn require_signature_with_a_local_image_is_a_usage_error() {
+        take_events();
+        let backend = FakeBackend::eligible();
+        let mut flash = request("local.iso", Some(PHRASE));
+        flash.require_signature = true;
+        let error = flash_image(&backend, flash).expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Usage);
+        assert!(backend.prepares.borrow().is_empty());
+        assert!(backend.writes.borrow().is_empty());
+        let events = take_events();
+        assert_eq!(event_names(&events), ["failed"]);
+        assert_eq!(events[0]["data"]["exit_code"], 2);
+    }
+
+    #[test]
+    fn early_json_progress_failures_emit_exactly_one_terminal_event() {
+        let ineligible = FakeBackend::default();
+        let prepare_fails = FakeBackend {
+            eligible: true,
+            prepare_error: Some(|| Error::StalePlan("the device changed".into())),
+            ..FakeBackend::default()
+        };
+        let unsafe_target = FakeBackend {
+            eligible: true,
+            prepare_error: Some(|| Error::UnsafeTarget("/dev/sda: system disk".into())),
+            ..FakeBackend::default()
+        };
+        let cases: [(&str, &FakeBackend, ExitStatus); 3] = [
+            ("cachyos", &ineligible, ExitStatus::Confirmation),
+            ("local.iso", &prepare_fails, ExitStatus::Error),
+            ("local.iso", &unsafe_target, ExitStatus::Confirmation),
+        ];
+        for (source, backend, status) in cases {
+            take_events();
+            let error = flash_image(backend, request(source, Some(PHRASE))).expect_err("fails");
+            assert_eq!(exit_status(&error), status, "{source}");
+            let events = take_events();
+            assert_eq!(
+                events.iter().filter(|event| is_terminal(event)).count(),
+                1,
+                "{source}: {events:?}"
+            );
+            let last = events.last().expect("an event");
+            assert_eq!(last["event"], "failed");
+            assert_eq!(last["data"]["kind"], status.name());
+            assert_eq!(last["data"]["exit_code"], status.code());
+        }
+        // `write` reports a failed plan the same way.
+        take_events();
+        let error = write_image(
+            &prepare_fails,
+            PathBuf::from("image.iso"),
+            "/dev/fake",
+            Some(PHRASE.into()),
+            true,
+            WriteOptions::default(),
+        )
+        .expect_err("fails");
+        assert_eq!(exit_status(&error), ExitStatus::Error);
+        let events = take_events();
+        assert_eq!(event_names(&events), ["failed"]);
+    }
+
+    #[test]
+    fn json_progress_streams_end_in_exactly_one_terminal_event() {
+        // Success.
+        take_events();
+        flash_image(&FakeBackend::eligible(), request("cachyos", Some(PHRASE))).expect("flashed");
+        let events = take_events();
+        assert_eq!(event_names(&events), ["integrity", "finished"]);
+        // No confirmation: the plan event is the terminal one.
+        flash_image(&FakeBackend::eligible(), request("cachyos", None)).expect_err("needs phrase");
+        let events = take_events();
+        assert_eq!(event_names(&events), ["integrity", "confirmation_required"]);
+        // Wrong phrase.
+        flash_image(&FakeBackend::eligible(), request("local.iso", Some("no"))).expect_err("bad");
+        let events = take_events();
+        assert_eq!(event_names(&events), ["failed"]);
+        assert_eq!(events[0]["data"]["exit_code"], 3);
+    }
+
+    #[test]
+    fn integrity_json_has_a_stable_shape() {
+        let transfer = integrity_json(&IntegrityState::TransferChecked);
+        assert_eq!(transfer["label"], IntegrityState::TransferChecked.label());
+        assert_eq!(transfer["signature_verified"], false);
+        assert_eq!(transfer["signature_expected_but_unverified"], false);
+        assert_eq!(transfer.as_object().expect("object").len(), 3);
+
+        let downgraded = IntegrityState::ChecksumVerified {
+            algorithm: bootable_core::ChecksumAlgorithm::Sha256,
+            signature_note: Some("signature expected but unavailable".into()),
+            signature_expected: true,
+        };
+        let value = integrity_json(&downgraded);
+        assert_eq!(value["label"], downgraded.label());
+        assert!(
+            value["label"]
+                .as_str()
+                .is_some_and(|label| label.contains("signature expected but unavailable"))
+        );
+        assert_eq!(value["signature_verified"], false);
+        assert_eq!(value["signature_expected_but_unverified"], true);
+    }
+
+    #[test]
+    fn integrity_event_carries_the_state_of_the_fetched_image() {
+        take_events();
+        let downgraded = IntegrityState::ChecksumVerified {
+            algorithm: bootable_core::ChecksumAlgorithm::Sha256,
+            signature_note: Some("signature expected but unavailable".into()),
+            signature_expected: true,
+        };
+        let backend = FakeBackend {
+            eligible: true,
+            integrity: Some(downgraded.clone()),
+            ..FakeBackend::default()
+        };
+        flash_image(&backend, request("ubuntu", Some(PHRASE))).expect("flashed");
+        let events = take_events();
+        assert_eq!(events[0]["event"], "integrity");
+        assert_eq!(events[0]["data"], integrity_json(&downgraded));
+        ProgressReporter::new(true).integrity(&IntegrityState::TransferChecked);
+        let events = take_events();
+        assert_eq!(events[0]["data"]["signature_verified"], false);
     }
 
     #[test]
