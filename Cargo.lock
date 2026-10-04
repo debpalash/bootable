@@ -955,6 +955,7 @@ dependencies = [
  "ratatui-image",
  "rfd",
  "serde_json",
+ "unicode-width",
 ]
 
 [[package]]
