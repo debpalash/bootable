@@ -165,3 +165,29 @@ tooltip.guide = Guide and shortcuts ({shortcut})
 tooltip.refresh_drives = Refresh removable drives
 tooltip.refresh_distrowatch = Refresh DistroWatch data
 tooltip.refresh_pi = Refresh Raspberry Pi catalog
+
+# Source panel
+source.title = Choose an image
+source.hint = The image is inspected before any write is allowed
+source.formats = ISO, IMG, RAW, or compressed disk image
+source.inspected = Inspected
+source.recent.title = Recent images
+source.recent.empty = Images you use appear here for one-click reuse
+source.recent.in_use = In use
+source.dialog.title = Boot images
+source.dialog.filter_iso = ISO images
+source.dialog.filter_backup = Raw drive image
+
+# Target panel
+target.title = Choose a drive
+target.empty = Connect a removable USB or SD drive, then refresh
+target.selected_drive = Selected drive
+target.confirm_physical = Confirm the physical drive before continuing · erasure starts only after review
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Source · choose or change the image
+focus.target = Target · choose an eligible removable drive
+focus.setup = Setup options · configure image-specific choices
+focus.review = Review & write · inspect the plan before erasure
+focus.discover = Discover images · browse trusted catalogs
+focus.refresh = Refresh drives · rescan removable media

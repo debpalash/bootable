@@ -154,3 +154,29 @@ tooltip.guide = Руководство и сочетания клавиш ({shor
 tooltip.refresh_drives = Обновить съёмные накопители
 tooltip.refresh_distrowatch = Обновить данные DistroWatch
 tooltip.refresh_pi = Обновить каталог Raspberry Pi
+
+# Source panel
+source.title = Выбрать образ
+source.hint = Образ проверяется до того, как будет разрешена любая запись
+source.formats = Образ диска ISO, IMG, RAW или сжатый
+source.inspected = Проверен
+source.recent.title = Недавние образы
+source.recent.empty = Используемые вами образы появятся здесь для повторного выбора одним щелчком
+source.recent.in_use = Используется
+source.dialog.title = Загрузочные образы
+source.dialog.filter_iso = Образы ISO
+source.dialog.filter_backup = Необработанный образ накопителя
+
+# Target panel
+target.title = Выбрать накопитель
+target.empty = Подключите съёмный USB- или SD-накопитель, затем обновите список
+target.selected_drive = Выбранный накопитель
+target.confirm_physical = Убедитесь, что это нужный физический накопитель · стирание начнётся только после проверки
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Источник · выберите или смените образ
+focus.target = Цель · выберите подходящий съёмный накопитель
+focus.setup = Параметры настройки · настройте параметры, зависящие от образа
+focus.review = Проверка и запись · изучите план до стирания
+focus.discover = Найти образы · просмотр надёжных каталогов
+focus.refresh = Обновить накопители · повторный поиск съёмных носителей

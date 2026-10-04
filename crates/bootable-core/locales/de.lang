@@ -147,3 +147,29 @@ tooltip.guide = Anleitung und Tastenkürzel ({shortcut})
 tooltip.refresh_drives = Wechsellaufwerke aktualisieren
 tooltip.refresh_distrowatch = DistroWatch-Daten aktualisieren
 tooltip.refresh_pi = Raspberry-Pi-Katalog aktualisieren
+
+# Source panel
+source.title = Abbild auswählen
+source.hint = Das Abbild wird geprüft, bevor ein Schreibvorgang erlaubt wird
+source.formats = ISO-, IMG-, RAW- oder komprimiertes Datenträgerabbild
+source.inspected = Geprüft
+source.recent.title = Zuletzt verwendete Abbilder
+source.recent.empty = Von Ihnen verwendete Abbilder erscheinen hier zur Wiederverwendung mit einem Klick
+source.recent.in_use = In Verwendung
+source.dialog.title = Boot-Abbilder
+source.dialog.filter_iso = ISO-Abbilder
+source.dialog.filter_backup = Rohabbild des Laufwerks
+
+# Target panel
+target.title = Laufwerk auswählen
+target.empty = Schließen Sie ein USB- oder SD-Wechsellaufwerk an und aktualisieren Sie dann
+target.selected_drive = Ausgewähltes Laufwerk
+target.confirm_physical = Bestätigen Sie das physische Laufwerk, bevor Sie fortfahren · das Löschen beginnt erst nach der Prüfung
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Quelle · Abbild auswählen oder ändern
+focus.target = Ziel · ein geeignetes Wechsellaufwerk auswählen
+focus.setup = Einrichtungsoptionen · abbildspezifische Optionen festlegen
+focus.review = Prüfen & schreiben · Plan vor dem Löschen prüfen
+focus.discover = Abbilder entdecken · vertrauenswürdige Kataloge durchsuchen
+focus.refresh = Laufwerke aktualisieren · Wechselmedien erneut suchen

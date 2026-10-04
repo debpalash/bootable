@@ -147,3 +147,29 @@ tooltip.guide = Guía y atajos ({shortcut})
 tooltip.refresh_drives = Actualizar unidades extraíbles
 tooltip.refresh_distrowatch = Actualizar los datos de DistroWatch
 tooltip.refresh_pi = Actualizar el catálogo de Raspberry Pi
+
+# Source panel
+source.title = Elegir una imagen
+source.hint = La imagen se inspecciona antes de permitir cualquier escritura
+source.formats = Imagen de disco ISO, IMG, RAW o comprimida
+source.inspected = Inspeccionada
+source.recent.title = Imágenes recientes
+source.recent.empty = Las imágenes que uses aparecerán aquí para reutilizarlas con un clic
+source.recent.in_use = En uso
+source.dialog.title = Imágenes de arranque
+source.dialog.filter_iso = Imágenes ISO
+source.dialog.filter_backup = Imagen de unidad sin procesar
+
+# Target panel
+target.title = Elegir una unidad
+target.empty = Conecta una unidad USB o SD extraíble y luego actualiza
+target.selected_drive = Unidad seleccionada
+target.confirm_physical = Confirma la unidad física antes de continuar · el borrado solo comienza tras la revisión
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Origen · elige o cambia la imagen
+focus.target = Destino · elige una unidad extraíble válida
+focus.setup = Opciones de configuración · ajusta las opciones propias de la imagen
+focus.review = Revisar y escribir · inspecciona el plan antes del borrado
+focus.discover = Descubrir imágenes · explora catálogos de confianza
+focus.refresh = Actualizar unidades · vuelve a buscar medios extraíbles

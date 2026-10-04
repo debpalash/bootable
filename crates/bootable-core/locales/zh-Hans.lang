@@ -145,3 +145,29 @@ tooltip.guide = 指南和快捷键（{shortcut}）
 tooltip.refresh_drives = 刷新可移动驱动器
 tooltip.refresh_distrowatch = 刷新 DistroWatch 数据
 tooltip.refresh_pi = 刷新 Raspberry Pi 目录
+
+# Source panel
+source.title = 选择镜像
+source.hint = 在允许任何写入之前会先检查镜像
+source.formats = ISO、IMG、RAW 或压缩磁盘镜像
+source.inspected = 已检查
+source.recent.title = 最近的镜像
+source.recent.empty = 您使用过的镜像会显示在这里，可一键重新使用
+source.recent.in_use = 使用中
+source.dialog.title = 启动镜像
+source.dialog.filter_iso = ISO 镜像
+source.dialog.filter_backup = 原始驱动器镜像
+
+# Target panel
+target.title = 选择驱动器
+target.empty = 请连接可移动的 USB 或 SD 驱动器，然后刷新
+target.selected_drive = 所选驱动器
+target.confirm_physical = 继续之前请确认实际的物理驱动器 · 仅在检查之后才会开始擦除
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = 源 · 选择或更改镜像
+focus.target = 目标 · 选择符合条件的可移动驱动器
+focus.setup = 设置选项 · 配置与镜像相关的选择
+focus.review = 检查并写入 · 擦除之前先检查计划
+focus.discover = 发现镜像 · 浏览可信目录
+focus.refresh = 刷新驱动器 · 重新扫描可移动介质

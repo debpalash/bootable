@@ -147,3 +147,29 @@ tooltip.guide = Guia e atalhos ({shortcut})
 tooltip.refresh_drives = Atualizar unidades removíveis
 tooltip.refresh_distrowatch = Atualizar os dados do DistroWatch
 tooltip.refresh_pi = Atualizar o catálogo do Raspberry Pi
+
+# Source panel
+source.title = Escolher uma imagem
+source.hint = A imagem é inspecionada antes de qualquer gravação ser permitida
+source.formats = Imagem de disco ISO, IMG, RAW ou compactada
+source.inspected = Inspecionada
+source.recent.title = Imagens recentes
+source.recent.empty = As imagens que você usa aparecem aqui para reutilização com um clique
+source.recent.in_use = Em uso
+source.dialog.title = Imagens de inicialização
+source.dialog.filter_iso = Imagens ISO
+source.dialog.filter_backup = Imagem bruta da unidade
+
+# Target panel
+target.title = Escolher uma unidade
+target.empty = Conecte uma unidade USB ou SD removível e depois atualize
+target.selected_drive = Unidade selecionada
+target.confirm_physical = Confirme a unidade física antes de continuar · o apagamento só começa após a revisão
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Origem · escolha ou altere a imagem
+focus.target = Destino · escolha uma unidade removível elegível
+focus.setup = Opções de configuração · defina as escolhas específicas da imagem
+focus.review = Revisar e gravar · inspecione o plano antes do apagamento
+focus.discover = Descobrir imagens · navegue por catálogos confiáveis
+focus.refresh = Atualizar unidades · verifique novamente as mídias removíveis

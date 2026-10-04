@@ -149,3 +149,29 @@ tooltip.guide = Guide et raccourcis ({shortcut})
 tooltip.refresh_drives = Actualiser les lecteurs amovibles
 tooltip.refresh_distrowatch = Actualiser les données DistroWatch
 tooltip.refresh_pi = Actualiser le catalogue Raspberry Pi
+
+# Source panel
+source.title = Choisir une image
+source.hint = L'image est inspectée avant toute écriture
+source.formats = Image disque ISO, IMG, RAW ou compressée
+source.inspected = Inspectée
+source.recent.title = Images récentes
+source.recent.empty = Les images que vous utilisez apparaissent ici pour être réutilisées en un clic
+source.recent.in_use = Utilisée
+source.dialog.title = Images de démarrage
+source.dialog.filter_iso = Images ISO
+source.dialog.filter_backup = Image brute du lecteur
+
+# Target panel
+target.title = Choisir un lecteur
+target.empty = Connectez un lecteur USB ou SD amovible, puis actualisez
+target.selected_drive = Lecteur sélectionné
+target.confirm_physical = Confirmez le lecteur physique avant de continuer · l'effacement ne commence qu'après la vérification
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Source · choisissez ou changez l'image
+focus.target = Cible · choisissez un lecteur amovible éligible
+focus.setup = Options de configuration · réglez les choix propres à l'image
+focus.review = Vérifier et écrire · examinez le plan avant l'effacement
+focus.discover = Découvrir des images · parcourez des catalogues de confiance
+focus.refresh = Actualiser les lecteurs · réanalysez les supports amovibles

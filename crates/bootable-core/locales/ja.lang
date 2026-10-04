@@ -145,3 +145,29 @@ tooltip.guide = ガイドとショートカット ({shortcut})
 tooltip.refresh_drives = リムーバブルドライブを更新
 tooltip.refresh_distrowatch = DistroWatchのデータを更新
 tooltip.refresh_pi = Raspberry Piカタログを更新
+
+# Source panel
+source.title = イメージを選択
+source.hint = 書き込みを許可する前にイメージを検査します
+source.formats = ISO、IMG、RAW、または圧縮ディスクイメージ
+source.inspected = 検査済み
+source.recent.title = 最近のイメージ
+source.recent.empty = 使用したイメージはここに表示され、ワンクリックで再利用できます
+source.recent.in_use = 使用中
+source.dialog.title = ブートイメージ
+source.dialog.filter_iso = ISOイメージ
+source.dialog.filter_backup = ドライブのRAWイメージ
+
+# Target panel
+target.title = ドライブを選択
+target.empty = リムーバブルUSBまたはSDドライブを接続してから更新してください
+target.selected_drive = 選択したドライブ
+target.confirm_physical = 続行する前に物理ドライブを確認してください · 消去は確認後にのみ開始されます
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = ソース · イメージを選択または変更
+focus.target = ターゲット · 使用可能なリムーバブルドライブを選択
+focus.setup = セットアップオプション · イメージ固有の設定を行う
+focus.review = 確認して書き込み · 消去の前にプランを点検
+focus.discover = イメージを探す · 信頼できるカタログを閲覧
+focus.refresh = ドライブを更新 · リムーバブルメディアを再スキャン
