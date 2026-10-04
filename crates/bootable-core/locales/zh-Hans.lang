@@ -171,3 +171,93 @@ focus.setup = 设置选项 · 配置与镜像相关的选择
 focus.review = 检查并写入 · 擦除之前先检查计划
 focus.discover = 发现镜像 · 浏览可信目录
 focus.refresh = 刷新驱动器 · 重新扫描可移动介质
+
+# Setup options: panel titles
+options.windows.title = Windows 安装程序选项
+options.linux.title = Linux / Unix 启动介质
+options.selected_count = 已选择 {count} 项
+options.summary.verification = 验证已开启 · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = 分区方案
+options.windows.scheme_value = 方案：{scheme}
+options.windows.boot_firmware = 引导固件
+options.windows.boot_firmware_experimental = 引导固件 · 实验性
+options.windows.boot_firmware_value = 引导固件：{value}
+options.windows.boot_firmware_value_experimental = 引导固件：{value} · 实验性
+options.windows.boot_firmware_value_compact = 固件：{value}
+options.windows.boot_firmware_hint = 实验性：BIOS + UEFI (CSM) 需要 MBR 方案，目前仅由 Linux 适配器写入。尚未在真实硬件上验证。
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = 绕过 TPM、安全启动和内存检查
+options.windows.bypass_hardware.short = 绕过硬件检查
+options.windows.bypass_hardware.on = 将绕过 Windows 11 的 TPM、安全启动和内存检查
+options.windows.bypass_hardware.off = Windows 11 硬件检查使用 Microsoft 默认设置
+options.windows.offline_account.label = 提供本地/离线账户设置
+options.windows.offline_account.short = 离线账户
+options.windows.offline_account.on = Windows OOBE 将显示本地/离线账户路径
+options.windows.offline_account.off = Windows OOBE 将使用标准账户流程
+options.windows.named_account.label = 创建本地账户：{name}
+options.windows.named_account.short = 指定账户
+options.windows.named_account.on = Windows 将创建本地管理员账户 `{account}`
+options.windows.named_account.off = 已禁用自动创建本地账户
+options.windows.host_region.label = 复制此计算机的区域设置和时区
+options.windows.host_region.short = 主机区域
+options.windows.host_region.on = Windows 将使用区域设置 {locale} 和时区 {zone}
+options.windows.host_region.off = Windows 安装程序将询问区域选项
+options.windows.privacy.label = 应用注重隐私的 OOBE 默认设置
+options.windows.privacy.short = 隐私默认值
+options.windows.privacy.on = Windows OOBE 将使用注重隐私的默认设置
+options.windows.privacy.off = Windows OOBE 隐私问题将保持默认设置
+options.windows.bitlocker.label = 禁用 BitLocker 自动加密
+options.windows.bitlocker.short = 禁用 BitLocker
+options.windows.bitlocker.on = 将禁用 Windows 自动设备加密
+options.windows.bitlocker.off = Windows 可能会自动启用设备加密
+options.windows.qol.label = 体验优化：减少 Copilot、OneDrive、Teams、建议和快速启动
+options.windows.qol.short = 体验优化
+options.windows.qol.on = Windows 将减少 Copilot、OneDrive、Teams、建议和快速启动
+options.windows.qol.off = Copilot、OneDrive、Teams、建议和快速启动将保持 Windows 默认行为
+options.windows.ca2023.label = 使用 Windows UEFI CA 2023 签名的引导加载程序
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA 2023 启动介质需要更新的安全启动固件证书
+options.windows.ca2023.off = 启动介质将使用标准的 Windows 引导加载程序
+options.windows.skusipolicy.label = 应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = 将应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.skusipolicy.off = 将不应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.smode.label = 强制 Windows S 模式（专家）
+options.windows.smode.short = 强制 S 模式
+options.windows.smode.on = 重新安装后 S 模式可能仍被强制启用；请仔细检查计划
+options.windows.smode.off = 不会强制启用 Windows S 模式
+
+# Setup options: Windows status lines
+status.windows.choose_installer = 更改 Windows 选项之前，请先选择 Windows 安装镜像
+status.windows.not_windows = Windows 设置选项仅适用于 Windows 安装镜像
+status.windows.scheme = Windows 分区方案：{scheme} · 引导固件：{firmware}
+status.windows.firmware = 引导固件：{firmware}（实验性） · 分区方案：{scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windows 安装介质
+options.windows.installer_ready = Windows ISO 已就绪 · 设置选项已解锁
+options.windows.installer_locked = 选择 Windows ISO 以解锁设置选项
+options.windows.choose_iso = 选择 Windows ISO
+options.windows.replace_iso = 替换 Windows ISO
+options.windows.unavailable_note = 不可用的项目无法点击。现有的 autounattend.xml 文件绝不会被覆盖。
+options.windows.silent_install_warning = 静默安装可能会擦除 Windows 安装程序检测到的第一块磁盘，需要单独设计高门槛的安全机制。
+
+# Setup options: Linux / Unix media
+options.linux.layout = 保留完整的可启动磁盘布局
+options.linux.layout_short = 完整磁盘布局
+options.linux.verify = 使用 SHA-256 验证已写入的字节
+options.linux.verify_short = 字节验证
+options.linux.boot_records_short = 引导记录
+options.linux.unmount_short = 安全卸载
+
+# Setup options: media tools
+options.tools.title = 介质工具
+options.tools.subtitle = 验证和备份实用工具
+options.tools.bad_blocks_off = 坏块检测 关
+options.tools.bad_blocks_passes = 坏块检测：{passes} 次
+options.tools.verify_image = 验证镜像
+options.tools.image_folder = 镜像文件夹
+options.tools.backup_drive = 备份驱动器

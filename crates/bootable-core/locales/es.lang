@@ -173,3 +173,93 @@ focus.setup = Opciones de configuración · ajusta las opciones propias de la im
 focus.review = Revisar y escribir · inspecciona el plan antes del borrado
 focus.discover = Descubrir imágenes · explora catálogos de confianza
 focus.refresh = Actualizar unidades · vuelve a buscar medios extraíbles
+
+# Setup options: panel titles
+options.windows.title = Opciones del instalador de Windows
+options.linux.title = Medio de arranque Linux / Unix
+options.selected_count = Seleccionadas: {count}
+options.summary.verification = Verificación activada · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Esquema de particiones
+options.windows.scheme_value = Esquema: {scheme}
+options.windows.boot_firmware = Firmware de arranque
+options.windows.boot_firmware_experimental = Firmware de arranque · experimental
+options.windows.boot_firmware_value = Firmware de arranque: {value}
+options.windows.boot_firmware_value_experimental = Firmware de arranque: {value} · experimental
+options.windows.boot_firmware_value_compact = Firmware: {value}
+options.windows.boot_firmware_hint = Experimental: BIOS + UEFI (CSM) requiere el esquema MBR y por ahora solo lo escribe el adaptador de Linux. Aún no se ha verificado en hardware real.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Omitir las comprobaciones de TPM, Secure Boot y RAM
+options.windows.bypass_hardware.short = Omitir requisitos
+options.windows.bypass_hardware.on = Se omitirán las comprobaciones de TPM, Secure Boot y RAM de Windows 11
+options.windows.bypass_hardware.off = Las comprobaciones de hardware de Windows 11 usan los valores predeterminados de Microsoft
+options.windows.offline_account.label = Mostrar la configuración de cuenta local/sin conexión
+options.windows.offline_account.short = Cuenta sin conexión
+options.windows.offline_account.on = El OOBE de Windows mostrará la opción de cuenta local/sin conexión
+options.windows.offline_account.off = El OOBE de Windows usará su flujo de cuenta estándar
+options.windows.named_account.label = Crear cuenta local: {name}
+options.windows.named_account.short = Cuenta con nombre
+options.windows.named_account.on = Windows creará la cuenta local de administrador `{account}`
+options.windows.named_account.off = Creación automática de cuenta local desactivada
+options.windows.host_region.label = Copiar la configuración regional y la zona horaria de este equipo
+options.windows.host_region.short = Región del equipo
+options.windows.host_region.on = Windows usará la configuración regional {locale} y la zona horaria {zone}
+options.windows.host_region.off = El instalador de Windows preguntará por las opciones regionales
+options.windows.privacy.label = Aplicar valores predeterminados de OOBE centrados en la privacidad
+options.windows.privacy.short = Privacidad por defecto
+options.windows.privacy.on = El OOBE de Windows usará valores predeterminados centrados en la privacidad
+options.windows.privacy.off = Las preguntas de privacidad del OOBE de Windows conservarán sus valores predeterminados
+options.windows.bitlocker.label = Desactivar el cifrado automático de BitLocker
+options.windows.bitlocker.short = Desactivar BitLocker
+options.windows.bitlocker.on = Se desactivará el cifrado automático de dispositivos de Windows
+options.windows.bitlocker.off = Windows puede activar automáticamente el cifrado del dispositivo
+options.windows.qol.label = Mejoras de uso: reducir Copilot, OneDrive, Teams, sugerencias e inicio rápido
+options.windows.qol.short = Mejoras de uso
+options.windows.qol.on = Windows reducirá Copilot, OneDrive, Teams, sugerencias e inicio rápido
+options.windows.qol.off = Windows mantiene el comportamiento predeterminado de Copilot, OneDrive, Teams, sugerencias e inicio rápido
+options.windows.ca2023.label = Usar cargadores de arranque firmados con Windows UEFI CA 2023
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = Los medios de arranque con CA 2023 requieren certificados de firmware Secure Boot actualizados
+options.windows.ca2023.off = El medio de arranque usará los cargadores de arranque estándar de Windows
+options.windows.skusipolicy.label = Aplicar las revocaciones de Secure Boot de SkuSiPolicy.p7b
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = Se aplicarán las revocaciones de Secure Boot de SkuSiPolicy.p7b
+options.windows.skusipolicy.off = No se aplicarán las revocaciones de Secure Boot de SkuSiPolicy.p7b
+options.windows.smode.label = Forzar el modo S de Windows (avanzado)
+options.windows.smode.short = Forzar modo S
+options.windows.smode.on = El modo S puede seguir aplicándose tras reinstalar; revisa el plan con cuidado
+options.windows.smode.off = No se forzará el modo S de Windows
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Elige una imagen de instalación de Windows antes de cambiar las opciones de Windows
+status.windows.not_windows = Las opciones de configuración de Windows solo se aplican a imágenes de instalación de Windows
+status.windows.scheme = Esquema de particiones de Windows: {scheme} · firmware de arranque: {firmware}
+status.windows.firmware = Firmware de arranque: {firmware} (experimental) · esquema de particiones: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Medio de instalación de Windows
+options.windows.installer_ready = ISO de Windows lista · opciones de configuración desbloqueadas
+options.windows.installer_locked = Elige una ISO de Windows para desbloquear las opciones de configuración
+options.windows.choose_iso = Elegir ISO de Windows
+options.windows.replace_iso = Reemplazar ISO de Windows
+options.windows.unavailable_note = Los elementos no disponibles no se pueden pulsar. Los archivos autounattend.xml existentes nunca se sobrescriben.
+options.windows.silent_install_warning = La instalación silenciosa puede borrar el primer disco que detecte el instalador de Windows y requiere un diseño de seguridad aparte con confirmaciones estrictas.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Conservar el diseño completo del disco de arranque
+options.linux.layout_short = Diseño completo del disco
+options.linux.verify = Verificar los bytes escritos con SHA-256
+options.linux.verify_short = Verificación de bytes
+options.linux.boot_records_short = Registros de arranque
+options.linux.unmount_short = Desmontaje seguro
+
+# Setup options: media tools
+options.tools.title = Herramientas de medios
+options.tools.subtitle = Utilidades de verificación y copia de seguridad
+options.tools.bad_blocks_off = Bloques defectuosos: desactivado
+options.tools.bad_blocks_passes = Bloques defectuosos: {passes}x
+options.tools.verify_image = Verificar imagen
+options.tools.image_folder = Carpeta de imágenes
+options.tools.backup_drive = Respaldar unidad

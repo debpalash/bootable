@@ -180,3 +180,93 @@ focus.setup = Параметры настройки · настройте пар
 focus.review = Проверка и запись · изучите план до стирания
 focus.discover = Найти образы · просмотр надёжных каталогов
 focus.refresh = Обновить накопители · повторный поиск съёмных носителей
+
+# Setup options: panel titles
+options.windows.title = Параметры установщика Windows
+options.linux.title = Загрузочный носитель Linux / Unix
+options.selected_count = Выбрано: {count}
+options.summary.verification = Проверка включена · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Схема разделов
+options.windows.scheme_value = Схема: {scheme}
+options.windows.boot_firmware = Прошивка загрузки
+options.windows.boot_firmware_experimental = Прошивка загрузки · экспериментально
+options.windows.boot_firmware_value = Прошивка загрузки: {value}
+options.windows.boot_firmware_value_experimental = Прошивка загрузки: {value} · экспериментально
+options.windows.boot_firmware_value_compact = Прошивка: {value}
+options.windows.boot_firmware_hint = Экспериментально: BIOS + UEFI (CSM) требует схемы MBR и пока записывается только адаптером Linux. На реальном оборудовании ещё не проверено.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Обойти проверки TPM, Secure Boot и объёма ОЗУ
+options.windows.bypass_hardware.short = Обход требований
+options.windows.bypass_hardware.on = Проверки TPM, Secure Boot и ОЗУ в Windows 11 будут обойдены
+options.windows.bypass_hardware.off = Проверки оборудования Windows 11 используют настройки Microsoft по умолчанию
+options.windows.offline_account.label = Показать настройку локальной учётной записи (без сети)
+options.windows.offline_account.short = Локальная запись
+options.windows.offline_account.on = В OOBE Windows будет доступен путь с локальной учётной записью
+options.windows.offline_account.off = OOBE Windows будет использовать стандартную процедуру создания учётной записи
+options.windows.named_account.label = Создать локальную запись: {name}
+options.windows.named_account.short = Именная запись
+options.windows.named_account.on = Windows создаст локальную учётную запись администратора `{account}`
+options.windows.named_account.off = Автоматическое создание локальной учётной записи отключено
+options.windows.host_region.label = Скопировать региональные настройки и часовой пояс этого компьютера
+options.windows.host_region.short = Регион ПК
+options.windows.host_region.on = Windows будет использовать региональные настройки {locale} и часовой пояс {zone}
+options.windows.host_region.off = Программа установки Windows запросит региональные параметры
+options.windows.privacy.label = Применить настройки OOBE, ориентированные на конфиденциальность
+options.windows.privacy.short = Приватность
+options.windows.privacy.on = OOBE Windows будет использовать настройки, ориентированные на конфиденциальность
+options.windows.privacy.off = Вопросы о конфиденциальности в OOBE Windows сохранят значения по умолчанию
+options.windows.bitlocker.label = Отключить автоматическое шифрование BitLocker
+options.windows.bitlocker.short = Без BitLocker
+options.windows.bitlocker.on = Автоматическое шифрование устройства Windows будет отключено
+options.windows.bitlocker.off = Windows может автоматически включить шифрование устройства
+options.windows.qol.label = Удобство: ограничить Copilot, OneDrive, Teams, рекомендации и быстрый запуск
+options.windows.qol.short = Удобство
+options.windows.qol.on = Windows ограничит Copilot, OneDrive, Teams, рекомендации и быстрый запуск
+options.windows.qol.off = Copilot, OneDrive, Teams, рекомендации и быстрый запуск в Windows останутся по умолчанию
+options.windows.ca2023.label = Использовать загрузчики, подписанные Windows UEFI CA 2023
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = Для носителя с CA 2023 нужны обновлённые сертификаты Secure Boot в прошивке
+options.windows.ca2023.off = Загрузочный носитель будет использовать стандартные загрузчики Windows
+options.windows.skusipolicy.label = Применить отзывы Secure Boot из SkuSiPolicy.p7b
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = Отзывы Secure Boot из SkuSiPolicy.p7b будут применены
+options.windows.skusipolicy.off = Отзывы Secure Boot из SkuSiPolicy.p7b не будут применены
+options.windows.smode.label = Принудительно включить режим S Windows (для опытных)
+options.windows.smode.short = Режим S
+options.windows.smode.on = Режим S может остаться принудительным после переустановки; внимательно проверьте план
+options.windows.smode.off = Режим S Windows не будет принудительно включён
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Выберите установочный образ Windows, прежде чем менять параметры Windows
+status.windows.not_windows = Параметры настройки Windows применяются только к установочным образам Windows
+status.windows.scheme = Схема разделов Windows: {scheme} · прошивка загрузки: {firmware}
+status.windows.firmware = Прошивка загрузки: {firmware} (экспериментально) · схема разделов: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Установочный носитель Windows
+options.windows.installer_ready = ISO Windows готов · параметры настройки разблокированы
+options.windows.installer_locked = Выберите ISO Windows, чтобы разблокировать параметры настройки
+options.windows.choose_iso = Выбрать ISO Windows
+options.windows.replace_iso = Заменить ISO Windows
+options.windows.unavailable_note = Недоступные элементы нельзя нажать. Существующие файлы autounattend.xml никогда не перезаписываются.
+options.windows.silent_install_warning = Автоматическая установка может стереть первый диск, обнаруженный программой установки Windows, и требует отдельной защиты с многоступенчатым подтверждением.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Сохранить полную разметку загрузочного диска
+options.linux.layout_short = Полная разметка
+options.linux.verify = Проверить записанные байты по SHA-256
+options.linux.verify_short = Проверка байтов
+options.linux.boot_records_short = Загрузочные записи
+options.linux.unmount_short = Безопасное размонтирование
+
+# Setup options: media tools
+options.tools.title = Инструменты носителя
+options.tools.subtitle = Утилиты проверки и резервного копирования
+options.tools.bad_blocks_off = Сбойные блоки: выкл.
+options.tools.bad_blocks_passes = Сбойные блоки: {passes}x
+options.tools.verify_image = Проверить образ
+options.tools.image_folder = Папка образов
+options.tools.backup_drive = Резервная копия накопителя

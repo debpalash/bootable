@@ -173,3 +173,93 @@ focus.setup = Einrichtungsoptionen · abbildspezifische Optionen festlegen
 focus.review = Prüfen & schreiben · Plan vor dem Löschen prüfen
 focus.discover = Abbilder entdecken · vertrauenswürdige Kataloge durchsuchen
 focus.refresh = Laufwerke aktualisieren · Wechselmedien erneut suchen
+
+# Setup options: panel titles
+options.windows.title = Windows-Installationsoptionen
+options.linux.title = Linux-/Unix-Startmedium
+options.selected_count = {count} ausgewählt
+options.summary.verification = Verifizierung an · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Partitionsschema
+options.windows.scheme_value = Schema: {scheme}
+options.windows.boot_firmware = Boot-Firmware
+options.windows.boot_firmware_experimental = Boot-Firmware · experimentell
+options.windows.boot_firmware_value = Boot-Firmware: {value}
+options.windows.boot_firmware_value_experimental = Boot-Firmware: {value} · experimentell
+options.windows.boot_firmware_value_compact = Firmware: {value}
+options.windows.boot_firmware_hint = Experimentell: BIOS + UEFI (CSM) erfordert das MBR-Schema und wird derzeit nur vom Linux-Adapter geschrieben. Noch nicht auf echter Hardware verifiziert.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = TPM-, Secure-Boot- und RAM-Prüfungen umgehen
+options.windows.bypass_hardware.short = Hardware-Umgehung
+options.windows.bypass_hardware.on = Die TPM-, Secure-Boot- und RAM-Prüfungen von Windows 11 werden umgangen
+options.windows.bypass_hardware.off = Die Hardwareprüfungen von Windows 11 verwenden die Microsoft-Standardwerte
+options.windows.offline_account.label = Einrichtung eines lokalen/Offline-Kontos anbieten
+options.windows.offline_account.short = Offline-Konto
+options.windows.offline_account.on = Das Windows-OOBE bietet den Weg über ein lokales/Offline-Konto an
+options.windows.offline_account.off = Das Windows-OOBE verwendet den Standardablauf für Konten
+options.windows.named_account.label = Lokales Konto erstellen: {name}
+options.windows.named_account.short = Benanntes Konto
+options.windows.named_account.on = Windows erstellt das lokale Administratorkonto `{account}`
+options.windows.named_account.off = Automatische Erstellung eines lokalen Kontos deaktiviert
+options.windows.host_region.label = Gebietsschema und Zeitzone dieses Computers übernehmen
+options.windows.host_region.short = Host-Region
+options.windows.host_region.on = Windows verwendet das Gebietsschema {locale} und die Zeitzone {zone}
+options.windows.host_region.off = Das Windows-Setup fragt die Regionaloptionen ab
+options.windows.privacy.label = Datenschutzfreundliche OOBE-Standardwerte anwenden
+options.windows.privacy.short = Datenschutz-Standard
+options.windows.privacy.on = Das Windows-OOBE verwendet datenschutzfreundliche Standardwerte
+options.windows.privacy.off = Die Datenschutzfragen des Windows-OOBE bleiben auf ihren Standardwerten
+options.windows.bitlocker.label = Automatische BitLocker-Verschlüsselung deaktivieren
+options.windows.bitlocker.short = BitLocker deaktivieren
+options.windows.bitlocker.on = Die automatische Geräteverschlüsselung von Windows wird deaktiviert
+options.windows.bitlocker.off = Windows aktiviert die Geräteverschlüsselung möglicherweise automatisch
+options.windows.qol.label = Komfort: Copilot, OneDrive, Teams, Vorschläge und Schnellstart reduzieren
+options.windows.qol.short = Komfort-Richtlinien
+options.windows.qol.on = Windows reduziert Copilot, OneDrive, Teams, Vorschläge und Schnellstart
+options.windows.qol.off = Windows behält das Standardverhalten von Copilot, OneDrive, Teams, Vorschlägen und Schnellstart bei
+options.windows.ca2023.label = Mit Windows UEFI CA 2023 signierte Bootloader verwenden
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA-2023-Startmedien erfordern aktualisierte Secure-Boot-Firmware-Zertifikate
+options.windows.ca2023.off = Das Startmedium verwendet die Standard-Bootloader von Windows
+options.windows.skusipolicy.label = Secure-Boot-Sperrungen aus SkuSiPolicy.p7b anwenden
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = Die Secure-Boot-Sperrungen aus SkuSiPolicy.p7b werden angewendet
+options.windows.skusipolicy.off = Die Secure-Boot-Sperrungen aus SkuSiPolicy.p7b werden nicht angewendet
+options.windows.smode.label = Windows-S-Modus erzwingen (Experten)
+options.windows.smode.short = S-Modus erzwingen
+options.windows.smode.on = Der S-Modus kann nach einer Neuinstallation erzwungen bleiben; prüfen Sie den Plan sorgfältig
+options.windows.smode.off = Der Windows-S-Modus wird nicht erzwungen
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Wählen Sie ein Windows-Installationsabbild, bevor Sie Windows-Optionen ändern
+status.windows.not_windows = Windows-Einrichtungsoptionen gelten nur für Windows-Installationsabbilder
+status.windows.scheme = Windows-Partitionsschema: {scheme} · Boot-Firmware: {firmware}
+status.windows.firmware = Boot-Firmware: {firmware} (experimentell) · Partitionsschema: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windows-Installationsmedium
+options.windows.installer_ready = Windows-ISO bereit · Einrichtungsoptionen freigeschaltet
+options.windows.installer_locked = Wählen Sie eine Windows-ISO, um die Einrichtungsoptionen freizuschalten
+options.windows.choose_iso = Windows-ISO auswählen
+options.windows.replace_iso = Windows-ISO ersetzen
+options.windows.unavailable_note = Nicht verfügbare Elemente sind nicht anklickbar. Vorhandene autounattend.xml-Dateien werden nie überschrieben.
+options.windows.silent_install_warning = Eine unbeaufsichtigte Installation kann die erste vom Windows-Setup erkannte Festplatte löschen und erfordert ein eigenes, bewusst hürdenreiches Sicherheitskonzept.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Vollständiges Layout des startfähigen Datenträgers beibehalten
+options.linux.layout_short = Volles Datenträgerlayout
+options.linux.verify = Geschriebene Bytes mit SHA-256 verifizieren
+options.linux.verify_short = Byte-Verifizierung
+options.linux.boot_records_short = Boot-Records
+options.linux.unmount_short = Sicheres Aushängen
+
+# Setup options: media tools
+options.tools.title = Medienwerkzeuge
+options.tools.subtitle = Werkzeuge zur Verifizierung und Sicherung
+options.tools.bad_blocks_off = Defekte Blöcke aus
+options.tools.bad_blocks_passes = Defekte Blöcke: {passes}x
+options.tools.verify_image = Abbild verifizieren
+options.tools.image_folder = Abbildordner
+options.tools.backup_drive = Laufwerk sichern

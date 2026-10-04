@@ -171,3 +171,93 @@ focus.setup = セットアップオプション · イメージ固有の設定�
 focus.review = 確認して書き込み · 消去の前にプランを点検
 focus.discover = イメージを探す · 信頼できるカタログを閲覧
 focus.refresh = ドライブを更新 · リムーバブルメディアを再スキャン
+
+# Setup options: panel titles
+options.windows.title = Windowsインストーラーのオプション
+options.linux.title = Linux / Unix ブートメディア
+options.selected_count = {count}件を選択
+options.summary.verification = 検証オン · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = パーティションスキーム
+options.windows.scheme_value = スキーム: {scheme}
+options.windows.boot_firmware = ブートファームウェア
+options.windows.boot_firmware_experimental = ブートファームウェア · 実験的
+options.windows.boot_firmware_value = ブートファームウェア: {value}
+options.windows.boot_firmware_value_experimental = ブートファームウェア: {value} · 実験的
+options.windows.boot_firmware_value_compact = ファームウェア: {value}
+options.windows.boot_firmware_hint = 実験的: BIOS + UEFI (CSM) にはMBR方式が必要で、現在はLinuxアダプターでのみ書き込まれます。実機ではまだ検証されていません。
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = TPM、セキュアブート、RAMのチェックを回避
+options.windows.bypass_hardware.short = 要件の回避
+options.windows.bypass_hardware.on = Windows 11のTPM、セキュアブート、RAMのチェックを回避します
+options.windows.bypass_hardware.off = Windows 11のハードウェアチェックはMicrosoftの既定値を使用します
+options.windows.offline_account.label = ローカル/オフラインアカウントの設定を表示
+options.windows.offline_account.short = オフラインアカウント
+options.windows.offline_account.on = Windows OOBEでローカル/オフラインアカウントの手順が表示されます
+options.windows.offline_account.off = Windows OOBEは標準のアカウント手順を使用します
+options.windows.named_account.label = ローカルアカウントを作成: {name}
+options.windows.named_account.short = 名前付きアカウント
+options.windows.named_account.on = Windowsがローカル管理者アカウント `{account}` を作成します
+options.windows.named_account.off = ローカルアカウントの自動作成を無効にしました
+options.windows.host_region.label = このコンピューターのロケールとタイムゾーンをコピー
+options.windows.host_region.short = ホストの地域設定
+options.windows.host_region.on = Windowsはロケール {locale} とタイムゾーン {zone} を使用します
+options.windows.host_region.off = Windowsセットアップで地域オプションを確認します
+options.windows.privacy.label = プライバシー重視のOOBE既定値を適用
+options.windows.privacy.short = プライバシー既定値
+options.windows.privacy.on = Windows OOBEはプライバシー重視の既定値を使用します
+options.windows.privacy.off = Windows OOBEのプライバシーに関する質問は既定のままになります
+options.windows.bitlocker.label = BitLockerの自動暗号化を無効にする
+options.windows.bitlocker.short = BitLockerを無効化
+options.windows.bitlocker.on = Windowsの自動デバイス暗号化が無効になります
+options.windows.bitlocker.off = Windowsがデバイス暗号化を自動的に有効にする場合があります
+options.windows.qol.label = 使い勝手: Copilot、OneDrive、Teams、おすすめ、高速スタートアップを抑制
+options.windows.qol.short = 使い勝手の設定
+options.windows.qol.on = WindowsでCopilot、OneDrive、Teams、おすすめ、高速スタートアップが抑制されます
+options.windows.qol.off = Copilot、OneDrive、Teams、おすすめ、高速スタートアップはWindowsの既定の動作のままです
+options.windows.ca2023.label = Windows UEFI CA 2023で署名されたブートローダーを使用
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA 2023のブートメディアには、更新されたセキュアブートのファームウェア証明書が必要です
+options.windows.ca2023.off = ブートメディアは標準のWindowsブートローダーを使用します
+options.windows.skusipolicy.label = SkuSiPolicy.p7bのセキュアブート失効を適用
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = SkuSiPolicy.p7bのセキュアブート失効が適用されます
+options.windows.skusipolicy.off = SkuSiPolicy.p7bのセキュアブート失効は適用されません
+options.windows.smode.label = WindowsのSモードを強制（上級者向け）
+options.windows.smode.short = Sモードを強制
+options.windows.smode.on = 再インストール後もSモードが強制されたままになる場合があります。プランを慎重に確認してください
+options.windows.smode.off = WindowsのSモードは強制されません
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Windowsのオプションを変更する前に、Windowsインストールイメージを選択してください
+status.windows.not_windows = Windowsのセットアップオプションは、Windowsインストールイメージにのみ適用されます
+status.windows.scheme = Windowsのパーティションスキーム: {scheme} · ブートファームウェア: {firmware}
+status.windows.firmware = ブートファームウェア: {firmware}（実験的） · パーティションスキーム: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windowsインストールメディア
+options.windows.installer_ready = Windows ISOの準備完了 · セットアップの選択が有効です
+options.windows.installer_locked = Windows ISOを選択するとセットアップの選択が有効になります
+options.windows.choose_iso = Windows ISOを選択
+options.windows.replace_iso = Windows ISOを置き換え
+options.windows.unavailable_note = 利用できない項目はクリックできません。既存のautounattend.xmlファイルが上書きされることはありません。
+options.windows.silent_install_warning = サイレントインストールでは、Windowsセットアップが最初に検出したディスクが消去される可能性があり、確認手順を厳格にした別の安全設計が必要です。
+
+# Setup options: Linux / Unix media
+options.linux.layout = ブート可能なディスクのレイアウト全体を保持
+options.linux.layout_short = ディスクレイアウト全体
+options.linux.verify = 書き込んだバイトをSHA-256で検証
+options.linux.verify_short = バイト検証
+options.linux.boot_records_short = ブートレコード
+options.linux.unmount_short = 安全なアンマウント
+
+# Setup options: media tools
+options.tools.title = メディアツール
+options.tools.subtitle = 検証とバックアップのユーティリティ
+options.tools.bad_blocks_off = 不良ブロック検査 オフ
+options.tools.bad_blocks_passes = 不良ブロック検査: {passes}回
+options.tools.verify_image = イメージを検証
+options.tools.image_folder = イメージフォルダー
+options.tools.backup_drive = ドライブをバックアップ

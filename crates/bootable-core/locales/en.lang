@@ -191,3 +191,93 @@ focus.setup = Setup options · configure image-specific choices
 focus.review = Review & write · inspect the plan before erasure
 focus.discover = Discover images · browse trusted catalogs
 focus.refresh = Refresh drives · rescan removable media
+
+# Setup options: panel titles
+options.windows.title = Windows installer options
+options.linux.title = Linux / Unix boot media
+options.selected_count = {count} selected
+options.summary.verification = Verification on · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Partition scheme
+options.windows.scheme_value = Scheme: {scheme}
+options.windows.boot_firmware = Boot firmware
+options.windows.boot_firmware_experimental = Boot firmware · experimental
+options.windows.boot_firmware_value = Boot firmware: {value}
+options.windows.boot_firmware_value_experimental = Boot firmware: {value} · experimental
+options.windows.boot_firmware_value_compact = Firmware: {value}
+options.windows.boot_firmware_hint = Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Bypass TPM, Secure Boot and RAM checks
+options.windows.bypass_hardware.short = Hardware bypass
+options.windows.bypass_hardware.on = Windows 11 TPM, Secure Boot, and RAM checks will be bypassed
+options.windows.bypass_hardware.off = Windows 11 hardware checks use Microsoft defaults
+options.windows.offline_account.label = Expose local/offline account setup
+options.windows.offline_account.short = Offline account
+options.windows.offline_account.on = Windows OOBE will expose the offline/local-account path
+options.windows.offline_account.off = Windows OOBE will use its standard account flow
+options.windows.named_account.label = Create local account: {name}
+options.windows.named_account.short = Named account
+options.windows.named_account.on = Windows will create local administrator account `{account}`
+options.windows.named_account.off = Automatic local-account creation disabled
+options.windows.host_region.label = Copy this computer's locale and time zone
+options.windows.host_region.short = Host region
+options.windows.host_region.on = Windows will use locale {locale} and time zone {zone}
+options.windows.host_region.off = Windows Setup will ask for regional options
+options.windows.privacy.label = Apply privacy-focused OOBE defaults
+options.windows.privacy.short = Privacy defaults
+options.windows.privacy.on = Windows OOBE will use privacy-focused defaults
+options.windows.privacy.off = Windows OOBE privacy questions will remain at their defaults
+options.windows.bitlocker.label = Disable automatic BitLocker encryption
+options.windows.bitlocker.short = Disable BitLocker
+options.windows.bitlocker.on = Automatic Windows device encryption will be disabled
+options.windows.bitlocker.off = Windows may automatically enable device encryption
+options.windows.qol.label = QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup
+options.windows.qol.short = QoL policies
+options.windows.qol.on = Windows will reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup
+options.windows.qol.off = Windows keeps its default Copilot, OneDrive, Teams, suggestions, and Fast Startup behavior
+options.windows.ca2023.label = Use Windows UEFI CA 2023 signed bootloaders
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA 2023 boot media requires updated Secure Boot firmware certificates
+options.windows.ca2023.off = Boot media will use the standard Windows bootloaders
+options.windows.skusipolicy.label = Apply SkuSiPolicy.p7b Secure Boot revocations
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = SkuSiPolicy.p7b Secure Boot revocations will be applied
+options.windows.skusipolicy.off = SkuSiPolicy.p7b Secure Boot revocations will not be applied
+options.windows.smode.label = Force Windows S Mode (expert)
+options.windows.smode.short = Force S Mode
+options.windows.smode.on = S Mode may remain enforced after reinstall; review the plan carefully
+options.windows.smode.off = Windows S Mode will not be forced
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Choose a Windows installer image before changing Windows options
+status.windows.not_windows = Windows setup options apply only to Windows installer images
+status.windows.scheme = Windows partition scheme: {scheme} · boot firmware: {firmware}
+status.windows.firmware = Boot firmware: {firmware} (experimental) · partition scheme: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windows installer media
+options.windows.installer_ready = Windows ISO ready · setup choices unlocked
+options.windows.installer_locked = Choose a Windows ISO to unlock setup choices
+options.windows.choose_iso = Choose Windows ISO
+options.windows.replace_iso = Replace Windows ISO
+options.windows.unavailable_note = Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.
+options.windows.silent_install_warning = Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Preserve the complete bootable disk layout
+options.linux.layout_short = Full disk layout
+options.linux.verify = Verify the written bytes with SHA-256
+options.linux.verify_short = Byte verification
+options.linux.boot_records_short = Boot records
+options.linux.unmount_short = Safe unmount
+
+# Setup options: media tools
+options.tools.title = Media tools
+options.tools.subtitle = Verification and backup utilities
+options.tools.bad_blocks_off = Bad blocks off
+options.tools.bad_blocks_passes = Bad blocks {passes}x
+options.tools.verify_image = Verify image
+options.tools.image_folder = Image folder
+options.tools.backup_drive = Back up drive
