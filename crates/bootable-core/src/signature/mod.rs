@@ -23,6 +23,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 use pgp::composed::{CleartextSignedMessage, Deserializable, DetachedSignature, SignedPublicKey};
+use pgp::crypto::hash::HashAlgorithm;
 use pgp::packet::{Signature, SignatureType};
 use pgp::types::KeyDetails;
 use serde::{Deserialize, Serialize};
@@ -229,6 +230,26 @@ fn verify_packet(
         Some(SignatureType::Binary | SignatureType::Text)
     ) {
         return Verification::Unverified("the signature is not a document signature".into());
+    }
+    // The signed digest is the whole security of a detached signature: a
+    // signature over an MD5/SHA-1/RIPEMD-160 digest is not evidence about the
+    // manifest, so it never verifies (and is not "rejected" either: a genuine
+    // old signature is merely too weak to use).
+    match signature.hash_alg() {
+        Some(
+            HashAlgorithm::Sha224
+            | HashAlgorithm::Sha256
+            | HashAlgorithm::Sha384
+            | HashAlgorithm::Sha512
+            | HashAlgorithm::Sha3_256
+            | HashAlgorithm::Sha3_512,
+        ) => {}
+        Some(weak) => {
+            return Verification::Unverified(format!(
+                "the signature uses a weak hash ({weak}) that Bootable does not accept"
+            ));
+        }
+        None => return Verification::Unverified("the signature has no usable hash".into()),
     }
     let fingerprints = signature.issuer_fingerprint();
     let key_ids = signature.issuer_key_id();

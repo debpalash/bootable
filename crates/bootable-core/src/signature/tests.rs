@@ -373,6 +373,61 @@ fn generated_binary_and_armored_detached_signatures_verify() {
     }
 }
 
+fn detach_with(key: &SignedSecretKey, hash: HashAlgorithm, data: &[u8]) -> Vec<u8> {
+    let signature = DetachedSignature::sign_binary_data(
+        thread_rng(),
+        &key.primary_key,
+        &Password::empty(),
+        hash,
+        data,
+    )
+    .expect("sign");
+    pgp::ser::Serialize::to_bytes(&signature).expect("signature bytes")
+}
+
+#[test]
+fn only_strong_hash_algorithms_verify() {
+    // RSA can sign with every hash, unlike Ed25519 (which refuses weak ones).
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Rsa(2048))
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id("Demo <demo@example.test>".into())
+        .build()
+        .expect("key parameters");
+    let key = params.generate(thread_rng()).expect("generate RSA key");
+    let anchors = pin(&key, "Demo");
+    let fingerprint = format!("{:X}", key.fingerprint());
+    for hash in [
+        HashAlgorithm::Sha224,
+        HashAlgorithm::Sha256,
+        HashAlgorithm::Sha384,
+        HashAlgorithm::Sha512,
+        HashAlgorithm::Sha3_256,
+        HashAlgorithm::Sha3_512,
+    ] {
+        let bytes = detach_with(&key, hash, MANIFEST.as_bytes());
+        expect_verified(
+            verify_openpgp_detached(&anchors, MANIFEST.as_bytes(), &bytes, today()),
+            "Demo",
+            &fingerprint,
+        );
+    }
+    for hash in [
+        HashAlgorithm::Md5,
+        HashAlgorithm::Sha1,
+        HashAlgorithm::Ripemd160,
+    ] {
+        let bytes = detach_with(&key, hash, MANIFEST.as_bytes());
+        match verify_openpgp_detached(&anchors, MANIFEST.as_bytes(), &bytes, today()) {
+            Verification::Unverified(reason) => {
+                assert!(reason.contains("weak hash"), "{hash}: {reason}");
+            }
+            other => panic!("{hash} must not verify, got {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn generated_tampered_manifest_is_rejected() {
     let key = generate("Demo <demo@example.test>");

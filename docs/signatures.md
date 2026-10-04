@@ -76,7 +76,10 @@ will be looked for.
   signature. Expiry is judged against the current time: a signature made while the key was valid but
   checked after expiry degrades to checksum-only rather than verifying. Update the pinned key when a
   publisher rotates.
-* Weak hashes (MD5, SHA-1, RIPEMD-160) are rejected by the OpenPGP implementation.
+* Only OpenPGP signatures made over SHA-224, SHA-256, SHA-384, SHA-512, SHA3-256 or SHA3-512 can
+  verify. Bootable enforces this itself before checking a signature: a signature over MD5, SHA-1 or
+  RIPEMD-160 is treated as unverified (checksum-only, with the reason in the label), never as
+  verified. Covered by the unit test `only_strong_hash_algorithms_verify`.
 * The signature file is looked up on the same host as the manifest, so mirrors work: a valid
   signature from a pinned key authenticates the manifest regardless of which mirror served it.
 
