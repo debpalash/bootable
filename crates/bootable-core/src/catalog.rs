@@ -1042,6 +1042,10 @@ fn checksum_algorithm_from_url(url: &Url) -> Option<ChecksumAlgorithm> {
     }
 }
 
+/// A hostile or broken mirror must not be able to stall catalog parsing with a
+/// gigantic manifest; real checksum files list a few hundred artifacts at most.
+const MAX_CHECKSUM_MANIFEST_LINES: usize = 100_000;
+
 fn parse_publisher_checksum(
     document: &str,
     release_name: &str,
@@ -1049,10 +1053,19 @@ fn parse_publisher_checksum(
 ) -> Option<(ChecksumAlgorithm, String)> {
     let release_name = release_name.trim_start_matches("./");
     let mut candidates = Vec::new();
+    // A bare digest is only trusted when it is the document's single line. The
+    // count is taken once, and only needs to tell one line from several.
+    let single_line_document = document
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(2)
+        .count()
+        == 1;
     for line in document
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
+        .take(MAX_CHECKSUM_MANIFEST_LINES)
     {
         if let Some((left, value)) = line.split_once(" = ")
             && let Some((_, file_name)) = left.split_once('(')
@@ -1069,13 +1082,7 @@ fn parse_publisher_checksum(
             {
                 push_checksum_candidate(&mut candidates, value, algorithm_hint);
             }
-            None if algorithm_hint.is_some()
-                && document
-                    .lines()
-                    .filter(|line| !line.trim().is_empty())
-                    .count()
-                    == 1 =>
-            {
+            None if algorithm_hint.is_some() && single_line_document => {
                 push_checksum_candidate(&mut candidates, value, algorithm_hint);
             }
             _ => {}
@@ -1848,6 +1855,28 @@ mod tests {
             Some((ChecksumAlgorithm::Sha256, sha256))
         );
         assert!(parse_publisher_checksum("not-a-digest image.iso", "image.iso", None).is_none());
+    }
+
+    #[test]
+    fn huge_one_token_manifests_parse_in_linear_time() {
+        let digest = "a".repeat(64);
+        let document = format!("{digest}\n").repeat(200_000);
+        let started = std::time::Instant::now();
+        // Many lines: a bare digest is ambiguous, so nothing is trusted.
+        assert!(
+            parse_publisher_checksum(&document, "image.iso", Some(ChecksumAlgorithm::Sha256))
+                .is_none()
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "manifest parsing must not be quadratic"
+        );
+        // Matching lines beyond the line cap are never reached.
+        let padded = format!(
+            "{}{digest}  image.iso\n",
+            "x y\n".repeat(MAX_CHECKSUM_MANIFEST_LINES)
+        );
+        assert!(parse_publisher_checksum(&padded, "image.iso", None).is_none());
     }
 
     #[test]
