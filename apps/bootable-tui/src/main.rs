@@ -2049,6 +2049,27 @@ impl App {
         }
     }
 
+    /// Shows core's progress message as the status. Core's last message
+    /// (phase `Finished`) names the integrity result, for example a verified
+    /// signature; remember that it is showing so the generic ready line does
+    /// not replace it. This is an explicit flag, not a comparison of the
+    /// (localizable) status text.
+    fn show_download_progress(&mut self, progress: &Progress) {
+        self.download_final_message = progress.phase == ProgressPhase::Finished;
+        self.status = progress.message.clone();
+    }
+
+    /// The download finished and its image is in use: keep core's final
+    /// message when it was shown, otherwise the shared ready line.
+    fn show_download_ready(&mut self, path: &Path) {
+        if !self.download_final_message {
+            self.status = self
+                .t()
+                .format(Message::StatusDownloadReady, &[("name", &path.display())]);
+        }
+        self.download_final_message = false;
+    }
+
     fn poll_download(&mut self) {
         let Some(receiver) = self.download_receiver.take() else {
             return;
@@ -2057,11 +2078,7 @@ impl App {
         while let Ok(update) = receiver.try_recv() {
             match update {
                 DownloadUpdate::Progress(progress) => {
-                    // Core's last message names the integrity result (for
-                    // example a verified signature); remember that it is
-                    // showing so the generic line below does not replace it.
-                    self.download_final_message = progress.phase == ProgressPhase::Finished;
-                    self.status = progress.message.clone();
+                    self.show_download_progress(&progress);
                     self.download_session.apply_progress(progress);
                 }
                 DownloadUpdate::Finished(completion) => {
@@ -2072,15 +2089,7 @@ impl App {
                             destination,
                         } => {
                             self.browse_directory = destination.parent().map(PathBuf::from);
-                            // Core's final progress message already names the integrity result
-                            // (for example a verified signature); keep it instead of a generic line.
-                            if !self.download_final_message {
-                                self.status = self.t().format(
-                                    Message::StatusDownloadReady,
-                                    &[("name", &report.path.display())],
-                                );
-                            }
-                            self.download_final_message = false;
+                            self.show_download_ready(&report.path);
                             self.reset_image_scoped_options();
                             self.image = Some(report.clone());
                             self.advanced = false;
@@ -3797,35 +3806,32 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         })
         .collect::<Vec<_>>();
 
-    let mut permanent_lines = vec![Line::styled(
+    let panel_text_width = usize::from(area.width.saturating_sub(2));
+    let mut permanent_lines = wrapped_lines(
         t.text(Message::ReviewConsequence),
         Style::default()
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD),
-    )];
+        panel_text_width,
+    );
     if app.write_session.active() {
-        permanent_lines.push(Line::styled(
+        permanent_lines.extend(wrapped_lines(
             t.text(Message::ReviewWarningWriting),
             Style::default().fg(Color::Yellow),
+            panel_text_width,
         ));
     } else {
-        permanent_lines.push(Line::styled(
-            t.text(Message::ReviewSubtitle),
-            Style::default().fg(MUTED),
-        ));
-        permanent_lines.push(Line::styled(
-            t.text(Message::ReviewHintOpenConfirmation),
-            Style::default().fg(MUTED),
-        ));
+        for message in [Message::ReviewSubtitle, Message::ReviewHintOpenConfirmation] {
+            permanent_lines.extend(wrapped_lines(
+                t.text(message),
+                Style::default().fg(MUTED),
+                panel_text_width,
+            ));
+        }
     }
     // Longer wording (German, Russian) wraps onto more lines; give the panel
     // the rows it needs instead of clipping a safety sentence.
-    let permanent_height = (permanent_lines
-        .iter()
-        .map(|line| wrapped_height(&line.to_string(), usize::from(area.width.saturating_sub(2))))
-        .sum::<usize>() as u16
-        + 2)
-    .clamp(6, if compact { 7 } else { 9 });
+    let permanent_height = (permanent_lines.len() as u16 + 2).clamp(6, if compact { 7 } else { 9 });
     let mut constraints = vec![
         Constraint::Length(if compact { 3 } else { 4 }),
         Constraint::Length(if compact { 5 } else { 6 }),
@@ -3919,9 +3925,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     if show_confirmation {
         let permanent_title = format!(" {} ", t.text(Message::ReviewPermanentChanges));
         frame.render_widget(
-            Paragraph::new(permanent_lines)
-                .wrap(Wrap { trim: true })
-                .block(panel_block(&permanent_title)),
+            Paragraph::new(permanent_lines).block(panel_block(&permanent_title)),
             rows[row],
         );
         row += 1;
@@ -3963,10 +3967,12 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         };
         let result_title = format!(" {} ", completion.title_in(app.locale));
         frame.render_widget(
-            Paragraph::new(completion.detail_in(app.locale))
-                .style(Style::default().fg(color))
-                .wrap(Wrap { trim: true })
-                .block(panel_block(&result_title)),
+            Paragraph::new(wrapped_lines(
+                &completion.detail_in(app.locale),
+                Style::default().fg(color),
+                usize::from(rows[row].width.saturating_sub(2)),
+            ))
+            .block(panel_block(&result_title)),
             rows[row],
         );
         row += 1;
@@ -4068,29 +4074,28 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         bullets
             .iter()
             .take(count)
-            .map(|(message, color)| {
-                Line::styled(
-                    format!("• {}", t.text(*message)),
+            .flat_map(|(message, color)| {
+                wrapped_lines(
+                    &format!("• {}", t.text(*message)),
                     Style::default().fg(*color),
+                    text_width,
                 )
             })
             .collect::<Vec<_>>()
     };
-    let bullet_height = |count: usize| {
-        bullet_lines(count)
-            .iter()
-            .map(|line| wrapped_height(&line.to_string(), text_width))
-            .sum::<usize>() as u16
-            + 2
-    };
+    let bullet_height = |count: usize| bullet_lines(count).len() as u16 + 2;
     // The acknowledgement must always be fully visible; size its row to it.
     let acknowledged = app.write_session.acknowledged();
-    let acknowledgment = format!(
-        "{} {}",
-        if acknowledged { "■" } else { "□" },
-        t.text(Message::ConfirmAck)
+    let acknowledgment = wrapped_lines(
+        &format!(
+            "{} {}",
+            if acknowledged { "■" } else { "□" },
+            t.text(Message::ConfirmAck)
+        ),
+        Style::default().fg(if acknowledged { ACCENT } else { Color::White }),
+        text_width,
     );
-    let acknowledgment_height = wrapped_height(&acknowledgment, text_width) as u16 + 2;
+    let acknowledgment_height = acknowledgment.len() as u16 + 2;
     // Full layout: target (4), changes (>= 5), consequences, acknowledgement,
     // buttons (3) and four gaps.
     let full_height = 4 + 5 + bullet_height(4) + acknowledgment_height + 3 + 4;
@@ -4148,9 +4153,7 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         // Narrow terminals show the two consequences that matter most; the
         // full list appears on a taller screen.
         frame.render_widget(
-            Paragraph::new(bullet_lines(2))
-                .wrap(Wrap { trim: true })
-                .block(panel_block(&consequences_title)),
+            Paragraph::new(bullet_lines(2)).block(panel_block(&consequences_title)),
             rows[1],
         );
     } else {
@@ -4160,19 +4163,14 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
             rows[1],
         );
         frame.render_widget(
-            Paragraph::new(bullet_lines(4))
-                .wrap(Wrap { trim: true })
-                .block(panel_block(&consequences_title)),
+            Paragraph::new(bullet_lines(4)).block(panel_block(&consequences_title)),
             rows[2],
         );
     }
     let acknowledgment_row = if compact { rows[2] } else { rows[3] };
     let actions_row = if compact { rows[3] } else { rows[4] };
     frame.render_widget(
-        Paragraph::new(acknowledgment)
-            .style(Style::default().fg(if acknowledged { ACCENT } else { Color::White }))
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Space/click to acknowledge ")),
+        Paragraph::new(acknowledgment).block(panel_block(" Space/click to acknowledge ")),
         acknowledgment_row,
     );
     let actions = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
@@ -4226,12 +4224,31 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(area);
     let area = header_rows[0];
     let wide = area.width >= 82;
+    let t = app.t();
     let action_count = if app.image.is_some() { 4 } else { 3 };
+    // Every button must at least fit its compact caption in this language
+    // (glyph, space, text, borders and a column of padding).
+    let caption = [
+        Message::ActionDownloadsCompact,
+        Message::ActionCatalogCloseCompact,
+        Message::ActionDiscoverCompact,
+        Message::ActionSetupOptionsCompact,
+        Message::ActionHideOptionsCompact,
+        Message::ActionRefresh,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)))
+    .max()
+    .unwrap_or(0) as u16
+        + 5;
+    let needed = caption * action_count as u16 + (action_count as u16 - 1);
     let action_width = if wide {
         if action_count == 4 { 64 } else { 48 }
     } else {
         area.width.saturating_sub(13)
-    };
+    }
+    .max(needed)
+    .min(area.width.saturating_sub(13 + 24));
     let columns = Layout::horizontal([
         Constraint::Min(if wide { 24 } else { 12 }),
         Constraint::Length(action_width + if wide { 6 } else { 0 }),
@@ -4243,7 +4260,6 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(columns[1]);
     render_button(frame, action_columns[1], "?", app.help_open);
     app.hit_regions.guide = Some(action_columns[1]);
-    let t = app.t();
     frame.render_widget(
         Paragraph::new(brand_lockup(
             wide,
@@ -4527,8 +4543,11 @@ fn draw_recent_images(
     }
     if recents.is_empty() {
         frame.render_widget(
-            Paragraph::new(app.t().text(Message::SourceRecentEmpty))
-                .style(Style::default().fg(MUTED)),
+            Paragraph::new(truncate_end(
+                app.t().text(Message::SourceRecentEmpty),
+                usize::from(area.width),
+            ))
+            .style(Style::default().fg(MUTED)),
             Rect::new(area.x, area.y, area.width, 1),
         );
         return;
@@ -4736,9 +4755,15 @@ fn glyph_label(area: Rect, narrow: bool, glyph: &str, long: &str, compact: &str)
     )
 }
 
-/// Rows `text` needs when wrapped to `width` terminal columns.
-fn wrapped_height(text: &str, width: usize) -> usize {
-    wrap_styled(&[(text, Style::default())], width).len()
+/// `text` wrapped to `width` terminal columns, ready to render without
+/// `Wrap`. The widget wrapper only breaks at spaces, which strands a whole
+/// Japanese sentence on its own row and makes the row count unpredictable;
+/// this one measures columns and may break between wide characters.
+fn wrapped_lines(text: &str, style: Style, width: usize) -> Vec<Line<'static>> {
+    wrap_styled(&[(text, style)], width)
+        .into_iter()
+        .map(Line::from)
+        .collect()
 }
 
 /// Pads `value` with spaces to `width` terminal columns (never truncates).
@@ -6148,8 +6173,12 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                 join(&[Message::DetailMounted.text(locale)]),
             ]
         });
-    let reminder = t.text(Message::TargetConfirmPhysical);
-    let reminder_height = wrapped_height(reminder, usize::from(target_inner.width)).min(2) as u16;
+    let reminder = wrapped_lines(
+        t.text(Message::TargetConfirmPhysical),
+        Style::default().fg(MUTED),
+        usize::from(target_inner.width),
+    );
+    let reminder_height = reminder.len().min(2) as u16;
     let target_rows = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
@@ -6184,12 +6213,7 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         target_rows[1],
         &mut state,
     );
-    frame.render_widget(
-        Paragraph::new(reminder)
-            .style(Style::default().fg(MUTED))
-            .wrap(Wrap { trim: true }),
-        target_rows[3],
-    );
+    frame.render_widget(Paragraph::new(reminder), target_rows[3]);
     app.hit_regions.device_rows = (0..app.devices.len())
         .filter_map(|index| {
             let y = target_rows[1].y.saturating_add(index as u16);
@@ -6221,9 +6245,11 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             Layout::vertical([Constraint::Min(1), Constraint::Length(0)]).split(status_rows[0])
         };
     frame.render_widget(
-        Paragraph::new(app.status.as_str())
-            .style(Style::default().fg(MUTED))
-            .wrap(Wrap { trim: true }),
+        Paragraph::new(wrapped_lines(
+            &app.status,
+            Style::default().fg(MUTED),
+            usize::from(progress_rows[0].width),
+        )),
         progress_rows[0],
     );
     if let Some(progress) = app.download_session.active_progress() {
@@ -6323,7 +6349,19 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     app.hit_regions.quit = Some(actions[1]);
 }
 
+/// `label` made to fit the inside of a bordered button `width` columns wide:
+/// first by collapsing the gap after the glyph, then with an ellipsis. A
+/// caption is never silently cut mid-word.
+fn fit_button_label(label: &str, width: u16) -> String {
+    let room = usize::from(width.saturating_sub(2));
+    if display_width(label) <= room {
+        return label.into();
+    }
+    truncate_end(&label.replacen("  ", " ", 1), room)
+}
+
 fn render_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, primary: bool) {
+    let label = fit_button_label(label, area.width);
     let style = if primary {
         Style::default().fg(Color::Black).bg(ACCENT)
     } else {
@@ -6345,7 +6383,7 @@ fn render_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, primar
 
 fn render_disabled_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str) {
     frame.render_widget(
-        Paragraph::new(label)
+        Paragraph::new(fit_button_label(label, area.width))
             .alignment(Alignment::Center)
             .style(Style::default().fg(MUTED).bg(PANEL_SOFT))
             .block(
@@ -6360,7 +6398,7 @@ fn render_disabled_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &st
 
 fn render_danger_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str) {
     frame.render_widget(
-        Paragraph::new(label)
+        Paragraph::new(fit_button_label(label, area.width))
             .alignment(Alignment::Center)
             .style(
                 Style::default()
@@ -6414,7 +6452,7 @@ fn render_option_checkbox(
     // Borders (2), padding (2), marker and its two spaces (3).
     let room = usize::from(area.width).saturating_sub(7);
     let caption = fit_variant(room, &[label.to_string(), short.to_string()]);
-    render_checkbox(frame, area, &caption, selected);
+    render_checkbox(frame, area, &truncate_end(&caption, room), selected);
 }
 
 fn panel_block<'a>(title: &'a str) -> Block<'a> {
@@ -7014,6 +7052,424 @@ mod workspace_render_tests {
         ] {
             assert!(screen.contains(heading), "{heading}\n{screen}");
         }
+    }
+
+    const LOCALIZED: [Locale; 3] = [Locale::De, Locale::Ru, Locale::Ja];
+
+    /// Leading characters of a catalog message. Long sentences wrap, so only
+    /// a prefix that always sits on one row is searched for.
+    fn lead(text: &str) -> String {
+        text.chars().take(6).collect()
+    }
+
+    fn assert_shows(screen: &str, locale: Locale, messages: &[Message]) {
+        for message in messages {
+            let text = message.text(locale);
+            assert!(
+                screen.contains(&lead(text)),
+                "{locale}: {} = {text:?} is missing\n{screen}",
+                message.key()
+            );
+        }
+    }
+
+    fn assert_hides(screen: &str, locale: Locale, english: &[&str]) {
+        for phrase in english {
+            assert!(
+                !screen.contains(phrase),
+                "{locale}: untranslated {phrase:?} is still shown\n{screen}"
+            );
+        }
+    }
+
+    fn reviewing_app(locale: Locale) -> App {
+        let mut app = localized_app(locale);
+        app.image = Some(image_report(bootable_core::ImageKind::HybridIso));
+        let device = app.devices[0].clone();
+        let plan = bootable_core::WritePlan {
+            image: app.image.clone().expect("image"),
+            target: device,
+            strategy: bootable_core::WriteStrategy::RawVerified,
+            options: WriteOptions::default(),
+            steps: vec![
+                bootable_core::PlanStep {
+                    title: "Unmount".into(),
+                    destructive: false,
+                },
+                bootable_core::PlanStep {
+                    title: "Write image".into(),
+                    destructive: true,
+                },
+            ],
+            required_tools: Vec::new(),
+            confirmation_phrase: ERASE_PHRASE.into(),
+        };
+        app.write_session.open(plan);
+        app
+    }
+
+    const ERASE_PHRASE: &str = "ERASE /dev/sdz ABCDEF123456";
+
+    #[test]
+    fn main_workspace_is_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::HeaderTitleCreate,
+                    Message::SourceTitle,
+                    Message::TargetTitle,
+                    Message::SourceHint,
+                    Message::ActionBrowse,
+                    Message::SourceRecentEmpty,
+                    Message::TargetConfirmPhysical,
+                    Message::ActionSelected,
+                    Message::DiscoverCollapsedHint,
+                ],
+            );
+            // Buttons use the long wording when it fits and the compact one
+            // otherwise; either is the same concept in the same language.
+            for (long, compact) in [
+                (Message::ActionDownloads, Message::ActionDownloadsCompact),
+                (Message::ActionDiscover, Message::ActionDiscoverCompact),
+                (Message::ActionRefreshDrives, Message::ActionRefresh),
+            ] {
+                assert!(
+                    screen.contains(long.text(locale)) || screen.contains(compact.text(locale)),
+                    "{locale}: {}\n{screen}",
+                    long.key()
+                );
+            }
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Choose an image",
+                    "Choose a drive",
+                    "Browse",
+                    "Images you use appear here",
+                    "Confirm the physical drive",
+                    "Selected",
+                    "Browse trusted catalogs",
+                    "Inspected before writing",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn main_workspace_fits_in_80x30_in_every_language() {
+        for locale in Locale::available() {
+            let mut app = localized_app(locale);
+            let screen = render_text(&mut app, 80, 30);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::SourceTitle,
+                    Message::TargetTitle,
+                    Message::ActionBrowse,
+                ],
+            );
+            // Nothing is drawn outside the terminal.
+            assert!(screen.lines().all(|line| display_width(line) <= 80));
+        }
+    }
+
+    #[test]
+    fn windows_setup_options_are_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            app.image = Some(image_report(windows_kind()));
+            app.advanced = true;
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::OptionsWindowsTitle,
+                    Message::OptionsToolsVerifyImage,
+                    Message::OptionsToolsImageFolder,
+                    Message::OptionsToolsBackupDrive,
+                ],
+            );
+            // Checkboxes show the full wording or the short caption of the
+            // same option, never English.
+            for (label, short) in [
+                (
+                    Message::OptionsWindowsBypassHardwareLabel,
+                    Message::OptionsWindowsBypassHardwareShort,
+                ),
+                (
+                    Message::OptionsWindowsOfflineAccountLabel,
+                    Message::OptionsWindowsOfflineAccountShort,
+                ),
+                (
+                    Message::OptionsWindowsPrivacyLabel,
+                    Message::OptionsWindowsPrivacyShort,
+                ),
+                (
+                    Message::OptionsWindowsBitlockerLabel,
+                    Message::OptionsWindowsBitlockerShort,
+                ),
+            ] {
+                assert!(
+                    screen.contains(label.text(locale)) || screen.contains(short.text(locale)),
+                    "{locale}: {}\n{screen}",
+                    label.key()
+                );
+            }
+            assert!(
+                screen.contains(&lead(&BadBlockCheck::Disabled.label_in(locale))),
+                "{locale}\n{screen}"
+            );
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Hardware bypass",
+                    "Offline account",
+                    "Privacy defaults",
+                    "Disable BitLocker",
+                    "Verify image",
+                    "Image folder",
+                    "Back up drive",
+                    "Bad blocks",
+                    "Windows installer options",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn windows_option_toggles_report_their_own_localized_status() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            app.image = Some(image_report(windows_kind()));
+            app.toggle_windows_requirements();
+            assert_eq!(
+                app.status,
+                Message::OptionsWindowsBypassHardwareOn.text(locale)
+            );
+            app.toggle_windows_requirements();
+            assert_eq!(
+                app.status,
+                Message::OptionsWindowsBypassHardwareOff.text(locale)
+            );
+            app.toggle_windows_s_mode();
+            assert_eq!(app.status, Message::OptionsWindowsSmodeOn.text(locale));
+            app.toggle_windows_qol();
+            assert_eq!(app.status, Message::OptionsWindowsQolOn.text(locale));
+            app.cycle_windows_partition_scheme();
+            assert!(app.status.contains("MBR"), "{}", app.status);
+            assert!(
+                app.status
+                    .starts_with(&lead(Message::StatusWindowsScheme.text(locale))),
+                "{locale}: {}",
+                app.status
+            );
+        }
+    }
+
+    #[test]
+    fn review_screen_is_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = reviewing_app(locale);
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::ReviewTitle,
+                    Message::HeaderSubtitleReview,
+                    Message::ReviewPlanSummary,
+                    Message::ReviewOrderedOperations,
+                    Message::ReviewPermanentChanges,
+                    Message::ReviewConsequence,
+                    Message::ReviewSubtitle,
+                    Message::ActionBack,
+                    Message::ReviewActionConsequences,
+                    Message::ActionQuit,
+                ],
+            );
+            for heading in [
+                Message::ReviewFieldSource,
+                Message::ReviewFieldTarget,
+                Message::ReviewFieldMethod,
+            ] {
+                assert!(
+                    screen.contains(&locale.strings().heading(heading)),
+                    "{locale}: {}\n{screen}",
+                    heading.key()
+                );
+            }
+            assert!(
+                screen.contains(&locale.strings().heading(Message::ReviewStepErases)),
+                "{locale}\n{screen}"
+            );
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Review write plan",
+                    "Plan summary",
+                    "Ordered operations",
+                    "Permanent changes",
+                    "Back to selection",
+                    "Review consequences",
+                    "Nothing is written",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn confirmation_dialog_is_localized_and_never_cut_off() {
+        for locale in LOCALIZED {
+            for (width, height) in [(130, 40), (80, 30)] {
+                let mut app = reviewing_app(locale);
+                assert!(app.write_session.open_confirmation());
+                let screen = render_text(&mut app, width, height);
+                assert_shows(
+                    &screen,
+                    locale,
+                    &[
+                        Message::ConfirmTitle,
+                        Message::ConfirmPhysicalTarget,
+                        Message::ConfirmConsequences,
+                        Message::ConfirmConsequenceErase,
+                        Message::ConfirmAck,
+                        Message::ActionCancel,
+                        Message::ConfirmAcknowledgeFirst,
+                    ],
+                );
+                assert!(
+                    screen.contains(&locale.strings().heading(Message::ConfirmBadge)),
+                    "{locale}\n{screen}"
+                );
+                // The acknowledgement is the safety-critical sentence: its
+                // last words must be on screen, not clipped.
+                let ack = Message::ConfirmAck.text(locale);
+                let tail = ack
+                    .chars()
+                    .rev()
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<String>();
+                assert!(
+                    screen.contains(&tail),
+                    "{locale} {width}x{height}: ack tail {tail:?} cut off\n{screen}"
+                );
+                app.write_session.toggle_acknowledged();
+                let screen = render_text(&mut app, width, height);
+                assert_shows(&screen, locale, &[Message::ConfirmSubmit]);
+            }
+        }
+    }
+
+    #[test]
+    fn erase_confirmation_phrase_is_identical_in_every_locale() {
+        for locale in Locale::ALL.iter().copied() {
+            let mut app = reviewing_app(locale);
+            assert!(app.write_session.open_confirmation());
+            let review = render_text(&mut app, 130, 40);
+            app.write_session.toggle_acknowledged();
+            let confirm = render_text(&mut app, 130, 40);
+            // The phrase is never part of any screen text, so a translation
+            // can neither change nor leak it.
+            for screen in [&review, &confirm] {
+                assert!(!screen.contains(ERASE_PHRASE), "{locale}\n{screen}");
+                assert!(!screen.contains("ERASE /dev"), "{locale}\n{screen}");
+            }
+            for message in Message::ALL {
+                assert!(
+                    !message.text(locale).contains("ERASE "),
+                    "{locale}: {}",
+                    message.key()
+                );
+            }
+            let launch = app.write_session.begin().expect("acknowledged write");
+            assert_eq!(launch.confirmation, ERASE_PHRASE, "{locale}");
+            assert_eq!(launch.plan.confirmation_phrase, ERASE_PHRASE, "{locale}");
+        }
+    }
+
+    #[test]
+    fn wording_changes_with_the_language_without_rebuilding_the_app() {
+        let mut app = localized_app(Locale::En);
+        let english = render_text(&mut app, 130, 40);
+        assert!(english.contains("Choose an image"), "{english}");
+        app.locale = Locale::De;
+        let german = render_text(&mut app, 130, 40);
+        assert!(german.contains(&lead(Message::SourceTitle.text(Locale::De))));
+        assert!(!german.contains("Choose an image"), "{german}");
+    }
+
+    #[test]
+    fn download_ready_status_survives_localization() {
+        for locale in [Locale::En, Locale::De, Locale::Ru, Locale::Ja] {
+            let mut app = localized_app(locale);
+            let path = PathBuf::from("/tmp/image.iso");
+
+            // Core's final message (it names the integrity result) is kept.
+            app.show_download_progress(&Progress {
+                phase: ProgressPhase::Finished,
+                completed: 1,
+                total: Some(1),
+                message: "Ready · signature verified · /tmp/image.iso".into(),
+            });
+            app.show_download_ready(&path);
+            assert_eq!(
+                app.status, "Ready · signature verified · /tmp/image.iso",
+                "{locale}"
+            );
+
+            // Without it, the shared (localized) ready line is shown.
+            app.show_download_progress(&Progress {
+                phase: ProgressPhase::Downloading,
+                completed: 1,
+                total: Some(2),
+                message: "halfway".into(),
+            });
+            app.show_download_ready(&path);
+            assert_eq!(
+                app.status,
+                locale
+                    .strings()
+                    .format(Message::StatusDownloadReady, &[("name", &path.display())]),
+                "{locale}"
+            );
+            // The flag is consumed: a later download starts clean.
+            assert!(!app.download_final_message);
+        }
+    }
+
+    #[test]
+    fn device_change_statuses_use_the_locale_plural_rules() {
+        for locale in [Locale::En, Locale::De, Locale::Ru, Locale::Ja] {
+            let t = locale.strings();
+            assert_eq!(
+                device_change_message(t, 1, 0),
+                t.plural(Message::StatusDrivesAdded, 1, &[])
+            );
+            assert_eq!(
+                device_change_message(t, 0, 5),
+                t.plural(Message::StatusDrivesRemoved, 5, &[])
+            );
+            assert_eq!(
+                device_change_message(t, 0, 0),
+                t.text(Message::StatusDrivesChanged)
+            );
+        }
+        assert_eq!(
+            device_change_message(Locale::En.strings(), 2, 1),
+            "Drive list changed: 2 added, 1 removed • updated automatically"
+        );
     }
 
     fn image_report(kind: bootable_core::ImageKind) -> bootable_core::ImageReport {
