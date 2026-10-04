@@ -271,6 +271,10 @@ struct BootableView {
     help_open: bool,
     focus_handle: FocusHandle,
     status: String,
+    /// Set when core's final `Finished`-phase progress message has been shown
+    /// for the running download; the completion handler then keeps it instead
+    /// of writing a generic ready line. Replaces matching the English text.
+    download_final_shown: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -469,9 +473,9 @@ impl BootableView {
             });
         let (devices, status) = match engine.discover_devices() {
             Ok(devices) => {
-                let status = format!(
-                    "{} · choose an image to begin",
-                    removable_media_status_in(locale, &devices)
+                let status = locale.strings().format(
+                    Message::StatusStartup,
+                    &[("media", &removable_media_status_in(locale, &devices))],
                 );
                 (devices, status)
             }
@@ -524,6 +528,7 @@ impl BootableView {
             help_open: false,
             focus_handle,
             status,
+            download_final_shown: false,
         };
         Self::schedule_initial_catalog_load(cx);
         view
@@ -546,9 +551,12 @@ impl BootableView {
     fn toggle_catalog(&mut self, cx: &mut Context<Self>) {
         self.catalog_open = !self.catalog_open;
         if !self.catalog_open {
-            self.status = format!(
-                "Catalog closed • {}",
-                self.review_readiness().guidance_in(self.locale)
+            self.status = self.t().format(
+                Message::StatusCatalogClosed,
+                &[(
+                    "guidance",
+                    &self.review_readiness().guidance_in(self.locale),
+                )],
             );
             cx.notify();
             return;
@@ -557,8 +565,7 @@ impl BootableView {
         if self.distributions.is_empty() {
             self.load_catalog(cx);
         } else {
-            self.status =
-                "DistroWatch catalog ready • rankings indicate interest, not quality".into();
+            self.status = self.t().text(Message::StatusCatalogReady).into();
             cx.notify();
         }
     }
@@ -571,7 +578,10 @@ impl BootableView {
         if !self.discovery_session.begin(CatalogFacet::Popular) {
             return;
         }
-        self.status = "Loading DistroWatch six-month popularity…".into();
+        self.status = self
+            .t()
+            .text(Message::StatusCatalogLoadingPopularity)
+            .into();
         cx.notify();
         let task = cx
             .background_executor()
@@ -587,7 +597,7 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let distributions = fetch.value;
                             let count = distributions.len();
                             view.popular_distributions = distributions.clone();
@@ -597,7 +607,11 @@ impl BootableView {
                             if showing_popular {
                                 view.distributions = distributions;
                             }
-                            view.status = format!("{count} distributions · {source}");
+                            view.status = view.t().plural(
+                                Message::StatusCatalogDistributionsLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             if count > 0 && showing_popular {
                                 view.select_distribution(0, cx);
                             }
@@ -608,7 +622,10 @@ impl BootableView {
                             view.status = view
                                 .discovery_session
                                 .state(CatalogFacet::Popular)
-                                .short_label("distributions");
+                                .short_label_in(
+                                    view.locale,
+                                    view.t().text(Message::CatalogSubjectDistributions),
+                                );
                         }
                     }
                     cx.notify();
@@ -628,7 +645,7 @@ impl BootableView {
         self.catalog_visible = 20;
         if query.trim().is_empty() {
             self.distributions = self.popular_distributions.clone();
-            self.status = "Showing DistroWatch six-month popularity".into();
+            self.status = self.t().text(Message::StatusCatalogPopularity).into();
             cx.notify();
             return;
         }
@@ -651,7 +668,10 @@ impl BootableView {
         if !self.discovery_session.begin(CatalogFacet::Directory) {
             return;
         }
-        self.status = "Searching DistroWatch's full distribution directory…".into();
+        self.status = self
+            .t()
+            .text(Message::StatusCatalogSearchingDirectory)
+            .into();
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             Bootable::native().distribution_directory_cached(CacheMode::PreferCache)
@@ -693,7 +713,10 @@ impl BootableView {
                                 view.status = view
                                     .discovery_session
                                     .state(CatalogFacet::Directory)
-                                    .short_label("search catalog");
+                                    .short_label_in(
+                                        view.locale,
+                                        view.t().text(Message::CatalogSubjectSearchCatalog),
+                                    );
                             }
                         }
                     }
@@ -714,11 +737,11 @@ impl BootableView {
         if (self.pi_catalog.is_some() && mode == CacheMode::PreferCache)
             || !self.discovery_session.begin(CatalogFacet::RaspberryPi)
         {
-            self.status = "Raspberry Pi image discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPiSelected).into();
             cx.notify();
             return;
         }
-        self.status = "Loading the official Raspberry Pi Imager catalog…".into();
+        self.status = self.t().text(Message::StatusCatalogPiLoading).into();
         cx.notify();
         let task = cx
             .background_executor()
@@ -734,14 +757,18 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.images.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let catalog = fetch.value;
                             let count = catalog.images.len();
                             view.pi_catalog = Some(catalog);
                             view.selected_pi_device = None;
                             view.selected_pi_image = (count > 0).then_some(0);
                             if view.discovery_session.source() == DiscoverySource::RaspberryPi {
-                                view.status = format!("{count} Raspberry Pi images · {source}");
+                                view.status = view.t().plural(
+                                    Message::StatusCatalogPiImagesLoaded,
+                                    count as u64,
+                                    &[("source", &source)],
+                                );
                             }
                         }
                         Err(error) => {
@@ -751,7 +778,10 @@ impl BootableView {
                                 view.status = view
                                     .discovery_session
                                     .state(CatalogFacet::RaspberryPi)
-                                    .short_label("Raspberry Pi images");
+                                    .short_label_in(
+                                        view.locale,
+                                        view.t().text(Message::CatalogSubjectPiImages),
+                                    );
                             }
                         }
                     }
@@ -780,7 +810,7 @@ impl BootableView {
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
-                self.status = "Showing DistroWatch six-month popularity".into();
+                self.status = self.t().text(Message::StatusCatalogPopularity).into();
             }
             QuickAccess::Arch | QuickAccess::Debian => {
                 let cached = if preset == QuickAccess::Arch {
@@ -793,14 +823,17 @@ impl BootableView {
                     return;
                 }
                 self.distributions = cached.clone();
-                self.status = format!(
-                    "Showing {} active {}-based distributions from DistroWatch",
-                    cached.len(),
-                    if preset == QuickAccess::Arch {
-                        "Arch"
-                    } else {
-                        "Debian"
-                    }
+                self.status = self.locale.strings().plural(
+                    Message::StatusCatalogShowingBase,
+                    cached.len() as u64,
+                    &[(
+                        "base",
+                        &if preset == QuickAccess::Arch {
+                            "Arch"
+                        } else {
+                            "Debian"
+                        },
+                    )],
                 );
             }
             QuickAccess::Omarchy => {
@@ -820,12 +853,11 @@ impl BootableView {
                         logo_url: "https://distrowatch.com/images/icon-large/omarchy.png".into(),
                     });
                 self.distributions = vec![omarchy];
-                self.status = "Omarchy family · ISO releases are writable; installer-only derivatives are clearly marked".into();
+                self.status = self.t().text(Message::StatusCatalogOmarchy).into();
             }
             QuickAccess::Windows => {
                 self.distributions.clear();
-                self.status =
-                    "Windows media tools · choose a Windows ISO to unlock setup options".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsTools).into();
             }
         }
         cx.notify();
@@ -854,7 +886,9 @@ impl BootableView {
         } else {
             "Debian"
         };
-        self.status = format!("Searching DistroWatch for active {base}-based distributions…");
+        self.status = self
+            .t()
+            .format(Message::StatusCatalogLoadingBase, &[("base", &base)]);
         cx.notify();
         let task = cx
             .background_executor()
@@ -867,7 +901,7 @@ impl BootableView {
                         Ok(fetch) => {
                             view.discovery_session
                                 .complete(facet, &fetch, fetch.value.is_empty());
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let distributions = fetch.value;
                             let count = distributions.len();
                             if preset == QuickAccess::Arch {
@@ -877,17 +911,24 @@ impl BootableView {
                             }
                             if view.discovery_session.quick_access() == preset {
                                 view.distributions = distributions;
-                                view.status =
-                                    format!("{count} active {base}-based distributions · {source}");
+                                view.status = view.t().plural(
+                                    Message::StatusCatalogBaseLoaded,
+                                    count as u64,
+                                    &[("base", &base), ("source", &source)],
+                                );
                             }
                         }
                         Err(error) => {
                             view.discovery_session.fail(facet, error.to_string());
                             if view.discovery_session.quick_access() == preset {
+                                let subject = view.t().format(
+                                    Message::CatalogSubjectBaseDistributions,
+                                    &[("base", &base)],
+                                );
                                 view.status = view
                                     .discovery_session
                                     .state(facet)
-                                    .short_label(&format!("{base}-based distributions"));
+                                    .short_label_in(view.locale, &subject);
                             }
                         }
                     }
@@ -902,9 +943,13 @@ impl BootableView {
     fn select_pi_device(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
         self.selected_pi_device = index;
         self.selected_pi_image = self.visible_pi_images().first().map(|(index, _)| *index);
+        let t = self.t();
         self.status = match index.and_then(|index| self.pi_catalog.as_ref()?.devices.get(index)) {
-            Some(device) => format!("Showing images compatible with {}", device.name),
-            None => "Showing every Raspberry Pi image".into(),
+            Some(device) => t.format(
+                Message::StatusCatalogPiCompatible,
+                &[("board", &device.name)],
+            ),
+            None => t.text(Message::StatusCatalogPiAll).into(),
         };
         cx.notify();
     }
@@ -971,21 +1016,25 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     match update {
                         DownloadUpdate::Progress(progress) => {
+                            // Core text (stage names, integrity result): English for now.
+                            view.download_final_shown = progress.phase == ProgressPhase::Finished;
                             view.status = progress.message.clone();
                             view.download_session.apply_progress(progress);
                         }
                         DownloadUpdate::Finished(completion) => {
                             match &completion {
-                                DownloadCompletion::Ready { report, destination } => {
-                                    view.browse_directory = destination
-                                        .parent()
-                                        .map(std::path::PathBuf::from);
+                                DownloadCompletion::Ready {
+                                    report,
+                                    destination,
+                                } => {
+                                    view.browse_directory =
+                                        destination.parent().map(std::path::PathBuf::from);
                                     // Core's final progress message already names the integrity result
                                     // (for example a verified signature); keep it instead of a generic line.
-                                    if !view.status.starts_with("Ready ·") {
-                                        view.status = format!(
-                                            "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                            report.path.display()
+                                    if !view.download_final_shown {
+                                        view.status = view.t().format(
+                                            Message::StatusDownloadReady,
+                                            &[("name", &report.path.display())],
                                         );
                                     }
                                     view.image = Some(report.clone());
@@ -993,13 +1042,19 @@ impl BootableView {
                                     view.reset_boot_firmware();
                                 }
                                 DownloadCompletion::Cancelled => {
-                                    view.status =
-                                        "Download cancelled • temporary data cleaned up".into();
+                                    view.status = view
+                                        .t()
+                                        .text(Message::StatusDownloadCancelledCleaned)
+                                        .into();
                                 }
                                 DownloadCompletion::Failed(error) => {
-                                    view.status = format!("Download stopped · {error}");
+                                    view.status = view.t().format(
+                                        Message::StatusDownloadStopped,
+                                        &[("error", error)],
+                                    );
                                 }
                             }
+                            view.download_final_shown = false;
                             view.download_session.finish(completion);
                             view.refresh_download_jobs(cx);
                             view.start_next_queued_download(cx);
@@ -1016,7 +1071,12 @@ impl BootableView {
     fn refresh_download_jobs(&mut self, cx: &mut Context<Self>) {
         match self.download_session.refresh(&self.engine) {
             Ok(_) => {}
-            Err(error) => self.status = format!("Download history unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadHistoryUnavailable,
+                    &[("error", &error)],
+                )
+            }
         }
         cx.notify();
     }
@@ -1025,9 +1085,10 @@ impl BootableView {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs(cx);
-            self.status = format!(
-                "{} download job(s) in history",
-                self.download_session.jobs().len()
+            self.status = self.t().plural(
+                Message::DownloadsJobsInHistory,
+                self.download_session.jobs().len() as u64,
+                &[],
             );
         }
         cx.notify();
@@ -1042,7 +1103,7 @@ impl BootableView {
     ) {
         let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
         else {
-            self.status = "Download queued · it will start when the active job finishes".into();
+            self.status = self.t().text(Message::StatusDownloadQueued).into();
             self.refresh_download_jobs(cx);
             return;
         };
@@ -1050,11 +1111,15 @@ impl BootableView {
     }
 
     fn launch_download_worker(&mut self, launch: DownloadLaunch, cx: &mut Context<Self>) {
-        self.status = if launch.retry {
-            "Retrying download · preserved bytes will be resumed when supported".into()
-        } else {
-            "Starting managed download…".into()
-        };
+        self.download_final_shown = false;
+        self.status = self
+            .t()
+            .text(if launch.retry {
+                Message::StatusDownloadRetrying
+            } else {
+                Message::StatusDownloadStarting
+            })
+            .into();
         let DownloadLaunch {
             id,
             destination,
@@ -1090,7 +1155,7 @@ impl BootableView {
         match self.download_session.retry(&self.engine, &id) {
             Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch, cx),
             Ok(DownloadRequest::Queued) => {
-                self.status = "Retry queued · it will start after the active download".into();
+                self.status = self.t().text(Message::StatusDownloadRetryQueued).into();
                 cx.notify();
             }
             Err(error) => {
@@ -1105,7 +1170,9 @@ impl BootableView {
             Ok(Some(launch)) => self.launch_download_worker(launch, cx),
             Ok(None) => {}
             Err(error) => {
-                self.status = format!("Could not start queued download · {error}");
+                self.status = self
+                    .t()
+                    .format(Message::StatusDownloadStartFailed, &[("error", &error)]);
                 cx.notify();
             }
         }
@@ -1113,7 +1180,7 @@ impl BootableView {
 
     fn use_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(job) = self.download_session.jobs().iter().find(|job| job.id == id) else {
-            self.status = "Download job no longer exists".into();
+            self.status = self.t().text(Message::StatusDownloadJobGone).into();
             cx.notify();
             return;
         };
@@ -1127,9 +1194,17 @@ impl BootableView {
                 self.advanced = false;
                 self.reset_boot_firmware();
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", destination.display());
+                self.status = self.t().format(
+                    Message::StatusDownloadUsingCompleted,
+                    &[("path", &destination.display())],
+                );
             }
-            Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadCompletedUnavailable,
+                    &[("error", &error)],
+                )
+            }
         }
         cx.notify();
     }
@@ -1137,7 +1212,7 @@ impl BootableView {
     fn remove_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
         match self.download_session.remove(&self.engine, id) {
             Ok(()) => {
-                self.status = "Download history entry removed · completed image kept".into();
+                self.status = self.t().text(Message::StatusDownloadHistoryRemoved).into();
                 self.refresh_download_jobs(cx);
             }
             Err(error) => {
@@ -1153,7 +1228,7 @@ impl BootableView {
             .and_then(|index| self.pi_catalog.as_ref()?.images.get(index))
             .cloned()
         else {
-            self.status = "Choose a Raspberry Pi image to download".into();
+            self.status = self.t().text(Message::StatusCatalogPiChoose).into();
             cx.notify();
             return;
         };
@@ -1162,7 +1237,7 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Raspberry Pi image download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadPiCancelled).into();
             cx.notify();
             return;
         };
@@ -1189,7 +1264,10 @@ impl BootableView {
         self.catalog_releases.clear();
         self.discovery_session
             .expect_details(distribution.slug.clone());
-        self.status = format!("Resolving current {} ISO files…", distribution.name);
+        self.status = self.t().format(
+            Message::StatusCatalogLoadingReleases,
+            &[("name", &distribution.name)],
+        );
         cx.notify();
         let request_slug = distribution.slug.clone();
         let fetch_slug = request_slug.clone();
@@ -1210,7 +1288,7 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.releases.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let DistributionBundle {
                                 details,
                                 releases,
@@ -1220,21 +1298,37 @@ impl BootableView {
                             view.selected_details = Some(details);
                             view.catalog_releases = releases;
                             view.selected_release = (count > 0).then_some(0);
+                            let t = view.t();
+                            let loaded = t.plural(
+                                Message::StatusCatalogReleasesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             view.status = if count == 0 && !warnings.is_empty() {
-                                format!(
-                                    "Profile ready · no direct ISO found · {} source error(s)",
-                                    warnings.len()
+                                t.plural(
+                                    Message::StatusCatalogProfileReadyErrors,
+                                    warnings.len() as u64,
+                                    &[],
                                 )
                             } else if count == 0 {
-                                "Profile loaded • no direct ISO was resolved from its current links"
-                                    .into()
+                                t.text(Message::StatusCatalogProfileReadyNoIso).into()
                             } else if !warnings.is_empty() {
-                                format!(
-                                    "{count} direct ISO release(s) · {source} · {} source warning(s)",
-                                    warnings.len()
+                                t.format(
+                                    Message::StatusCatalogWithWarnings,
+                                    &[
+                                        ("summary", &loaded),
+                                        (
+                                            "warnings",
+                                            &t.plural(
+                                                Message::StatusCatalogSourceWarnings,
+                                                warnings.len() as u64,
+                                                &[],
+                                            ),
+                                        ),
+                                    ],
                                 )
                             } else {
-                                format!("{count} direct ISO release(s) · {source}")
+                                loaded
                             };
                         }
                         Err(error) => {
@@ -1243,7 +1337,10 @@ impl BootableView {
                             view.status = view
                                 .discovery_session
                                 .state(CatalogFacet::Details)
-                                .short_label("ISO releases");
+                                .short_label_in(
+                                    view.locale,
+                                    view.t().text(Message::CatalogSubjectIsoReleases),
+                                );
                         }
                     }
                     cx.notify();
@@ -1260,12 +1357,15 @@ impl BootableView {
             .and_then(|index| self.distributions.get(index))
             .map(|distribution| distribution.page_url.clone())
         else {
-            self.status = "Choose a distribution first".into();
+            self.status = self
+                .t()
+                .text(Message::StatusCatalogChooseDistribution)
+                .into();
             cx.notify();
             return;
         };
         self.status = match self.engine.open_distrowatch_page(&page_url) {
-            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Ok(()) => self.t().text(Message::StatusCatalogBrowserOpened).into(),
             Err(error) => error.to_string(),
         };
         cx.notify();
@@ -1292,7 +1392,7 @@ impl BootableView {
                 );
             }
             QuickAccess::Windows => {
-                self.status = "Windows tools use the selected local ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsUsesIso).into();
                 cx.notify();
             }
         }
@@ -1304,7 +1404,7 @@ impl BootableView {
             .and_then(|index| self.catalog_releases.get(index))
             .cloned()
         else {
-            self.status = "Choose an ISO release to download".into();
+            self.status = self.t().text(Message::StatusCatalogChooseRelease).into();
             cx.notify();
             return;
         };
@@ -1313,7 +1413,7 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "ISO download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadIsoCancelled).into();
             cx.notify();
             return;
         };
@@ -1329,9 +1429,11 @@ impl BootableView {
     fn toggle_download_pause(&mut self, cx: &mut Context<Self>) {
         match self.download_session.toggle_pause(&self.engine) {
             Ok(Some(OperationState::Paused)) => {
-                self.status = "Download paused • resume or cancel when ready".into()
+                self.status = self.t().text(Message::StatusDownloadPaused).into()
             }
-            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Running)) => {
+                self.status = self.t().text(Message::StatusDownloadResumed).into()
+            }
             Ok(Some(OperationState::Cancelled) | None) => {}
             Err(error) => self.status = error.to_string(),
         }
@@ -1340,7 +1442,7 @@ impl BootableView {
 
     fn cancel_download(&mut self, cx: &mut Context<Self>) {
         if self.download_session.cancel() {
-            self.status = "Cancelling download safely • cleaning temporary data…".into();
+            self.status = self.t().text(Message::StatusDownloadCancelling).into();
             cx.notify();
         }
     }
@@ -1388,7 +1490,7 @@ impl BootableView {
 
     fn choose_image(&mut self, cx: &mut Context<Self>) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             cx.notify();
             return;
         }
@@ -1408,12 +1510,12 @@ impl BootableView {
 
     fn inspect_image_path(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             cx.notify();
             return;
         }
         self.image_loading = true;
-        self.status = "Inspecting image • compressed sources are measured after expansion…".into();
+        self.status = self.t().text(Message::StatusImageInspecting).into();
         cx.notify();
         let inspected_path = path.clone();
         let task = cx.background_executor().spawn(async move {
@@ -1428,7 +1530,9 @@ impl BootableView {
                     view.image_loading = false;
                     match result {
                         Ok(report) => {
-                            view.status = format!("Recognized {}", report.kind);
+                            view.status = view
+                                .t()
+                                .format(Message::StatusImageRecognized, &[("kind", &report.kind)]);
                             view.preferences.remember_image(&report);
                             view.save_preferences();
                             view.browse_directory = view.preferences.image_directory();
@@ -1455,7 +1559,9 @@ impl BootableView {
 
     fn save_preferences(&mut self) {
         if let Err(error) = self.preferences.save() {
-            self.status = format!("Preferences were not saved: {error}");
+            self.status = self
+                .t()
+                .format(Message::StatusPrefsSaveFailed, &[("error", &error)]);
         }
     }
 
@@ -1665,8 +1771,7 @@ impl BootableView {
     fn scan_devices(&mut self, manual: bool, cx: &mut Context<Self>) {
         if self.write_session.active() {
             if manual {
-                self.status =
-                    "Drive refresh is paused while writing • do not unplug the target".into();
+                self.status = self.t().text(Message::StatusDrivesRefreshPaused).into();
                 cx.notify();
             }
             return;
@@ -1675,7 +1780,7 @@ impl BootableView {
             Ok(devices) => {
                 if devices == self.devices {
                     if manual {
-                        self.status = "Drive list is up to date • automatic detection is on".into();
+                        self.status = self.t().text(Message::StatusDrivesUpToDate).into();
                         cx.notify();
                     }
                     return;
@@ -1696,7 +1801,7 @@ impl BootableView {
                 self.selected_device =
                     selected_id.and_then(|id| devices.iter().position(|device| device.id == id));
                 self.devices = devices;
-                self.status = device_change_message(added, removed);
+                self.status = device_change_message(self.t(), added, removed);
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -5550,14 +5655,15 @@ fn compact_list(t: Strings, values: &[String], limit: usize) -> String {
     result
 }
 
-fn device_change_message(added: usize, removed: usize) -> String {
+fn device_change_message(t: Strings, added: usize, removed: usize) -> String {
     match (added, removed) {
-        (0, 0) => "Drive details changed • list updated automatically".into(),
-        (added, 0) => format!("Detected {added} new drive(s) • list updated automatically"),
-        (0, removed) => format!("Removed {removed} drive(s) • list updated automatically"),
-        (added, removed) => {
-            format!("Drive list changed: {added} added, {removed} removed • updated automatically")
-        }
+        (0, 0) => t.text(Message::StatusDrivesChanged).into(),
+        (added, 0) => t.plural(Message::StatusDrivesAdded, added as u64, &[]),
+        (0, removed) => t.plural(Message::StatusDrivesRemoved, removed as u64, &[]),
+        (added, removed) => t.format(
+            Message::StatusDrivesAddedRemoved,
+            &[("added", &added), ("removed", &removed)],
+        ),
     }
 }
 
