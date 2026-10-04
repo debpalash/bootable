@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+clap_complete.workspace = true
 crossterm.workspace = true
 bootable-core = { path = "../../crates/bootable-core" }
 image.workspace = true

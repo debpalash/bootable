@@ -1,5 +1,7 @@
+use std::fmt;
 use std::io::{self, IsTerminal};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
@@ -14,7 +16,8 @@ use bootable_core::{
     catalog_search_summary, device_details, distribution_matches_query, format_bytes,
     removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
 };
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
     MouseButton, MouseEvent, MouseEventKind,
@@ -140,6 +143,38 @@ enum Commands {
         #[arg(long, default_value = "off", value_name = "off|1|2|4")]
         bad_block_check: BadBlockCheck,
     },
+    /// One step: fetch (if a catalog slug), plan, then write and verify.
+    ///
+    /// The target must be named explicitly and must pass the same eligibility
+    /// checks as `plan` and `write`. Nothing is written unless --confirm
+    /// repeats the exact phrase printed by the plan.
+    Flash {
+        /// Local image path, or a catalog slug (see `bootable catalog`).
+        #[arg(value_name = "SLUG_OR_IMAGE")]
+        source: String,
+        /// Removable device id or path (see `bootable devices`).
+        target: String,
+        /// Release index to download when SOURCE is a catalog slug.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Where to save a downloaded catalog image.
+        #[arg(long, value_name = "ISO_FILE")]
+        output: Option<PathBuf>,
+        #[arg(long, value_name = "EXACT_PHRASE")]
+        confirm: Option<String>,
+        /// Emit newline-delimited JSON progress events for trusted clients.
+        #[arg(long)]
+        json_progress: bool,
+        #[command(flatten)]
+        windows: WindowsArgs,
+        #[arg(long, default_value = "off", value_name = "off|1|2|4")]
+        bad_block_check: BadBlockCheck,
+    },
+    /// Print a shell completion script to stdout.
+    Completions {
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -168,8 +203,126 @@ struct WindowsArgs {
     force_windows_s_mode: bool,
 }
 
-fn main() -> Result<()> {
+/// Stable process exit codes. Documented in `docs/cli.md`; do not renumber.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitStatus {
+    Ok = 0,
+    Error = 1,
+    Usage = 2,
+    Confirmation = 3,
+    Verification = 4,
+}
+
+impl ExitStatus {
+    fn code(self) -> u8 {
+        self as u8
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Error => "error",
+            Self::Usage => "usage",
+            Self::Confirmation => "confirmation_required",
+            Self::Verification => "verification_failed",
+        }
+    }
+}
+
+/// CLI-level failures that carry their own exit status.
+#[derive(Debug)]
+enum CliError {
+    Usage(String),
+    ConfirmationRequired { phrase: String },
+}
+
+impl fmt::Display for CliError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Usage(message) => formatter.write_str(message),
+            Self::ConfirmationRequired { phrase } => write!(
+                formatter,
+                "nothing was written; repeat with --confirm '{phrase}'"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CliError {}
+
+fn core_exit_status(error: &bootable_core::Error) -> ExitStatus {
+    use bootable_core::Error;
+    match error {
+        Error::ConfirmationMismatch { .. } | Error::UnsafeTarget(_) => ExitStatus::Confirmation,
+        Error::StalePlan(message)
+        | Error::PrivilegedWriteFailed(message)
+        | Error::InvalidDownload(message)
+            if is_verification_message(message) =>
+        {
+            ExitStatus::Verification
+        }
+        _ => ExitStatus::Error,
+    }
+}
+
+/// Core reports verification failures as message text on a few variants.
+fn is_verification_message(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("verification failed") || message.contains("mismatch")
+}
+
+fn exit_status(error: &anyhow::Error) -> ExitStatus {
+    if let Some(error) = error.downcast_ref::<CliError>() {
+        return match error {
+            CliError::Usage(_) => ExitStatus::Usage,
+            CliError::ConfirmationRequired { .. } => ExitStatus::Confirmation,
+        };
+    }
+    error
+        .downcast_ref::<bootable_core::Error>()
+        .map_or(ExitStatus::Error, core_exit_status)
+}
+
+fn error_json(message: &str, status: ExitStatus) -> serde_json::Value {
+    serde_json::json!({
+        "error": { "kind": status.name(), "exit_code": status.code(), "message": message }
+    })
+}
+
+/// Commands whose success output is JSON also report failures as JSON on stderr.
+fn wants_json_errors(command: &Commands) -> bool {
+    match command {
+        Commands::Catalog { json, .. }
+        | Commands::Releases { json, .. }
+        | Commands::PiImages { json, .. }
+        | Commands::Devices { json }
+        | Commands::Inspect { json, .. }
+        | Commands::Checksum { json, .. }
+        | Commands::Plan { json, .. } => *json,
+        _ => false,
+    }
+}
+
+fn main() -> ExitCode {
+    // clap exits with status 2 on usage errors and 0 for --help/--version.
     let cli = Cli::parse();
+    let json_errors = cli.command.as_ref().is_some_and(wants_json_errors);
+    match run(cli) {
+        Ok(()) => ExitCode::from(ExitStatus::Ok.code()),
+        Err(error) => {
+            let status = exit_status(&error);
+            let message = error.to_string();
+            if json_errors {
+                eprintln!("{}", error_json(&message, status));
+            } else {
+                eprintln!("error: {message}");
+            }
+            ExitCode::from(status.code())
+        }
+    }
+}
+
+fn run(cli: Cli) -> Result<()> {
     let engine = Bootable::native();
     match cli.command {
         Some(Commands::Catalog { limit, json }) => print_catalog(&engine, limit, json),
@@ -226,9 +379,41 @@ fn main() -> Result<()> {
             json_progress,
             write_options(windows, bad_block_check),
         ),
+        Some(Commands::Flash {
+            source,
+            target,
+            index,
+            output,
+            confirm,
+            json_progress,
+            windows,
+            bad_block_check,
+        }) => flash_image(
+            &engine,
+            FlashRequest {
+                source,
+                target,
+                index,
+                output,
+                confirm,
+                json_progress,
+                options: write_options(windows, bad_block_check),
+            },
+        ),
+        Some(Commands::Completions { shell }) => {
+            print_completions(shell);
+            Ok(())
+        }
         None if io::stdout().is_terminal() => run_tui(engine, cli.image),
-        None => bail!("interactive mode needs a terminal; use `bootable --help`"),
+        None => Err(CliError::Usage(
+            "interactive mode needs a terminal; use `bootable --help`".into(),
+        )
+        .into()),
     }
+}
+
+fn print_completions(shell: Shell) {
+    clap_complete::generate(shell, &mut Cli::command(), "bootable", &mut io::stdout());
 }
 
 fn print_catalog(engine: &Bootable, limit: usize, json: bool) -> Result<()> {
@@ -298,17 +483,9 @@ fn download_release(
     json_progress: bool,
 ) -> Result<()> {
     let mut reporter = ProgressReporter::new(json_progress);
-    let result = (|| {
-        let details = engine.distribution_details(slug)?;
-        let releases = resolve_releases(engine, &details)?;
-        let release = releases
-            .get(index)
-            .with_context(|| format!("release index {index} is out of range"))?;
-        let destination = output.unwrap_or_else(|| PathBuf::from(&release.name));
-        engine
-            .download_iso(release, &destination, |progress| reporter.print(progress))
-            .map_err(anyhow::Error::from)
-    })();
+    let result = fetch_catalog_image(engine, slug, index, output, &mut |progress| {
+        reporter.print(progress)
+    });
 
     match result {
         Ok(report) => {
@@ -322,10 +499,30 @@ fn download_release(
             Ok(())
         }
         Err(error) => {
-            reporter.failed(&error.to_string());
+            reporter.failed(&error.to_string(), exit_status(&error));
             Err(error)
         }
     }
+}
+
+/// Resolve a catalog slug to a release, then download and verify it.
+fn fetch_catalog_image(
+    engine: &Bootable,
+    slug: &str,
+    index: usize,
+    output: Option<PathBuf>,
+    progress: &mut dyn FnMut(Progress),
+) -> Result<ImageReport> {
+    let details = engine.distribution_details(slug)?;
+    let releases = resolve_releases(engine, &details)?;
+    let release = releases.get(index).ok_or_else(|| {
+        CliError::Usage(format!(
+            "release index {index} is out of range ({} available)",
+            releases.len()
+        ))
+    })?;
+    let destination = output.unwrap_or_else(|| PathBuf::from(&release.name));
+    Ok(engine.download_iso(release, &destination, progress)?)
 }
 
 fn resolve_releases(engine: &Bootable, details: &DistributionDetails) -> Result<Vec<IsoRelease>> {
@@ -474,35 +671,200 @@ fn print_plan(
     Ok(())
 }
 
+/// The engine operations the write commands depend on. `Bootable` is the real
+/// implementation; tests substitute a fake so no device is ever touched.
+trait WriteBackend {
+    fn check_target(&self, target: &str) -> Result<()>;
+    fn fetch(
+        &self,
+        slug: &str,
+        index: usize,
+        output: Option<PathBuf>,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<ImageReport>;
+    fn prepare(&self, image: PathBuf, target: &str, options: WriteOptions) -> Result<WritePlan>;
+    fn write(
+        &self,
+        plan: &WritePlan,
+        confirmation: &str,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<()>;
+}
+
+impl WriteBackend for Bootable {
+    fn check_target(&self, target: &str) -> Result<()> {
+        let device = self
+            .discover_devices()?
+            .into_iter()
+            .find(|device| device.id.as_str() == target || device.path.to_string_lossy() == target)
+            .ok_or_else(|| bootable_core::Error::DeviceNotFound(target.into()))?;
+        if !device.is_eligible_target() {
+            return Err(bootable_core::Error::UnsafeTarget(format!(
+                "{}: {}",
+                device.path.display(),
+                target_eligibility_label(&device)
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
+    fn fetch(
+        &self,
+        slug: &str,
+        index: usize,
+        output: Option<PathBuf>,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<ImageReport> {
+        fetch_catalog_image(self, slug, index, output, progress)
+    }
+
+    fn prepare(&self, image: PathBuf, target: &str, options: WriteOptions) -> Result<WritePlan> {
+        Ok(self.prepare_with_options(image, target, options)?)
+    }
+
+    fn write(
+        &self,
+        plan: &WritePlan,
+        confirmation: &str,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<()> {
+        Ok(self.write_with_privilege(plan, confirmation, progress)?)
+    }
+}
+
 fn write_image(
-    engine: &Bootable,
+    backend: &impl WriteBackend,
     image: PathBuf,
     target: &str,
     confirmation: Option<String>,
     json_progress: bool,
     options: WriteOptions,
 ) -> Result<()> {
-    let plan = engine.prepare_with_options(image, target, options)?;
-    let Some(confirmation) = confirmation else {
-        render_plan_text(&plan);
-        bail!(
-            "nothing was written; repeat with --confirm '{}'",
-            plan.confirmation_phrase
-        );
-    };
+    let plan = backend.prepare(image, target, options)?;
+    confirmed_write(backend, &plan, confirmation, json_progress)
+}
+
+/// The single confirmation gate shared by `write` and `flash`: nothing is
+/// written unless the caller repeats the plan's exact phrase.
+fn confirmed_write(
+    backend: &impl WriteBackend,
+    plan: &WritePlan,
+    confirmation: Option<String>,
+    json_progress: bool,
+) -> Result<()> {
     let mut reporter = ProgressReporter::new(json_progress);
-    let result =
-        engine.write_with_privilege(&plan, &confirmation, |progress| reporter.print(progress));
-    match result {
+    let Some(confirmation) = confirmation else {
+        if json_progress {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "event": "confirmation_required",
+                    "data": {
+                        "confirmation_phrase": plan.confirmation_phrase,
+                        "plan": plan,
+                    },
+                })
+            );
+        } else {
+            render_plan_text(plan);
+        }
+        return Err(CliError::ConfirmationRequired {
+            phrase: plan.confirmation_phrase.clone(),
+        }
+        .into());
+    };
+    if !plan.confirmation_matches(&confirmation) {
+        let error: anyhow::Error = bootable_core::Error::ConfirmationMismatch {
+            expected: plan.confirmation_phrase.clone(),
+        }
+        .into();
+        reporter.failed(&error.to_string(), exit_status(&error));
+        return Err(error);
+    }
+    match backend.write(plan, &confirmation, &mut |progress| {
+        reporter.print(progress)
+    }) {
         Ok(()) => {
             reporter.finished();
             Ok(())
         }
         Err(error) => {
-            reporter.failed(&error.to_string());
-            Err(error.into())
+            reporter.failed(&error.to_string(), exit_status(&error));
+            Err(error)
         }
     }
+}
+
+struct FlashRequest {
+    source: String,
+    target: String,
+    index: usize,
+    output: Option<PathBuf>,
+    confirm: Option<String>,
+    json_progress: bool,
+    options: WriteOptions,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum FlashSource {
+    Image(PathBuf),
+    Catalog(String),
+}
+
+/// An existing file, or anything that looks like a path, is a local image;
+/// a bare word is a catalog slug.
+fn classify_source(source: &str, exists: bool) -> FlashSource {
+    let path_like = source.contains(['/', '\\', '.']) || source.starts_with('~');
+    if exists || path_like {
+        FlashSource::Image(PathBuf::from(source))
+    } else {
+        FlashSource::Catalog(source.to_owned())
+    }
+}
+
+fn flash_image(backend: &impl WriteBackend, request: FlashRequest) -> Result<()> {
+    let FlashRequest {
+        source,
+        target,
+        index,
+        output,
+        confirm,
+        json_progress,
+        options,
+    } = request;
+    let mut reporter = ProgressReporter::new(json_progress);
+    let image = match classify_source(&source, Path::new(&source).exists()) {
+        FlashSource::Image(path) => path,
+        FlashSource::Catalog(slug) => {
+            // Refuse a missing or ineligible target before a large download.
+            backend.check_target(&target)?;
+            let report = backend
+                .fetch(&slug, index, output, &mut |progress| {
+                    reporter.print(progress)
+                })
+                .inspect_err(|error| reporter.failed(&error.to_string(), exit_status(error)))?;
+            if confirm.is_none() && !json_progress {
+                eprintln!(
+                    "Image kept at {}; pass that path instead of the slug to skip the download.",
+                    report.path.display()
+                );
+            }
+            report.path
+        }
+    };
+    let plan = backend
+        .prepare(image, &target, options)
+        .inspect_err(|error| reporter.failed(&error.to_string(), exit_status(error)))?;
+    confirmed_write(backend, &plan, confirm, json_progress)?;
+    if !json_progress {
+        println!(
+            "Done: {} written and verified on {}",
+            plan.image.path.display(),
+            plan.target.path.display()
+        );
+    }
+    Ok(())
 }
 
 fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteOptions {
@@ -573,11 +935,18 @@ impl ProgressReporter {
         }
     }
 
-    fn failed(&self, message: &str) {
+    fn failed(&self, message: &str, status: ExitStatus) {
         if self.json {
             println!(
                 "{}",
-                serde_json::json!({ "event": "failed", "data": { "message": message } })
+                serde_json::json!({
+                    "event": "failed",
+                    "data": {
+                        "message": message,
+                        "kind": status.name(),
+                        "exit_code": status.code(),
+                    },
+                })
             );
         }
     }
@@ -5508,5 +5877,366 @@ mod workspace_render_tests {
         for section in HELP_SECTIONS {
             assert!(screen.contains(&section.title.to_uppercase()), "{screen}");
         }
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+
+    use anyhow::Result;
+    use bootable_core::{
+        Device, DeviceId, Error, ImageKind, ImageReport, PlanStep, Progress, WriteOptions,
+        WritePlan, WriteStrategy,
+    };
+    use clap::{CommandFactory, Parser};
+    use clap_complete::Shell;
+
+    use super::{
+        Cli, CliError, Commands, ExitStatus, FlashRequest, FlashSource, WriteBackend,
+        classify_source, error_json, exit_status, flash_image, wants_json_errors, write_image,
+    };
+
+    const PHRASE: &str = "ERASE /dev/fake TEST";
+
+    fn parse(arguments: &[&str]) -> Cli {
+        Cli::try_parse_from(arguments).expect("valid invocation")
+    }
+
+    fn fake_plan(image: PathBuf, target: &str) -> WritePlan {
+        WritePlan {
+            image: ImageReport {
+                path: image,
+                size: 1024,
+                kind: ImageKind::HybridIso,
+                volume_label: None,
+                warnings: Vec::new(),
+            },
+            target: Device {
+                id: DeviceId::new(target),
+                path: PathBuf::from(target),
+                vendor: None,
+                model: None,
+                serial: None,
+                transport: None,
+                capacity: 1 << 30,
+                removable: true,
+                read_only: false,
+                system_disk: false,
+                mounts: Vec::new(),
+            },
+            strategy: WriteStrategy::RawVerified,
+            options: WriteOptions::default(),
+            steps: vec![PlanStep {
+                title: "Write".into(),
+                destructive: true,
+            }],
+            required_tools: Vec::new(),
+            confirmation_phrase: PHRASE.into(),
+        }
+    }
+
+    /// Records every call; never touches a real device or network.
+    #[derive(Default)]
+    struct FakeBackend {
+        eligible: bool,
+        write_error: Option<fn() -> Error>,
+        fetches: RefCell<Vec<String>>,
+        prepares: RefCell<Vec<(PathBuf, String)>>,
+        writes: RefCell<Vec<String>>,
+    }
+
+    impl FakeBackend {
+        fn eligible() -> Self {
+            Self {
+                eligible: true,
+                ..Self::default()
+            }
+        }
+    }
+
+    impl WriteBackend for FakeBackend {
+        fn check_target(&self, target: &str) -> Result<()> {
+            if self.eligible {
+                Ok(())
+            } else {
+                Err(Error::UnsafeTarget(format!("{target}: Internal disk · blocked")).into())
+            }
+        }
+
+        fn fetch(
+            &self,
+            slug: &str,
+            _index: usize,
+            _output: Option<PathBuf>,
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<ImageReport> {
+            self.fetches.borrow_mut().push(slug.into());
+            Ok(fake_plan(PathBuf::from(format!("{slug}.iso")), "/dev/fake").image)
+        }
+
+        fn prepare(
+            &self,
+            image: PathBuf,
+            target: &str,
+            _options: WriteOptions,
+        ) -> Result<WritePlan> {
+            self.prepares
+                .borrow_mut()
+                .push((image.clone(), target.into()));
+            Ok(fake_plan(image, target))
+        }
+
+        fn write(
+            &self,
+            _plan: &WritePlan,
+            confirmation: &str,
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<()> {
+            self.writes.borrow_mut().push(confirmation.into());
+            match self.write_error {
+                Some(error) => Err(error().into()),
+                None => Ok(()),
+            }
+        }
+    }
+
+    fn request(source: &str, confirm: Option<&str>) -> FlashRequest {
+        FlashRequest {
+            source: source.into(),
+            target: "/dev/fake".into(),
+            index: 0,
+            output: None,
+            confirm: confirm.map(Into::into),
+            json_progress: true,
+            options: WriteOptions::default(),
+        }
+    }
+
+    #[test]
+    fn exit_codes_are_stable() {
+        assert_eq!(ExitStatus::Ok.code(), 0);
+        assert_eq!(ExitStatus::Error.code(), 1);
+        assert_eq!(ExitStatus::Usage.code(), 2);
+        assert_eq!(ExitStatus::Confirmation.code(), 3);
+        assert_eq!(ExitStatus::Verification.code(), 4);
+    }
+
+    #[test]
+    fn errors_map_to_documented_exit_codes() {
+        let status = |error: anyhow::Error| exit_status(&error);
+        assert_eq!(
+            status(CliError::Usage("bad".into()).into()),
+            ExitStatus::Usage
+        );
+        assert_eq!(
+            status(CliError::ConfirmationRequired { phrase: "x".into() }.into()),
+            ExitStatus::Confirmation
+        );
+        assert_eq!(
+            status(
+                Error::ConfirmationMismatch {
+                    expected: "x".into()
+                }
+                .into()
+            ),
+            ExitStatus::Confirmation
+        );
+        assert_eq!(
+            status(Error::UnsafeTarget("system disk".into()).into()),
+            ExitStatus::Confirmation
+        );
+        assert_eq!(
+            status(Error::StalePlan("verification failed: SHA-256 digests differ".into()).into()),
+            ExitStatus::Verification
+        );
+        assert_eq!(
+            status(Error::InvalidDownload("SHA-256 checksum mismatch for x.iso".into()).into()),
+            ExitStatus::Verification
+        );
+        assert_eq!(
+            status(Error::StalePlan("the device changed".into()).into()),
+            ExitStatus::Error
+        );
+        assert_eq!(status(Error::NotPrivileged.into()), ExitStatus::Error);
+        assert_eq!(status(anyhow::anyhow!("boom")), ExitStatus::Error);
+        // Context added by callers must not hide the underlying status.
+        let wrapped = anyhow::Error::from(Error::UnsafeTarget("x".into())).context("planning");
+        assert_eq!(exit_status(&wrapped), ExitStatus::Confirmation);
+    }
+
+    #[test]
+    fn json_errors_share_one_shape() {
+        let value = error_json("nope", ExitStatus::Verification);
+        assert_eq!(value["error"]["kind"], "verification_failed");
+        assert_eq!(value["error"]["exit_code"], 4);
+        assert_eq!(value["error"]["message"], "nope");
+        let with_json = parse(&["bootable", "devices", "--json"]);
+        assert!(wants_json_errors(&with_json.command.expect("command")));
+        let without_json = parse(&["bootable", "devices"]);
+        assert!(!wants_json_errors(&without_json.command.expect("command")));
+    }
+
+    #[test]
+    fn flash_parses_with_explicit_target_and_options() {
+        let cli = parse(&[
+            "bootable",
+            "flash",
+            "cachyos",
+            "/dev/sdx",
+            "--index",
+            "2",
+            "--output",
+            "a.iso",
+            "--confirm",
+            PHRASE,
+            "--json-progress",
+        ]);
+        let Some(Commands::Flash {
+            source,
+            target,
+            index,
+            output,
+            confirm,
+            json_progress,
+            ..
+        }) = cli.command
+        else {
+            panic!("expected flash");
+        };
+        assert_eq!(source, "cachyos");
+        assert_eq!(target, "/dev/sdx");
+        assert_eq!(index, 2);
+        assert_eq!(output, Some(PathBuf::from("a.iso")));
+        assert_eq!(confirm.as_deref(), Some(PHRASE));
+        assert!(json_progress);
+    }
+
+    #[test]
+    fn flash_never_infers_a_target() {
+        assert!(Cli::try_parse_from(["bootable", "flash", "cachyos"]).is_err());
+        assert!(Cli::try_parse_from(["bootable", "flash"]).is_err());
+    }
+
+    #[test]
+    fn completions_parse_every_supported_shell() {
+        for name in ["bash", "zsh", "fish", "powershell", "elvish"] {
+            let cli = parse(&["bootable", "completions", name]);
+            assert!(matches!(cli.command, Some(Commands::Completions { .. })));
+        }
+        assert!(Cli::try_parse_from(["bootable", "completions", "tcsh"]).is_err());
+    }
+
+    #[test]
+    fn completions_scripts_mention_flash() {
+        for shell in [
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Elvish,
+        ] {
+            let mut output = Vec::new();
+            clap_complete::generate(shell, &mut Cli::command(), "bootable", &mut output);
+            let script = String::from_utf8(output).expect("utf-8 script");
+            assert!(script.contains("flash"), "{shell} completions lack flash");
+        }
+    }
+
+    #[test]
+    fn sources_are_classified_as_paths_or_slugs() {
+        assert_eq!(
+            classify_source("cachyos", false),
+            FlashSource::Catalog("cachyos".into())
+        );
+        for path in ["image.iso", "./image", "/tmp/x", "dir\\x", "~/x"] {
+            assert_eq!(
+                classify_source(path, false),
+                FlashSource::Image(PathBuf::from(path))
+            );
+        }
+        assert_eq!(
+            classify_source("local", true),
+            FlashSource::Image(PathBuf::from("local"))
+        );
+    }
+
+    #[test]
+    fn flash_without_confirm_plans_but_never_writes() {
+        let backend = FakeBackend::eligible();
+        let error = flash_image(&backend, request("missing.iso", None)).expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Confirmation);
+        assert!(error.to_string().contains(PHRASE));
+        assert_eq!(backend.prepares.borrow().len(), 1);
+        assert!(backend.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn flash_with_wrong_phrase_never_writes() {
+        let backend = FakeBackend::eligible();
+        let error =
+            flash_image(&backend, request("missing.iso", Some("yes"))).expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Confirmation);
+        assert!(backend.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn flash_writes_only_with_the_exact_phrase() {
+        let backend = FakeBackend::eligible();
+        flash_image(&backend, request("missing.iso", Some(PHRASE))).expect("flashed");
+        assert_eq!(*backend.writes.borrow(), vec![PHRASE.to_owned()]);
+        assert_eq!(
+            backend.prepares.borrow()[0],
+            (PathBuf::from("missing.iso"), "/dev/fake".to_owned())
+        );
+        assert!(backend.fetches.borrow().is_empty());
+    }
+
+    #[test]
+    fn flash_slug_fetches_then_plans_the_downloaded_image() {
+        let backend = FakeBackend::eligible();
+        flash_image(&backend, request("cachyos", Some(PHRASE))).expect("flashed");
+        assert_eq!(*backend.fetches.borrow(), vec!["cachyos".to_owned()]);
+        assert_eq!(backend.prepares.borrow()[0].0, PathBuf::from("cachyos.iso"));
+        assert_eq!(backend.writes.borrow().len(), 1);
+    }
+
+    #[test]
+    fn flash_refuses_ineligible_target_before_downloading() {
+        let backend = FakeBackend::default();
+        let error = flash_image(&backend, request("cachyos", Some(PHRASE))).expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Confirmation);
+        assert!(backend.fetches.borrow().is_empty());
+        assert!(backend.prepares.borrow().is_empty());
+        assert!(backend.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn flash_reports_verification_failure_with_its_own_exit_code() {
+        let backend = FakeBackend {
+            eligible: true,
+            write_error: Some(|| Error::StalePlan("verification failed: digests differ".into())),
+            ..FakeBackend::default()
+        };
+        let error =
+            flash_image(&backend, request("missing.iso", Some(PHRASE))).expect_err("failed");
+        assert_eq!(exit_status(&error), ExitStatus::Verification);
+    }
+
+    #[test]
+    fn write_shares_the_confirmation_gate() {
+        let backend = FakeBackend::eligible();
+        let error = write_image(
+            &backend,
+            PathBuf::from("image.iso"),
+            "/dev/fake",
+            None,
+            true,
+            WriteOptions::default(),
+        )
+        .expect_err("refused");
+        assert_eq!(exit_status(&error), ExitStatus::Confirmation);
+        assert!(backend.writes.borrow().is_empty());
     }
 }
