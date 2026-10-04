@@ -21,6 +21,7 @@ rust-version = "1.88"
 [workspace.dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 crossterm = "0.29"
 gpui = "0.2.2"
 gpui-component = "0.5.1"
