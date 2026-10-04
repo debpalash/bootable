@@ -2612,62 +2612,74 @@ impl App {
 
     fn toggle_windows_requirements(&mut self) {
         let Some(image) = &self.image else {
-            self.status = "Choose a Windows image before changing Windows options".into();
+            self.status = self.t().text(Message::StatusWindowsChooseInstaller).into();
             return;
         };
         if !matches!(
             image.kind,
             bootable_core::ImageKind::WindowsInstaller { .. }
         ) {
-            self.status = "Windows setup options apply only to Windows installer images".into();
+            self.status = self.t().text(Message::StatusWindowsNotWindows).into();
             return;
         }
-        let enabled = &mut self.options.windows.bypass_hardware_requirements;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows 11 TPM, Secure Boot, and RAM checks will be bypassed".into()
-        } else {
-            "Windows 11 hardware checks use Microsoft defaults".into()
-        };
+        let enabled = !self.options.windows.bypass_hardware_requirements;
+        self.options.windows.bypass_hardware_requirements = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsBypassHardwareOn
+            } else {
+                Message::OptionsWindowsBypassHardwareOff
+            })
+            .into();
     }
 
     fn toggle_windows_offline_account(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.allow_offline_account;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows OOBE will expose the offline/local-account path".into()
-        } else {
-            "Windows OOBE will use its standard account flow".into()
-        };
+        let enabled = !self.options.windows.allow_offline_account;
+        self.options.windows.allow_offline_account = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsOfflineAccountOn
+            } else {
+                Message::OptionsWindowsOfflineAccountOff
+            })
+            .into();
     }
 
     fn toggle_windows_privacy(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.minimize_data_collection;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows OOBE will use privacy-focused defaults".into()
-        } else {
-            "Windows OOBE privacy questions will remain at their defaults".into()
-        };
+        let enabled = !self.options.windows.minimize_data_collection;
+        self.options.windows.minimize_data_collection = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsPrivacyOn
+            } else {
+                Message::OptionsWindowsPrivacyOff
+            })
+            .into();
     }
 
     fn toggle_windows_bitlocker(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.disable_bitlocker;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Automatic Windows device encryption will be disabled".into()
-        } else {
-            "Windows may automatically enable device encryption".into()
-        };
+        let enabled = !self.options.windows.disable_bitlocker;
+        self.options.windows.disable_bitlocker = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsBitlockerOn
+            } else {
+                Message::OptionsWindowsBitlockerOff
+            })
+            .into();
     }
 
     fn toggle_windows_named_account(&mut self) {
@@ -2676,12 +2688,15 @@ impl App {
         }
         if self.options.windows.local_account.is_some() {
             self.options.windows.local_account = None;
-            self.status = "Automatic local-account creation disabled".into();
+            self.status = self.t().text(Message::OptionsWindowsNamedAccountOff).into();
         } else {
             let account = bootable_core::suggested_account_name().unwrap_or_else(|| "User".into());
             self.options.windows.local_account = Some(account.clone());
             self.options.windows.allow_offline_account = true;
-            self.status = format!("Windows will create local administrator account `{account}`");
+            self.status = self.t().format(
+                Message::OptionsWindowsNamedAccountOn,
+                &[("account", &account)],
+            );
         }
     }
 
@@ -2691,12 +2706,15 @@ impl App {
         }
         if self.options.windows.regional.is_some() {
             self.options.windows.regional = None;
-            self.status = "Windows Setup will ask for regional options".into();
+            self.status = self.t().text(Message::OptionsWindowsHostRegionOff).into();
         } else {
             let regional = bootable_core::host_regional_options();
-            self.status = format!(
-                "Windows will use locale {} and time zone {}",
-                regional.user_locale, regional.time_zone
+            self.status = self.t().format(
+                Message::OptionsWindowsHostRegionOn,
+                &[
+                    ("locale", &regional.user_locale),
+                    ("zone", &regional.time_zone),
+                ],
             );
             self.options.windows.regional = Some(regional);
         }
@@ -2704,30 +2722,61 @@ impl App {
 
     fn toggle_windows_qol(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.quality_of_life = !self.options.windows.quality_of_life;
-            self.status = "Windows QoL policy selection updated".into();
+            let enabled = !self.options.windows.quality_of_life;
+            self.options.windows.quality_of_life = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsQolOn
+                } else {
+                    Message::OptionsWindowsQolOff
+                })
+                .into();
         }
     }
 
     fn toggle_windows_ca_2023(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.use_windows_ca_2023 = !self.options.windows.use_windows_ca_2023;
-            self.status = "CA 2023 boot media requires updated Secure Boot certificates".into();
+            let enabled = !self.options.windows.use_windows_ca_2023;
+            self.options.windows.use_windows_ca_2023 = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsCa2023On
+                } else {
+                    Message::OptionsWindowsCa2023Off
+                })
+                .into();
         }
     }
 
     fn toggle_windows_skusi_policy(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.apply_skusi_policy = !self.options.windows.apply_skusi_policy;
-            self.status = "SkuSiPolicy.p7b selection updated".into();
+            let enabled = !self.options.windows.apply_skusi_policy;
+            self.options.windows.apply_skusi_policy = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsSkusipolicyOn
+                } else {
+                    Message::OptionsWindowsSkusipolicyOff
+                })
+                .into();
         }
     }
 
     fn toggle_windows_s_mode(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.force_s_mode = !self.options.windows.force_s_mode;
-            self.status =
-                "S Mode may remain enforced after reinstall; review the plan carefully".into();
+            let enabled = !self.options.windows.force_s_mode;
+            self.options.windows.force_s_mode = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsSmodeOn
+                } else {
+                    Message::OptionsWindowsSmodeOff
+                })
+                .into();
         }
     }
 
@@ -2736,9 +2785,12 @@ impl App {
             return;
         }
         cycle_partition_scheme(&mut self.options);
-        self.status = format!(
-            "Windows partition scheme: {} · boot firmware: {}",
-            self.options.windows_partition_scheme, self.options.windows_boot_firmware
+        self.status = self.t().format(
+            Message::StatusWindowsScheme,
+            &[
+                ("scheme", &self.options.windows_partition_scheme),
+                ("firmware", &self.options.windows_boot_firmware),
+            ],
         );
     }
 
@@ -2747,9 +2799,12 @@ impl App {
             return;
         }
         cycle_boot_firmware(&mut self.options);
-        self.status = format!(
-            "Boot firmware: {} (experimental) · partition scheme: {}",
-            self.options.windows_boot_firmware, self.options.windows_partition_scheme
+        self.status = self.t().format(
+            Message::StatusWindowsFirmware,
+            &[
+                ("firmware", &self.options.windows_boot_firmware),
+                ("scheme", &self.options.windows_partition_scheme),
+            ],
         );
     }
 
@@ -2767,7 +2822,7 @@ impl App {
             )
         });
         if !available {
-            self.status = "Choose a Windows installer image before changing Windows options".into();
+            self.status = self.t().text(Message::StatusWindowsChooseInstaller).into();
         }
         available
     }
@@ -3536,14 +3591,18 @@ fn draw_screen(frame: &mut ratatui::Frame<'_>, app: &mut App) {
 }
 
 fn draw_collapsed_setup(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let bad_blocks = match app.options.bad_block_check.passes() {
-        0 => "Bad blocks off".into(),
-        passes => format!("Bad blocks {passes}x"),
-    };
+    let t = app.t();
+    let summary = t.format(
+        Message::OptionsSummaryVerification,
+        &[(
+            "bad_blocks",
+            &app.options.bad_block_check.label_in(app.locale),
+        )],
+    );
     render_button(
         frame,
         area,
-        &format!("+  Setup options · Verification on · {bad_blocks}"),
+        &format!("+  {} · {summary}", t.text(Message::ActionSetupOptions)),
         app.workspace_focus == WorkspaceFocus::Setup,
     );
     app.hit_regions.advanced = Some(area);
@@ -3553,7 +3612,11 @@ fn draw_collapsed_discovery(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     render_button(
         frame,
         area,
-        "+  Discover images · Browse trusted catalogs · Open →",
+        &format!(
+            "+  {} · {} →",
+            app.t().text(Message::ActionDiscover),
+            app.t().text(Message::DiscoverCollapsedHint)
+        ),
         app.workspace_focus == WorkspaceFocus::Discover,
     );
     app.hit_regions.discover = Some(area);
@@ -4899,6 +4962,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
     app.hit_regions.release_rows.clear();
     app.hit_regions.pi_device_rows.clear();
     app.hit_regions.pi_image_rows.clear();
+    let t = app.t();
     let windows_image = app.image.as_ref().is_some_and(|image| {
         matches!(
             image.kind,
@@ -4958,11 +5022,11 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
                     .add_modifier(Modifier::BOLD),
             ),
             Line::styled(
-                if windows_image {
-                    "Windows ISO ready · setup choices unlocked"
+                t.text(if windows_image {
+                    Message::OptionsWindowsInstallerReady
                 } else {
-                    "Choose a Windows ISO to unlock setup choices"
-                },
+                    Message::OptionsWindowsInstallerLocked
+                }),
                 Style::default().fg(if windows_image { ACCENT } else { MUTED }),
             ),
             Line::styled(
@@ -4978,77 +5042,89 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         rows[0],
     );
     let options = grid_areas(rows[1], columns, 12);
-    render_checkbox(
-        frame,
-        options[0],
-        "Hardware bypass",
-        app.options.windows.bypass_hardware_requirements,
-    );
-    render_checkbox(
-        frame,
-        options[1],
-        "Offline account",
-        app.options.windows.allow_offline_account,
-    );
-    render_checkbox(
-        frame,
-        options[2],
-        "Privacy defaults",
-        app.options.windows.minimize_data_collection,
-    );
-    render_checkbox(
-        frame,
-        options[3],
-        "Disable BitLocker",
-        app.options.windows.disable_bitlocker,
-    );
-    render_checkbox(
-        frame,
-        options[4],
-        "Named account",
-        app.options.windows.local_account.is_some(),
-    );
-    render_checkbox(
-        frame,
-        options[5],
-        "Host region",
-        app.options.windows.regional.is_some(),
-    );
-    render_checkbox(
-        frame,
-        options[6],
-        "QoL policies",
-        app.options.windows.quality_of_life,
-    );
-    render_checkbox(
-        frame,
-        options[7],
-        "CA 2023",
-        app.options.windows.use_windows_ca_2023,
-    );
-    render_checkbox(
-        frame,
-        options[8],
-        "SkuSiPolicy",
-        app.options.windows.apply_skusi_policy,
-    );
-    render_checkbox(
-        frame,
-        options[9],
-        "Force S Mode",
-        app.options.windows.force_s_mode,
-    );
+    let named_account = app
+        .options
+        .windows
+        .local_account
+        .clone()
+        .or_else(bootable_core::suggested_account_name)
+        .unwrap_or_else(|| "User".into());
+    let option_cells = [
+        (
+            Message::OptionsWindowsBypassHardwareLabel,
+            Message::OptionsWindowsBypassHardwareShort,
+            app.options.windows.bypass_hardware_requirements,
+        ),
+        (
+            Message::OptionsWindowsOfflineAccountLabel,
+            Message::OptionsWindowsOfflineAccountShort,
+            app.options.windows.allow_offline_account,
+        ),
+        (
+            Message::OptionsWindowsPrivacyLabel,
+            Message::OptionsWindowsPrivacyShort,
+            app.options.windows.minimize_data_collection,
+        ),
+        (
+            Message::OptionsWindowsBitlockerLabel,
+            Message::OptionsWindowsBitlockerShort,
+            app.options.windows.disable_bitlocker,
+        ),
+        (
+            Message::OptionsWindowsNamedAccountLabel,
+            Message::OptionsWindowsNamedAccountShort,
+            app.options.windows.local_account.is_some(),
+        ),
+        (
+            Message::OptionsWindowsHostRegionLabel,
+            Message::OptionsWindowsHostRegionShort,
+            app.options.windows.regional.is_some(),
+        ),
+        (
+            Message::OptionsWindowsQolLabel,
+            Message::OptionsWindowsQolShort,
+            app.options.windows.quality_of_life,
+        ),
+        (
+            Message::OptionsWindowsCa2023Label,
+            Message::OptionsWindowsCa2023Short,
+            app.options.windows.use_windows_ca_2023,
+        ),
+        (
+            Message::OptionsWindowsSkusipolicyLabel,
+            Message::OptionsWindowsSkusipolicyShort,
+            app.options.windows.apply_skusi_policy,
+        ),
+        (
+            Message::OptionsWindowsSmodeLabel,
+            Message::OptionsWindowsSmodeShort,
+            app.options.windows.force_s_mode,
+        ),
+    ];
+    for (cell, (label, short, selected)) in option_cells.into_iter().enumerate() {
+        // The named-account label carries a `{name}` placeholder; when narrow
+        // the placeholder-free short caption is used instead.
+        let label = if label == Message::OptionsWindowsNamedAccountLabel {
+            t.format(label, &[("name", &named_account)])
+        } else {
+            t.text(label).to_string()
+        };
+        render_option_checkbox(frame, options[cell], &label, t.text(short), selected);
+    }
     render_button(
         frame,
         options[10],
-        &format!("Scheme: {}", app.options.windows_partition_scheme),
+        &t.format(
+            Message::OptionsWindowsSchemeValue,
+            &[("scheme", &app.options.windows_partition_scheme)],
+        ),
         true,
     );
     if windows_image {
         render_button(
             frame,
             options[11],
-            &boot_firmware_label(app.options.windows_boot_firmware, options[11].width),
+            &boot_firmware_label(t, app.options.windows_boot_firmware, options[11].width),
             true,
         );
     }
@@ -5091,7 +5167,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
     ];
     if windows_image {
         coverage.push(Line::styled(
-            "Boot firmware (f): UEFI or BIOS + UEFI (CSM) · BIOS option is experimental and needs MBR",
+            format!("f · {}", t.text(Message::OptionsWindowsBootFirmwareHint)),
             Style::default().fg(Color::Yellow),
         ));
     }
@@ -5100,7 +5176,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         Style::default().fg(Color::Yellow),
     ));
     coverage.push(Line::styled(
-        "Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.",
+        t.text(Message::OptionsWindowsUnavailableNote),
         Style::default().fg(MUTED),
     ));
     frame.render_widget(
@@ -5575,10 +5651,9 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     app.hit_regions.windows_s_mode = None;
     app.hit_regions.windows_partition_scheme = None;
     app.hit_regions.windows_boot_firmware = None;
-    let block = focused_panel_block(
-        " Setup options ",
-        app.workspace_focus == WorkspaceFocus::Setup,
-    );
+    let t = app.t();
+    let setup_title = format!(" {} ", t.text(Message::ActionSetupOptions));
+    let block = focused_panel_block(&setup_title, app.workspace_focus == WorkspaceFocus::Setup);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let compact = area.width < 78;
@@ -5611,9 +5686,13 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     });
     frame.render_widget(
         Paragraph::new(if windows_image {
-            format!("Windows installer options  ·  checkboxes  ·  {selected} selected")
+            format!(
+                "{}  ·  {}",
+                t.text(Message::OptionsWindowsTitle),
+                t.format(Message::OptionsSelectedCount, &[("count", &selected)])
+            )
         } else {
-            "Linux / Unix boot media  ·  active features".into()
+            t.text(Message::OptionsLinuxTitle).to_string()
         })
         .style(Style::default().fg(MUTED)),
         rows[0],
@@ -5622,28 +5701,32 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let tools = grid_areas(rows[2], if compact { 3 } else { 5 }, 5);
 
     if windows_image {
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[0],
-            "Hardware bypass",
+            t.text(Message::OptionsWindowsBypassHardwareLabel),
+            t.text(Message::OptionsWindowsBypassHardwareShort),
             app.options.windows.bypass_hardware_requirements,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[1],
-            "Local account",
+            t.text(Message::OptionsWindowsOfflineAccountLabel),
+            t.text(Message::OptionsWindowsOfflineAccountShort),
             app.options.windows.allow_offline_account,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[2],
-            "Privacy defaults",
+            t.text(Message::OptionsWindowsPrivacyLabel),
+            t.text(Message::OptionsWindowsPrivacyShort),
             app.options.windows.minimize_data_collection,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[3],
-            "Disable BitLocker",
+            t.text(Message::OptionsWindowsBitlockerLabel),
+            t.text(Message::OptionsWindowsBitlockerShort),
             app.options.windows.disable_bitlocker,
         );
         app.hit_regions.windows_options = Some(windows[0]);
@@ -5651,20 +5734,41 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         app.hit_regions.windows_privacy = Some(windows[2]);
         app.hit_regions.windows_bitlocker = Some(windows[3]);
     } else {
-        render_checkbox(frame, windows[0], "Full disk layout", true);
-        render_checkbox(frame, windows[1], "Boot records", true);
-        render_checkbox(frame, windows[2], "Byte verification", true);
-        render_checkbox(frame, windows[3], "Safe unmount", true);
+        render_option_checkbox(
+            frame,
+            windows[0],
+            t.text(Message::OptionsLinuxLayout),
+            t.text(Message::OptionsLinuxLayoutShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[1],
+            t.text(Message::OptionsLinuxBootRecordsShort),
+            t.text(Message::OptionsLinuxBootRecordsShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[2],
+            t.text(Message::OptionsLinuxVerify),
+            t.text(Message::OptionsLinuxVerifyShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[3],
+            t.text(Message::OptionsLinuxUnmountShort),
+            t.text(Message::OptionsLinuxUnmountShort),
+            true,
+        );
         app.hit_regions.windows_options = None;
         app.hit_regions.windows_offline = None;
         app.hit_regions.windows_privacy = None;
         app.hit_regions.windows_bitlocker = None;
     }
 
-    let bad_blocks = match app.options.bad_block_check.passes() {
-        0 => "Bad blocks: off".into(),
-        passes => format!("Bad blocks: {passes}x"),
-    };
+    let bad_blocks = app.options.bad_block_check.label_in(app.locale);
     render_button(frame, tools[0], &format!("◌  {bad_blocks}"), false);
     render_button(
         frame,
@@ -5672,9 +5776,24 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         &format!("#  {}", app.checksum_algorithm),
         false,
     );
-    render_button(frame, tools[2], "✓  Verify image", false);
-    render_button(frame, tools[3], "▢  Image folder", false);
-    render_button(frame, tools[4], "⇩  Back up drive", false);
+    render_button(
+        frame,
+        tools[2],
+        &format!("✓  {}", t.text(Message::OptionsToolsVerifyImage)),
+        false,
+    );
+    render_button(
+        frame,
+        tools[3],
+        &format!("▢  {}", t.text(Message::OptionsToolsImageFolder)),
+        false,
+    );
+    render_button(
+        frame,
+        tools[4],
+        &format!("⇩  {}", t.text(Message::OptionsToolsBackupDrive)),
+        false,
+    );
 
     app.hit_regions.bad_blocks = Some(tools[0]);
     app.hit_regions.checksum_algorithm = Some(tools[1]);
@@ -6016,6 +6135,21 @@ fn render_checkbox(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, sele
     );
 }
 
+/// A checkbox that shows the full option wording when the cell has room and
+/// the compact caption otherwise (the same concept, never different words).
+fn render_option_checkbox(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    label: &str,
+    short: &str,
+    selected: bool,
+) {
+    // Borders (2), padding (2), marker and its two spaces (3).
+    let room = usize::from(area.width).saturating_sub(7);
+    let caption = fit_variant(room, &[label.to_string(), short.to_string()]);
+    render_checkbox(frame, area, &caption, selected);
+}
+
 fn panel_block<'a>(title: &'a str) -> Block<'a> {
     Block::default()
         .title(title)
@@ -6101,18 +6235,21 @@ fn cycle_boot_firmware(options: &mut WriteOptions) {
 
 /// Widest label that fits the cell, so the experimental marker survives
 /// wherever the layout leaves room for it.
-fn boot_firmware_label(firmware: bootable_core::WindowsBootFirmware, width: u16) -> String {
+fn boot_firmware_label(
+    t: Strings,
+    firmware: bootable_core::WindowsBootFirmware,
+    width: u16,
+) -> String {
     let room = usize::from(width.saturating_sub(2));
-    let candidates = [
-        format!("Boot firmware: {firmware} · experimental"),
-        format!("Boot firmware: {firmware}"),
-        format!("Firmware: {firmware}"),
-    ];
-    candidates
-        .iter()
-        .find(|label| display_width(label) <= room)
-        .unwrap_or(&candidates[2])
-        .clone()
+    let args: [bootable_core::Arg<'_>; 1] = [("value", &firmware)];
+    fit_variant(
+        room,
+        &[
+            t.format(Message::OptionsWindowsBootFirmwareValueExperimental, &args),
+            t.format(Message::OptionsWindowsBootFirmwareValue, &args),
+            t.format(Message::OptionsWindowsBootFirmwareValueCompact, &args),
+        ],
+    )
 }
 
 fn windows_option_columns(width: u16) -> usize {
@@ -6642,13 +6779,13 @@ mod workspace_render_tests {
         let screen = render(&mut app, 130, 70);
         assert!(screen.contains("Boot firmware: UEFI"), "{screen}");
         assert!(screen.contains("Scheme: GPT"), "{screen}");
-        assert!(screen.contains("experimental"), "{screen}");
+        assert!(screen.to_lowercase().contains("experimental"), "{screen}");
         assert!(app.hit_regions.windows_boot_firmware.is_some());
 
         let mut app = windows_catalog_app(bootable_core::ImageKind::HybridIso);
         let screen = render(&mut app, 130, 70);
         assert!(!screen.contains("Boot firmware"), "{screen}");
-        assert!(!screen.contains("experimental"), "{screen}");
+        assert!(!screen.to_lowercase().contains("experimental"), "{screen}");
         assert!(app.hit_regions.windows_boot_firmware.is_none());
     }
 
@@ -6757,11 +6894,17 @@ mod workspace_render_tests {
     fn boot_firmware_label_degrades_to_fit_narrow_cells() {
         let uefi = bootable_core::WindowsBootFirmware::Uefi;
         assert_eq!(
-            boot_firmware_label(uefi, 60),
+            boot_firmware_label(Locale::En.strings(), uefi, 60),
             "Boot firmware: UEFI · experimental"
         );
-        assert_eq!(boot_firmware_label(uefi, 24), "Boot firmware: UEFI");
-        assert_eq!(boot_firmware_label(uefi, 10), "Firmware: UEFI");
+        assert_eq!(
+            boot_firmware_label(Locale::En.strings(), uefi, 24),
+            "Boot firmware: UEFI"
+        );
+        assert_eq!(
+            boot_firmware_label(Locale::En.strings(), uefi, 10),
+            "Firmware: UEFI"
+        );
     }
 }
 
