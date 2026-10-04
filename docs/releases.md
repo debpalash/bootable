@@ -24,6 +24,26 @@ Before dispatching a stable release:
 1. Confirm the intended version is committed in `Cargo.toml` and `Cargo.lock` on `main`.
 2. Confirm the release-candidate assets were installed or opened on their target platforms.
 3. Open **Actions → Release → Run workflow**, select `main`, and approve the run.
-4. Confirm the resulting release is neither a draft nor a prerelease and contains all 22 assets.
+4. Confirm the resulting release is neither a draft nor a prerelease and contains all 22 assets
+   (24 when signed checksums are enabled).
+5. If signing is enabled, spot-check one asset per platform using [signing.md](signing.md).
 
 Stable tags and releases are immutable. Corrections use a new patch version.
+
+## Signing
+
+The stable workflow can sign every platform, but **it signs nothing until secrets are added**; with
+none configured it produces unsigned packages exactly as before, and the release notes say so. Each
+platform switches on independently when its credentials exist:
+
+| Platform | Enabled by | Result |
+| --- | --- | --- |
+| macOS | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD` and an Apple ID or API key notarization set | Developer ID signed, hardened, notarized, and stapled app and DMG, including the privileged helper |
+| Windows | Azure Artifact Signing (default) or SignPath settings | Authenticode-signed executables, MSI, and setup EXE with timestamps |
+| Linux | repository variable `SIGN_CHECKSUMS=true` (no secret) | Keyless Sigstore-signed `SHA256SUMS` plus the existing build attestations |
+
+Signing runs only for a manual dispatch from `main`. A partially configured platform fails the job
+on purpose. `scripts/sign-verify-macos.sh` and `scripts/sign-verify-windows.ps1` assert the result
+before artifacts are attested and uploaded. The exact secret and variable names, what to purchase,
+and how users verify are in [signing.md](signing.md).
+

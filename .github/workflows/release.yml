@@ -89,6 +89,8 @@ jobs:
     name: Package macOS Apple Silicon
     needs: metadata
     runs-on: macos-14
+    outputs:
+      signed: ${{ steps.signing.outputs.enabled }}
     permissions:
       contents: read
       id-token: write
@@ -107,8 +109,39 @@ jobs:
       - run: cargo build --release --workspace --target aarch64-apple-darwin
       - name: Build DMG and archive
         run: scripts/package-macos.sh "$BOOTABLE_VERSION"
+      # Signing is off unless every Apple secret of a credential set exists and
+      # the run is a manual stable release (see docs/signing.md). The secret
+      # values are scoped to these two steps so cargo build scripts never see them.
+      - name: Detect macOS signing configuration
+        id: signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_ID || '' }}
+          APPLE_TEAM_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_APP_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_APP_PASSWORD || '' }}
+          APPLE_API_KEY_P8: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_API_KEY_P8 || '' }}
+          APPLE_API_KEY_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.APPLE_API_ISSUER_ID || '' }}
+        run: scripts/sign-detect.sh macos
+      - name: Developer ID sign, notarize, and staple
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: scripts/sign-macos.sh "$BOOTABLE_VERSION"
       - name: Verify macOS packages
         run: scripts/verify-macos-packages.sh "$BOOTABLE_VERSION"
+      - name: Verify macOS signatures and notarization
+        if: steps.signing.outputs.enabled == 'true'
+        run: scripts/sign-verify-macos.sh "$BOOTABLE_VERSION"
       - uses: actions/attest-build-provenance@v2
         if: github.event_name == 'workflow_dispatch'
         with:
@@ -123,6 +156,8 @@ jobs:
     name: Package Windows x86-64
     needs: metadata
     runs-on: windows-2025
+    outputs:
+      signed: ${{ steps.signing.outputs.enabled }}
     permissions:
       contents: read
       id-token: write
@@ -142,12 +177,150 @@ jobs:
         run: cargo install cargo-packager --locked --version 0.11.8
       - run: cargo test --workspace
       - run: cargo build --release --workspace --target x86_64-pc-windows-msvc
+      # Signing is off unless a complete provider configuration exists and the run
+      # is a manual stable release (see docs/signing.md). Azure Artifact Signing is
+      # the default; SignPath is the alternative. Secret values are scoped to the
+      # steps that need them so cargo build scripts never see them.
+      - name: Detect Windows signing configuration
+        id: signing
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_TENANT_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_SUBSCRIPTION_ID: ${{ github.event_name == 'workflow_dispatch' && secrets.AZURE_SUBSCRIPTION_ID || '' }}
+          AZURE_SIGNING_ENDPOINT: ${{ github.event_name == 'workflow_dispatch' && vars.AZURE_SIGNING_ENDPOINT || '' }}
+          AZURE_SIGNING_ACCOUNT: ${{ github.event_name == 'workflow_dispatch' && vars.AZURE_SIGNING_ACCOUNT || '' }}
+          AZURE_SIGNING_PROFILE: ${{ github.event_name == 'workflow_dispatch' && vars.AZURE_SIGNING_PROFILE || '' }}
+          SIGNPATH_API_TOKEN: ${{ github.event_name == 'workflow_dispatch' && secrets.SIGNPATH_API_TOKEN || '' }}
+          SIGNPATH_ORGANIZATION_ID: ${{ github.event_name == 'workflow_dispatch' && vars.SIGNPATH_ORGANIZATION_ID || '' }}
+          SIGNPATH_PROJECT_SLUG: ${{ github.event_name == 'workflow_dispatch' && vars.SIGNPATH_PROJECT_SLUG || '' }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ github.event_name == 'workflow_dispatch' && vars.SIGNPATH_SIGNING_POLICY_SLUG || '' }}
+        run: scripts/sign-detect.sh windows
+      - name: Azure login for Artifact Signing
+        if: steps.signing.outputs.provider == 'azure'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Stage release executables for signing
+        id: stage_binaries
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: scripts/sign-windows.ps1 -Action Stage -Phase binaries -Version $env:BOOTABLE_VERSION
+      - name: Sign binaries with Azure Artifact Signing
+        if: steps.signing.outputs.provider == 'azure'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ steps.stage_binaries.outputs.unsigned_dir }}
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+      - name: Upload binaries to SignPath
+        id: upload_binaries
+        if: steps.signing.outputs.provider == 'signpath'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-binaries
+          path: ${{ steps.stage_binaries.outputs.unsigned_dir }}
+          retention-days: 1
+          if-no-files-found: error
+      - name: Sign binaries with SignPath
+        if: steps.signing.outputs.provider == 'signpath'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload_binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ${{ steps.stage_binaries.outputs.signed_dir }}
+      - name: Apply signed release executables
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          SIGNED_DIRECTORY: ${{ steps.signing.outputs.provider == 'azure' && steps.stage_binaries.outputs.unsigned_dir || steps.stage_binaries.outputs.signed_dir }}
+        run: scripts/sign-windows.ps1 -Action Apply -Phase binaries -Version $env:BOOTABLE_VERSION -SignedDirectory $env:SIGNED_DIRECTORY
       - name: Build MSI, NSIS installer, portable executables, and archive
         shell: pwsh
         run: scripts/package-windows.ps1 -Version $env:BOOTABLE_VERSION
+      - name: Stage installers for signing
+        id: stage_installers
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: scripts/sign-windows.ps1 -Action Stage -Phase installers -Version $env:BOOTABLE_VERSION
+      - name: Sign installers with Azure Artifact Signing
+        if: steps.signing.outputs.provider == 'azure'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ steps.stage_installers.outputs.unsigned_dir }}
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+      - name: Upload installers to SignPath
+        id: upload_installers
+        if: steps.signing.outputs.provider == 'signpath'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-installers
+          path: ${{ steps.stage_installers.outputs.unsigned_dir }}
+          retention-days: 1
+          if-no-files-found: error
+      - name: Sign installers with SignPath
+        if: steps.signing.outputs.provider == 'signpath'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload_installers.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ${{ steps.stage_installers.outputs.signed_dir }}
+      - name: Apply signed installers
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          SIGNED_DIRECTORY: ${{ steps.signing.outputs.provider == 'azure' && steps.stage_installers.outputs.unsigned_dir || steps.stage_installers.outputs.signed_dir }}
+        run: scripts/sign-windows.ps1 -Action Apply -Phase installers -Version $env:BOOTABLE_VERSION -SignedDirectory $env:SIGNED_DIRECTORY
       - name: Verify Windows packages
         shell: pwsh
         run: scripts/verify-windows-packages.ps1 -Version $env:BOOTABLE_VERSION
+      - name: Verify Authenticode signatures
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: scripts/sign-verify-windows.ps1 -Version $env:BOOTABLE_VERSION
       - uses: actions/attest-build-provenance@v2
         if: github.event_name == 'workflow_dispatch'
         with:
@@ -238,12 +411,62 @@ jobs:
             - Windows 10+ x86-64: MSI, setup EXE, portable GUI/TUI EXEs, and ZIP
             - macOS Apple Silicon: DMG and tar.gz
             - Integrity: SHA-256 sidecars for every asset
+            - Signing: release candidates are never code-signed or notarized; only stable releases can be
             - Safety: interactive apps remain unelevated; approved removable-media writes use the fixed helper
           files: dist/*
 
+  # Optional keyless Sigstore signature over one SHA256SUMS file covering every
+  # release asset. Needs no secret: enable it by setting the repository variable
+  # SIGN_CHECKSUMS to "true" (see docs/signing.md). Disabled, this job only reports.
+  checksums:
+    name: Sign release checksums
+    needs: [metadata, linux, macos, windows]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      signed: ${{ steps.report.outputs.signed }}
+    env:
+      SIGN_CHECKSUMS: ${{ vars.SIGN_CHECKSUMS }}
+    steps:
+      - id: report
+        name: Report checksum signing state
+        run: echo "signed=$([ "$SIGN_CHECKSUMS" = true ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        if: env.SIGN_CHECKSUMS == 'true'
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - uses: sigstore/cosign-installer@v4
+        if: env.SIGN_CHECKSUMS == 'true'
+      - name: Write and sign SHA256SUMS
+        if: env.SIGN_CHECKSUMS == 'true'
+        shell: bash
+        run: |
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 22
+          (cd dist && sha256sum --check ./*.sha256)
+          mkdir checksums
+          (cd dist && find . -maxdepth 1 -type f ! -name '*.sha256' -printf '%f\n' |
+            LC_ALL=C sort | xargs -d '\n' sha256sum) > checksums/SHA256SUMS
+          cosign sign-blob --yes --bundle checksums/SHA256SUMS.sigstore.json checksums/SHA256SUMS
+          cosign verify-blob \
+            --bundle checksums/SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_WORKFLOW_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            checksums/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: env.SIGN_CHECKSUMS == 'true'
+        with:
+          name: release-checksums
+          path: checksums/*
+          if-no-files-found: error
+
   publish:
     name: Publish stable release
-    needs: [metadata, linux, macos, windows]
+    needs: [metadata, linux, macos, windows, checksums]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
@@ -254,6 +477,20 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
+      - id: signing
+        name: Describe signing status
+        env:
+          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
+          MACOS_SIGNED: ${{ needs.macos.outputs.signed }}
+          CHECKSUMS_SIGNED: ${{ needs.checksums.outputs.signed }}
+        run: |
+          windows='Windows packages are unsigned'
+          macos='the macOS app is ad-hoc signed, not notarized'
+          checksums=''
+          [ "$WINDOWS_SIGNED" = true ] && windows='Windows executables and installers are Authenticode-signed'
+          [ "$MACOS_SIGNED" = true ] && macos='the macOS app and DMG are Developer ID signed, notarized, and stapled'
+          [ "$CHECKSUMS_SIGNED" = true ] && checksums=' SHA256SUMS carries a keyless Sigstore signature (SHA256SUMS.sigstore.json).'
+          echo "text=${windows} and ${macos}.${checksums}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.metadata.outputs.tag }}
@@ -264,13 +501,15 @@ jobs:
             ## Bootable ${{ needs.metadata.outputs.tag }}
 
             Bootable ships native installers and portable builds for its matching GUI and TUI.
-            Packages are unsigned and the macOS app is ad-hoc signed, not notarized. Use expendable
-            USB or SD media and check the physical target before approving erasure.
+            ${{ steps.signing.outputs.text }} Linux packages rely on checksums and build
+            provenance. Use expendable USB or SD media and check the physical target before
+            approving erasure.
 
             - Linux x86-64: AppImage, DEB, RPM, and tar.gz
             - Windows 10+ x86-64: MSI, setup EXE, portable GUI/TUI EXEs, and ZIP
             - macOS Apple Silicon: DMG and tar.gz
             - Integrity: SHA-256 sidecars and GitHub build provenance for every asset
+            - Verification: see docs/signing.md for how to check signatures on each platform
             - Privilege: interactive apps remain unelevated; a fixed helper performs approved writes
 
             The DEB/RPM and Windows installers place the protected helper automatically. The macOS
