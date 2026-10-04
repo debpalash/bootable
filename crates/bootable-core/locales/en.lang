@@ -1,0 +1,114 @@
+# Bootable message catalog: English (source of truth and fallback).
+#
+# Format: `key = value`, one message per line. `#` starts a comment line.
+# `{name}` is a placeholder; write `{{` and `}}` for literal braces.
+# Escapes: `\n` newline, `\\` backslash.
+# Plural messages use `key.one` / `key.few` / `key.many` / `key.other`; every
+# plural message must define `other`, and `{count}` is always available.
+# Every key here needs a variant in `Message` (src/messages.rs).
+
+# Guide: introduction and section titles
+help.intro = Source → Target → Review & write. Nothing is written until you review the plan and acknowledge the erase.
+help.section.source = Source
+help.section.target = Target
+help.section.review = Review & write
+help.section.general = General
+
+# Guide: Source
+help.source.choose.action = Choose an image
+help.source.choose.detail = Browse for an ISO, IMG, RAW, or compressed image
+help.source.recent.action = Use a recent image
+help.source.recent.detail = Re-inspect one of your last images
+help.source.recent.desktop = Click a recent image
+help.source.discover.action = Discover images
+help.source.discover.detail = Open or close the distribution catalog
+help.source.downloads.action = Downloads
+help.source.downloads.detail = Open or close the download manager
+help.source.downloads.desktop = Downloads button
+
+# Guide: Target
+help.target.refresh.action = Refresh drives
+help.target.refresh.detail = Rescan removable media
+help.target.choose.action = Choose a drive
+help.target.choose.detail = Selecting is always explicit; fixed disks are blocked
+help.target.choose.desktop = Click a drive
+
+# Guide: Review & write
+help.review.plan.action = Review plan
+help.review.plan.detail = Open the plan; nothing is written yet
+help.review.stop.action = Stop a write
+help.review.stop.detail = Stops at the next safe boundary
+help.review.stop.desktop = Stop button
+
+# Guide: General
+help.general.toggle.action = Show or hide this guide
+help.general.toggle.detail = Reopen it any time
+help.general.close.action = Close a panel
+help.general.close.detail = Dismiss this guide or the catalog
+
+# Drive detail rows
+detail.drive = Drive
+detail.path = Path
+detail.capacity = Capacity
+detail.connection = Connection
+detail.serial = Serial
+detail.status = Status
+detail.mounted = Mounted
+detail.connection.unknown = unknown
+detail.serial.not_reported = not reported
+detail.mounted.none = nothing mounted
+detail.mounted.list = {listed} · unmounted before writing
+detail.mounted.list_more = {listed} +{hidden} more · unmounted before writing
+
+# Target eligibility
+target.system_blocked = System disk · blocked
+target.internal_blocked = Internal disk · blocked
+target.read_only_blocked = Read-only · blocked
+target.eligible = Removable · eligible
+
+# Removable media inventory ({count} is the number of connected drives
+# except in media.ready, where it is the number of ready drives)
+media.none = No removable drives connected
+media.ready.one = {count} removable drive ready
+media.ready.other = {count} removable drives ready
+media.none_eligible.one = {count} removable drive connected · none eligible
+media.none_eligible.other = {count} removable drives connected · none eligible
+media.some_ready.one = {count} removable drive connected · {ready} ready
+media.some_ready.other = {count} removable drives connected · {ready} ready
+
+# Workflow readiness
+readiness.needs_image.action = Choose image first
+readiness.needs_target.action = Choose a removable drive
+readiness.ready.action = Review plan
+readiness.needs_image.guidance = Choose or download an image to continue
+readiness.needs_target.guidance = Connect and choose a removable drive to continue
+readiness.ready.guidance = Ready to review the image, target, and erase plan
+workspace.needs_image.status = Choose or download an image to continue
+workspace.needs_target.status = Choose a removable drive · nothing has been written
+workspace.ready.status = Ready to review · nothing has been written
+
+# Workflow step titles
+step.source = Source
+step.target = Target
+step.review = Review & write
+
+# Operation phases
+phase.preparing = Preparing
+phase.downloading = Downloading
+phase.reading = Reading
+phase.writing = Writing
+phase.syncing = Syncing
+phase.verifying = Verifying
+phase.finished = Finished
+
+# Download integrity
+integrity.transfer_checked = HTTPS transfer and boot structure checked · publisher checksum unavailable
+integrity.checksum_verified = Publisher checksum verified
+integrity.checksum_unsigned = Publisher checksum verified · signature not verified ({note})
+integrity.signature_verified = Signature verified · {publisher} (key {fingerprint}) · {algorithm} matches signed manifest
+integrity.completion = {label} · ready
+integrity.ready = Ready · {label} · {path}
+integrity.finalized.transfer = Stage 4/5 · HTTPS transfer length verified · publisher checksum unavailable · finalized at {path}
+integrity.finalized.checksum = Stage 4/5 · Publisher {algorithm} verified · finalized at {path}
+integrity.finalized.checksum_unsigned = Stage 4/5 · Publisher {algorithm} verified · signature not verified ({note}) · finalized at {path}
+integrity.finalized.signature = Stage 4/5 · {label} · finalized at {path}

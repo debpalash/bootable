@@ -9,6 +9,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::ChecksumAlgorithm;
+use crate::locale::Locale;
+use crate::messages::Message;
 use crate::signature::SignerIdentity;
 
 /// Ordered from weakest to strongest evidence.
@@ -55,62 +57,83 @@ impl IntegrityState {
 
     /// The shared one-line description of what was verified.
     pub fn label(&self) -> String {
+        self.label_in(Locale::SOURCE)
+    }
+
+    /// [`IntegrityState::label`] in `locale`. The fixed phrases are translated;
+    /// publisher names, fingerprints, and any `signature_note` are data and
+    /// appear as produced.
+    pub fn label_in(&self, locale: Locale) -> String {
         match self {
-            Self::TransferChecked => {
-                "HTTPS transfer and boot structure checked · publisher checksum unavailable".into()
-            }
+            Self::TransferChecked => Message::IntegrityTransferChecked.text(locale).into(),
             Self::ChecksumVerified {
                 signature_note: None,
                 ..
-            } => "Publisher checksum verified".into(),
+            } => Message::IntegrityChecksumVerified.text(locale).into(),
             Self::ChecksumVerified {
                 signature_note: Some(note),
                 ..
-            } => format!("Publisher checksum verified · signature not verified ({note})"),
-            Self::SignatureVerified { algorithm, signer } => format!(
-                "Signature verified · {} (key {}) · {algorithm} matches signed manifest",
-                signer.publisher,
-                signer.short_fingerprint()
-            ),
+            } => Message::IntegrityChecksumUnsigned.format(locale, &[("note", note)]),
+            Self::SignatureVerified { algorithm, signer } => Message::IntegritySignatureVerified
+                .format(
+                    locale,
+                    &[
+                        ("publisher", &signer.publisher),
+                        ("fingerprint", &signer.short_fingerprint()),
+                        ("algorithm", algorithm),
+                    ],
+                ),
         }
     }
 
     /// Ledger row text for a completed download.
     pub fn completion_message(&self) -> String {
-        format!("{} · ready", self.label())
+        self.completion_message_in(Locale::SOURCE)
+    }
+
+    pub fn completion_message_in(&self, locale: Locale) -> String {
+        Message::IntegrityCompletion.format(locale, &[("label", &self.label_in(locale))])
     }
 
     /// Progress text emitted once the verified file has been finalized.
     pub fn finalized_message(&self, destination: &Path) -> String {
+        self.finalized_message_in(Locale::SOURCE, destination)
+    }
+
+    pub fn finalized_message_in(&self, locale: Locale, destination: &Path) -> String {
+        let path = destination.display();
         match self {
-            Self::TransferChecked => format!(
-                "Stage 4/5 · HTTPS transfer length verified · publisher checksum unavailable · finalized at {}",
-                destination.display()
-            ),
+            Self::TransferChecked => {
+                Message::IntegrityFinalizedTransfer.format(locale, &[("path", &path)])
+            }
             Self::ChecksumVerified {
                 algorithm,
                 signature_note,
             } => match signature_note {
-                None => format!(
-                    "Stage 4/5 · Publisher {algorithm} verified · finalized at {}",
-                    destination.display()
-                ),
-                Some(note) => format!(
-                    "Stage 4/5 · Publisher {algorithm} verified · signature not verified ({note}) · finalized at {}",
-                    destination.display()
+                None => Message::IntegrityFinalizedChecksum
+                    .format(locale, &[("algorithm", algorithm), ("path", &path)]),
+                Some(note) => Message::IntegrityFinalizedChecksumUnsigned.format(
+                    locale,
+                    &[("algorithm", algorithm), ("note", note), ("path", &path)],
                 ),
             },
-            Self::SignatureVerified { .. } => format!(
-                "Stage 4/5 · {} · finalized at {}",
-                self.label(),
-                destination.display()
+            Self::SignatureVerified { .. } => Message::IntegrityFinalizedSignature.format(
+                locale,
+                &[("label", &self.label_in(locale)), ("path", &path)],
             ),
         }
     }
 
     /// Final progress text once the boot structure has been inspected.
     pub fn ready_message(&self, path: &Path) -> String {
-        format!("Ready · {} · {}", self.label(), path.display())
+        self.ready_message_in(Locale::SOURCE, path)
+    }
+
+    pub fn ready_message_in(&self, locale: Locale, path: &Path) -> String {
+        Message::IntegrityReady.format(
+            locale,
+            &[("label", &self.label_in(locale)), ("path", &path.display())],
+        )
     }
 }
 
@@ -166,6 +189,60 @@ mod tests {
                 .label()
                 .contains("Signature verified")
         );
+    }
+
+    #[test]
+    fn every_integrity_message_translates_with_all_data_intact() {
+        let states = [
+            IntegrityState::TransferChecked,
+            IntegrityState::ChecksumVerified {
+                algorithm: ChecksumAlgorithm::Sha256,
+                signature_note: None,
+            },
+            IntegrityState::ChecksumVerified {
+                algorithm: ChecksumAlgorithm::Sha512,
+                signature_note: Some("NOTE-DATA".into()),
+            },
+            IntegrityState::SignatureVerified {
+                algorithm: ChecksumAlgorithm::Sha256,
+                signer: signer(),
+            },
+        ];
+        let path = Path::new("/tmp/a.iso");
+        for locale in Locale::ALL {
+            for state in &states {
+                for text in [
+                    state.label_in(*locale),
+                    state.completion_message_in(*locale),
+                    state.finalized_message_in(*locale, path),
+                    state.ready_message_in(*locale, path),
+                ] {
+                    assert!(
+                        !text.contains('{') && !text.contains('}'),
+                        "{locale}: {text}"
+                    );
+                }
+                assert!(
+                    state
+                        .finalized_message_in(*locale, path)
+                        .contains("/tmp/a.iso")
+                );
+                assert!(state.ready_message_in(*locale, path).contains("/tmp/a.iso"));
+                if let IntegrityState::ChecksumVerified {
+                    signature_note: Some(_),
+                    ..
+                } = state
+                {
+                    assert!(state.label_in(*locale).contains("NOTE-DATA"));
+                }
+                if state.is_signature_verified() {
+                    assert!(state.label_in(*locale).contains("Ubuntu"));
+                    assert!(state.label_in(*locale).contains("D94A A3F0 EFE2 1092"));
+                }
+            }
+        }
+        let spanish = states[3].label_in(Locale::Es);
+        assert!(spanish.starts_with("Firma verificada"));
     }
 
     #[test]

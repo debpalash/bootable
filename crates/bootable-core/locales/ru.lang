@@ -1,0 +1,103 @@
+# Bootable message catalog: Russian (ru).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Plural messages carry one/few/many/other forms.
+
+help.intro = Источник → Цель → Проверка и запись. Ничего не записывается, пока вы не проверите план и не подтвердите стирание.
+help.section.source = Источник
+help.section.target = Цель
+help.section.review = Проверка и запись
+help.section.general = Общее
+
+help.source.choose.action = Выбрать образ
+help.source.choose.detail = Выбор образа ISO, IMG, RAW или сжатого образа
+help.source.recent.action = Использовать недавний образ
+help.source.recent.detail = Повторно проверить один из последних образов
+help.source.recent.desktop = Щёлкнуть недавний образ
+help.source.discover.action = Найти образы
+help.source.discover.detail = Открыть или закрыть каталог дистрибутивов
+help.source.downloads.action = Загрузки
+help.source.downloads.detail = Открыть или закрыть менеджер загрузок
+help.source.downloads.desktop = Кнопка «Загрузки»
+
+help.target.refresh.action = Обновить накопители
+help.target.refresh.detail = Повторно найти съёмные носители
+help.target.choose.action = Выбрать накопитель
+help.target.choose.detail = Выбор всегда явный; встроенные диски заблокированы
+help.target.choose.desktop = Щёлкнуть накопитель
+
+help.review.plan.action = Проверить план
+help.review.plan.detail = Открывает план; пока ничего не записано
+help.review.stop.action = Остановить запись
+help.review.stop.detail = Останавливается в ближайшей безопасной точке
+help.review.stop.desktop = Кнопка «Остановить»
+
+help.general.toggle.action = Показать или скрыть это руководство
+help.general.toggle.detail = Его можно открыть снова в любой момент
+help.general.close.action = Закрыть панель
+help.general.close.detail = Закрывает это руководство или каталог
+
+detail.drive = Накопитель
+detail.path = Путь
+detail.capacity = Ёмкость
+detail.connection = Подключение
+detail.serial = Серийный номер
+detail.status = Состояние
+detail.mounted = Смонтировано
+detail.connection.unknown = неизвестно
+detail.serial.not_reported = не сообщается
+detail.mounted.none = ничего не смонтировано
+detail.mounted.list = {listed} · будет размонтировано перед записью
+detail.mounted.list_more = {listed} +ещё {hidden} · будет размонтировано перед записью
+
+target.system_blocked = Системный диск · заблокирован
+target.internal_blocked = Внутренний диск · заблокирован
+target.read_only_blocked = Только чтение · заблокирован
+target.eligible = Съёмный · подходит
+
+media.none = Съёмные накопители не подключены
+media.ready.one = {count} съёмный накопитель готов
+media.ready.few = {count} съёмных накопителя готовы
+media.ready.many = {count} съёмных накопителей готовы
+media.ready.other = {count} съёмного накопителя готово
+media.none_eligible.one = Подключён {count} съёмный накопитель · подходящих нет
+media.none_eligible.few = Подключено {count} съёмных накопителя · подходящих нет
+media.none_eligible.many = Подключено {count} съёмных накопителей · подходящих нет
+media.none_eligible.other = Подключено {count} съёмного накопителя · подходящих нет
+media.some_ready.one = Подключён {count} съёмный накопитель · готовых: {ready}
+media.some_ready.few = Подключено {count} съёмных накопителя · готовых: {ready}
+media.some_ready.many = Подключено {count} съёмных накопителей · готовых: {ready}
+media.some_ready.other = Подключено {count} съёмного накопителя · готовых: {ready}
+
+readiness.needs_image.action = Сначала выберите образ
+readiness.needs_target.action = Выбрать съёмный накопитель
+readiness.ready.action = Проверить план
+readiness.needs_image.guidance = Выберите или скачайте образ, чтобы продолжить
+readiness.needs_target.guidance = Подключите и выберите съёмный накопитель, чтобы продолжить
+readiness.ready.guidance = Можно проверить образ, цель и план стирания
+workspace.needs_image.status = Выберите или скачайте образ, чтобы продолжить
+workspace.needs_target.status = Выберите съёмный накопитель · ничего не записано
+workspace.ready.status = Можно проверять · ничего не записано
+
+step.source = Источник
+step.target = Цель
+step.review = Проверка и запись
+
+phase.preparing = Подготовка
+phase.downloading = Загрузка
+phase.reading = Чтение
+phase.writing = Запись
+phase.syncing = Синхронизация
+phase.verifying = Проверка
+phase.finished = Завершено
+
+integrity.transfer_checked = HTTPS-передача и загрузочная структура проверены · контрольная сумма издателя недоступна
+integrity.checksum_verified = Контрольная сумма издателя проверена
+integrity.checksum_unsigned = Контрольная сумма издателя проверена · подпись не проверена ({note})
+integrity.signature_verified = Подпись проверена · {publisher} (ключ {fingerprint}) · {algorithm} совпадает с подписанным манифестом
+integrity.completion = {label} · готово
+integrity.ready = Готово · {label} · {path}
+integrity.finalized.transfer = Этап 4/5 · Размер HTTPS-передачи проверен · контрольная сумма издателя недоступна · завершено в {path}
+integrity.finalized.checksum = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · завершено в {path}
+integrity.finalized.checksum_unsigned = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · подпись не проверена ({note}) · завершено в {path}
+integrity.finalized.signature = Этап 4/5 · {label} · завершено в {path}

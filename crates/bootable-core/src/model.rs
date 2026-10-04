@@ -5,6 +5,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::locale::Locale;
+use crate::messages::Message;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DeviceId(String);
 
@@ -173,29 +176,53 @@ pub struct WorkspaceProgress {
 
 impl WorkspaceProgress {
     pub fn status(self) -> &'static str {
+        self.status_in(Locale::SOURCE)
+    }
+
+    pub fn status_in(self, locale: Locale) -> &'static str {
         match self.readiness {
-            ReviewReadiness::NeedsImage => "Choose or download an image to continue",
-            ReviewReadiness::NeedsTarget => "Choose a removable drive · nothing has been written",
-            ReviewReadiness::Ready => "Ready to review · nothing has been written",
+            ReviewReadiness::NeedsImage => Message::WorkspaceNeedsImageStatus,
+            ReviewReadiness::NeedsTarget => Message::WorkspaceNeedsTargetStatus,
+            ReviewReadiness::Ready => Message::WorkspaceReadyStatus,
         }
+        .text(locale)
+    }
+
+    /// Titles of the three workflow steps, in order: source, target, review.
+    pub fn step_titles(locale: Locale) -> [&'static str; 3] {
+        [
+            Message::StepSource.text(locale),
+            Message::StepTarget.text(locale),
+            Message::StepReview.text(locale),
+        ]
     }
 }
 
 impl ReviewReadiness {
     pub fn action_label(self) -> &'static str {
+        self.action_label_in(Locale::SOURCE)
+    }
+
+    pub fn action_label_in(self, locale: Locale) -> &'static str {
         match self {
-            Self::NeedsImage => "Choose image first",
-            Self::NeedsTarget => "Choose a removable drive",
-            Self::Ready => "Review plan",
+            Self::NeedsImage => Message::ReadinessNeedsImageAction,
+            Self::NeedsTarget => Message::ReadinessNeedsTargetAction,
+            Self::Ready => Message::ReadinessReadyAction,
         }
+        .text(locale)
     }
 
     pub fn guidance(self) -> &'static str {
+        self.guidance_in(Locale::SOURCE)
+    }
+
+    pub fn guidance_in(self, locale: Locale) -> &'static str {
         match self {
-            Self::NeedsImage => "Choose or download an image to continue",
-            Self::NeedsTarget => "Connect and choose a removable drive to continue",
-            Self::Ready => "Ready to review the image, target, and erase plan",
+            Self::NeedsImage => Message::ReadinessNeedsImageGuidance,
+            Self::NeedsTarget => Message::ReadinessNeedsTargetGuidance,
+            Self::Ready => Message::ReadinessReadyGuidance,
         }
+        .text(locale)
     }
 }
 
@@ -237,15 +264,20 @@ pub fn workspace_progress(
 }
 
 pub fn target_eligibility_label(device: &Device) -> &'static str {
+    target_eligibility_label_in(Locale::SOURCE, device)
+}
+
+pub fn target_eligibility_label_in(locale: Locale, device: &Device) -> &'static str {
     if device.system_disk {
-        "System disk · blocked"
+        Message::TargetSystemBlocked
     } else if !device.removable {
-        "Internal disk · blocked"
+        Message::TargetInternalBlocked
     } else if device.read_only {
-        "Read-only · blocked"
+        Message::TargetReadOnlyBlocked
     } else {
-        "Removable · eligible"
+        Message::TargetEligible
     }
+    .text(locale)
 }
 
 /// A compact, interface-neutral summary of the removable media inventory.
@@ -254,21 +286,25 @@ pub fn target_eligibility_label(device: &Device) -> &'static str {
 /// this wording shared so the desktop and terminal interfaces expose the same
 /// connection state without implying that a target was selected.
 pub fn removable_media_status(devices: &[Device]) -> String {
+    removable_media_status_in(Locale::SOURCE, devices)
+}
+
+/// [`removable_media_status`] in `locale`, with plural agreement on the count.
+pub fn removable_media_status_in(locale: Locale, devices: &[Device]) -> String {
     let connected = devices.len();
     let ready = devices
         .iter()
         .filter(|device| device.is_eligible_target())
         .count();
+    let (connected_count, ready_count) = (connected as u64, ready as u64);
 
     match (connected, ready) {
-        (0, _) => "No removable drives connected".into(),
-        (1, 1) => "1 removable drive ready".into(),
+        (0, _) => Message::MediaNone.text(locale).into(),
         (connected, ready) if connected == ready => {
-            format!("{connected} removable drives ready")
+            Message::MediaReady.plural(locale, ready_count, &[])
         }
-        (1, 0) => "1 removable drive connected · none eligible".into(),
-        (connected, 0) => format!("{connected} removable drives connected · none eligible"),
-        (connected, ready) => format!("{connected} removable drives connected · {ready} ready"),
+        (_, 0) => Message::MediaNoneEligible.plural(locale, connected_count, &[]),
+        _ => Message::MediaSomeReady.plural(locale, connected_count, &[("ready", &ready)]),
     }
 }
 
@@ -538,17 +574,25 @@ impl Progress {
     }
 }
 
+impl ProgressPhase {
+    pub fn label_in(&self, locale: Locale) -> &'static str {
+        match self {
+            Self::Preparing => Message::PhasePreparing,
+            Self::Downloading => Message::PhaseDownloading,
+            Self::Reading => Message::PhaseReading,
+            Self::Writing => Message::PhaseWriting,
+            Self::Syncing => Message::PhaseSyncing,
+            Self::Verifying => Message::PhaseVerifying,
+            Self::Finished => Message::PhaseFinished,
+        }
+        .text(locale)
+    }
+}
+
 impl fmt::Display for ProgressPhase {
+    /// English label; use [`ProgressPhase::label_in`] for localized UI.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Preparing => "Preparing",
-            Self::Downloading => "Downloading",
-            Self::Reading => "Reading",
-            Self::Writing => "Writing",
-            Self::Syncing => "Syncing",
-            Self::Verifying => "Verifying",
-            Self::Finished => "Finished",
-        })
+        formatter.write_str(self.label_in(Locale::SOURCE))
     }
 }
 
@@ -726,6 +770,54 @@ mod tests {
         assert_eq!(
             removable_media_status(&[ready, second]),
             "2 removable drives connected · 1 ready"
+        );
+    }
+
+    #[test]
+    fn localized_labels_keep_english_identical_and_translate_other_locales() {
+        let drive = |removable| Device {
+            id: DeviceId::new("usb"),
+            path: PathBuf::from("/dev/test"),
+            vendor: None,
+            model: None,
+            serial: None,
+            transport: None,
+            capacity: 1,
+            removable,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        };
+        let drives = [drive(true), drive(true), drive(true)];
+        assert_eq!(
+            removable_media_status_in(Locale::En, &drives),
+            removable_media_status(&drives)
+        );
+        assert_eq!(
+            removable_media_status_in(Locale::Es, &drives),
+            "3 unidades extraíbles listas"
+        );
+        assert_eq!(
+            removable_media_status_in(Locale::Ja, &drives[..1]),
+            "使用可能なリムーバブルドライブ: 1台"
+        );
+        assert_eq!(
+            removable_media_status_in(Locale::Ru, &drives[..1]),
+            "1 съёмный накопитель готов"
+        );
+        assert_eq!(
+            target_eligibility_label_in(Locale::De, &drive(false)),
+            "Interner Datenträger · gesperrt"
+        );
+        assert_eq!(
+            ReviewReadiness::Ready.action_label_in(Locale::Fr),
+            "Vérifier le plan"
+        );
+        assert_eq!(ProgressPhase::Verifying.label_in(Locale::En), "Verifying");
+        assert_eq!(ProgressPhase::Verifying.to_string(), "Verifying");
+        assert_eq!(
+            WorkspaceProgress::step_titles(Locale::En),
+            ["Source", "Target", "Review & write"]
         );
     }
 

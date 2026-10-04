@@ -1,0 +1,98 @@
+# Bootable message catalog: French (fr).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Typography note: plain spaces are used before ; : ! ? (no NBSP) so terminal
+# layouts wrap predictably; a native reviewer may prefer U+202F / U+00A0.
+
+help.intro = Source → Cible → Vérifier et écrire. Rien n'est écrit tant que vous n'avez pas vérifié le plan et confirmé l'effacement.
+help.section.source = Source
+help.section.target = Cible
+help.section.review = Vérifier et écrire
+help.section.general = Général
+
+help.source.choose.action = Choisir une image
+help.source.choose.detail = Parcourir pour trouver une image ISO, IMG, RAW ou compressée
+help.source.recent.action = Utiliser une image récente
+help.source.recent.detail = Réinspecter l'une de vos dernières images
+help.source.recent.desktop = Cliquer sur une image récente
+help.source.discover.action = Découvrir des images
+help.source.discover.detail = Ouvrir ou fermer le catalogue des distributions
+help.source.downloads.action = Téléchargements
+help.source.downloads.detail = Ouvrir ou fermer le gestionnaire de téléchargements
+help.source.downloads.desktop = Bouton Téléchargements
+
+help.target.refresh.action = Actualiser les lecteurs
+help.target.refresh.detail = Réanalyser les supports amovibles
+help.target.choose.action = Choisir un lecteur
+help.target.choose.detail = La sélection est toujours explicite ; les disques fixes sont bloqués
+help.target.choose.desktop = Cliquer sur un lecteur
+
+help.review.plan.action = Vérifier le plan
+help.review.plan.detail = Ouvre le plan ; rien n'est encore écrit
+help.review.stop.action = Arrêter une écriture
+help.review.stop.detail = S'arrête au prochain point sûr
+help.review.stop.desktop = Bouton Arrêter
+
+help.general.toggle.action = Afficher ou masquer ce guide
+help.general.toggle.detail = Rouvrez-le à tout moment
+help.general.close.action = Fermer un panneau
+help.general.close.detail = Ferme ce guide ou le catalogue
+
+detail.drive = Lecteur
+detail.path = Chemin
+detail.capacity = Capacité
+detail.connection = Connexion
+detail.serial = N° de série
+detail.status = État
+detail.mounted = Monté
+detail.connection.unknown = inconnue
+detail.serial.not_reported = non communiqué
+detail.mounted.none = rien n'est monté
+detail.mounted.list = {listed} · démonté avant l'écriture
+detail.mounted.list_more = {listed} +{hidden} de plus · démonté avant l'écriture
+
+target.system_blocked = Disque système · bloqué
+target.internal_blocked = Disque interne · bloqué
+target.read_only_blocked = Lecture seule · bloqué
+target.eligible = Amovible · éligible
+
+media.none = Aucun lecteur amovible connecté
+media.ready.one = {count} lecteur amovible prêt
+media.ready.other = {count} lecteurs amovibles prêts
+media.none_eligible.one = {count} lecteur amovible connecté · aucun éligible
+media.none_eligible.other = {count} lecteurs amovibles connectés · aucun éligible
+media.some_ready.one = {count} lecteur amovible connecté · prêts : {ready}
+media.some_ready.other = {count} lecteurs amovibles connectés · prêts : {ready}
+
+readiness.needs_image.action = Choisissez d'abord une image
+readiness.needs_target.action = Choisir un lecteur amovible
+readiness.ready.action = Vérifier le plan
+readiness.needs_image.guidance = Choisissez ou téléchargez une image pour continuer
+readiness.needs_target.guidance = Connectez et choisissez un lecteur amovible pour continuer
+readiness.ready.guidance = Prêt à vérifier l'image, la cible et le plan d'effacement
+workspace.needs_image.status = Choisissez ou téléchargez une image pour continuer
+workspace.needs_target.status = Choisissez un lecteur amovible · rien n'a été écrit
+workspace.ready.status = Prêt à vérifier · rien n'a été écrit
+
+step.source = Source
+step.target = Cible
+step.review = Vérifier et écrire
+
+phase.preparing = Préparation
+phase.downloading = Téléchargement
+phase.reading = Lecture
+phase.writing = Écriture
+phase.syncing = Synchronisation
+phase.verifying = Vérification
+phase.finished = Terminé
+
+integrity.transfer_checked = Transfert HTTPS et structure de démarrage vérifiés · somme de contrôle de l'éditeur indisponible
+integrity.checksum_verified = Somme de contrôle de l'éditeur vérifiée
+integrity.checksum_unsigned = Somme de contrôle de l'éditeur vérifiée · signature non vérifiée ({note})
+integrity.signature_verified = Signature vérifiée · {publisher} (clé {fingerprint}) · {algorithm} correspond au manifeste signé
+integrity.completion = {label} · prêt
+integrity.ready = Prêt · {label} · {path}
+integrity.finalized.transfer = Étape 4/5 · Longueur du transfert HTTPS vérifiée · somme de contrôle de l'éditeur indisponible · finalisé dans {path}
+integrity.finalized.checksum = Étape 4/5 · {algorithm} de l'éditeur vérifié · finalisé dans {path}
+integrity.finalized.checksum_unsigned = Étape 4/5 · {algorithm} de l'éditeur vérifié · signature non vérifiée ({note}) · finalisé dans {path}
+integrity.finalized.signature = Étape 4/5 · {label} · finalisé dans {path}

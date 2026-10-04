@@ -1,0 +1,94 @@
+# Bootable message catalog: Japanese (ja).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Japanese has no plural forms, so plural messages define only `.other`.
+
+help.intro = ソース → ターゲット → 確認して書き込み。プランを確認し、消去を承認するまで、何も書き込まれません。
+help.section.source = ソース
+help.section.target = ターゲット
+help.section.review = 確認して書き込み
+help.section.general = 一般
+
+help.source.choose.action = イメージを選択
+help.source.choose.detail = ISO、IMG、RAW、または圧縮イメージを参照します
+help.source.recent.action = 最近のイメージを使用
+help.source.recent.detail = 最近使ったイメージを再検査します
+help.source.recent.desktop = 最近のイメージをクリック
+help.source.discover.action = イメージを探す
+help.source.discover.detail = ディストリビューションのカタログを開閉します
+help.source.downloads.action = ダウンロード
+help.source.downloads.detail = ダウンロードマネージャーを開閉します
+help.source.downloads.desktop = 「ダウンロード」ボタン
+
+help.target.refresh.action = ドライブを更新
+help.target.refresh.detail = リムーバブルメディアを再スキャンします
+help.target.choose.action = ドライブを選択
+help.target.choose.detail = 選択は常に明示的に行います。固定ディスクはブロックされます
+help.target.choose.desktop = ドライブをクリック
+
+help.review.plan.action = プランを確認
+help.review.plan.detail = プランを開きます。まだ何も書き込まれません
+help.review.stop.action = 書き込みを停止
+help.review.stop.detail = 次の安全な区切りで停止します
+help.review.stop.desktop = 「停止」ボタン
+
+help.general.toggle.action = このガイドを表示または非表示
+help.general.toggle.detail = いつでも再度開けます
+help.general.close.action = パネルを閉じる
+help.general.close.detail = このガイドまたはカタログを閉じます
+
+detail.drive = ドライブ
+detail.path = パス
+detail.capacity = 容量
+detail.connection = 接続
+detail.serial = シリアル
+detail.status = 状態
+detail.mounted = マウント
+detail.connection.unknown = 不明
+detail.serial.not_reported = 報告なし
+detail.mounted.none = マウントなし
+detail.mounted.list = {listed} · 書き込み前にアンマウントされます
+detail.mounted.list_more = {listed} ほか{hidden}件 · 書き込み前にアンマウントされます
+
+target.system_blocked = システムディスク · ブロック
+target.internal_blocked = 内蔵ディスク · ブロック
+target.read_only_blocked = 読み取り専用 · ブロック
+target.eligible = リムーバブル · 使用可能
+
+media.none = リムーバブルドライブが接続されていません
+media.ready.other = 使用可能なリムーバブルドライブ: {count}台
+media.none_eligible.other = 接続中のリムーバブルドライブ: {count}台 · 使用可能なものなし
+media.some_ready.other = 接続中のリムーバブルドライブ: {count}台 · 使用可能: {ready}台
+
+readiness.needs_image.action = 先にイメージを選択
+readiness.needs_target.action = リムーバブルドライブを選択
+readiness.ready.action = プランを確認
+readiness.needs_image.guidance = 続行するにはイメージを選択またはダウンロードしてください
+readiness.needs_target.guidance = 続行するにはリムーバブルドライブを接続して選択してください
+readiness.ready.guidance = イメージ、ターゲット、消去プランを確認できます
+workspace.needs_image.status = 続行するにはイメージを選択またはダウンロードしてください
+workspace.needs_target.status = リムーバブルドライブを選択 · まだ何も書き込まれていません
+workspace.ready.status = 確認できます · まだ何も書き込まれていません
+
+step.source = ソース
+step.target = ターゲット
+step.review = 確認して書き込み
+
+phase.preparing = 準備中
+phase.downloading = ダウンロード中
+phase.reading = 読み取り中
+phase.writing = 書き込み中
+phase.syncing = 同期中
+phase.verifying = 検証中
+phase.finished = 完了
+
+integrity.transfer_checked = HTTPS転送とブート構造を確認済み · 配布元のチェックサムはありません
+integrity.checksum_verified = 配布元のチェックサムを検証済み
+integrity.checksum_unsigned = 配布元のチェックサムを検証済み · 署名は未検証 ({note})
+integrity.signature_verified = 署名を検証済み · {publisher} (鍵 {fingerprint}) · {algorithm} が署名付きマニフェストと一致
+integrity.completion = {label} · 準備完了
+integrity.ready = 準備完了 · {label} · {path}
+integrity.finalized.transfer = ステージ 4/5 · HTTPS転送の長さを検証済み · 配布元のチェックサムはありません · {path} に確定
+integrity.finalized.checksum = ステージ 4/5 · 配布元の{algorithm}を検証済み · {path} に確定
+integrity.finalized.checksum_unsigned = ステージ 4/5 · 配布元の{algorithm}を検証済み · 署名は未検証 ({note}) · {path} に確定
+integrity.finalized.signature = ステージ 4/5 · {label} · {path} に確定

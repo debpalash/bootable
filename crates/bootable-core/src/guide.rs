@@ -1,4 +1,6 @@
-use crate::model::{Device, format_bytes, target_eligibility_label};
+use crate::locale::Locale;
+use crate::messages::Message;
+use crate::model::{Device, format_bytes, target_eligibility_label_in};
 
 /// One labelled fact about a drive, shown identically by both interfaces.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,30 +13,44 @@ const MAX_LISTED_MOUNTS: usize = 3;
 
 /// Facts a user needs to confirm that a drive is the physical one they mean.
 pub fn device_details(device: &Device) -> Vec<DetailRow> {
-    let row = |label, value: String| DetailRow { label, value };
-    let mut rows = vec![
-        row("Drive", device.display_name()),
-        row("Path", device.path.display().to_string()),
-        row("Capacity", format_bytes(device.capacity)),
+    device_details_in(Locale::SOURCE, device)
+}
+
+/// [`device_details`] with labels and values in `locale`. Rows keep the same
+/// order in every locale; only their text changes.
+pub fn device_details_in(locale: Locale, device: &Device) -> Vec<DetailRow> {
+    let row = |label: Message, value: String| DetailRow {
+        label: label.text(locale),
+        value,
+    };
+    vec![
+        row(Message::DetailDrive, device.display_name()),
+        row(Message::DetailPath, device.path.display().to_string()),
+        row(Message::DetailCapacity, format_bytes(device.capacity)),
         row(
-            "Connection",
+            Message::DetailConnection,
             device
                 .transport
                 .clone()
                 .filter(|transport| !transport.is_empty())
-                .unwrap_or_else(|| "unknown".into()),
+                .unwrap_or_else(|| Message::DetailConnectionUnknown.text(locale).into()),
         ),
-        row("Serial", masked_serial(device.serial.as_deref())),
-        row("Status", target_eligibility_label(device).into()),
-    ];
-    rows.push(row("Mounted", mounted_summary(device)));
-    rows
+        row(
+            Message::DetailSerial,
+            masked_serial(locale, device.serial.as_deref()),
+        ),
+        row(
+            Message::DetailStatus,
+            target_eligibility_label_in(locale, device).into(),
+        ),
+        row(Message::DetailMounted, mounted_summary(locale, device)),
+    ]
 }
 
-fn masked_serial(serial: Option<&str>) -> String {
+fn masked_serial(locale: Locale, serial: Option<&str>) -> String {
     let serial = serial.map(str::trim).filter(|serial| !serial.is_empty());
     match serial {
-        None => "not reported".into(),
+        None => Message::DetailSerialNotReported.text(locale).into(),
         Some(serial) => {
             let tail = serial.chars().rev().take(4).collect::<Vec<_>>();
             let tail = tail.into_iter().rev().collect::<String>();
@@ -47,9 +63,9 @@ fn masked_serial(serial: Option<&str>) -> String {
     }
 }
 
-fn mounted_summary(device: &Device) -> String {
+fn mounted_summary(locale: Locale, device: &Device) -> String {
     if device.mounts.is_empty() {
-        return "nothing mounted".into();
+        return Message::DetailMountedNone.text(locale).into();
     }
     let listed = device
         .mounts
@@ -60,9 +76,9 @@ fn mounted_summary(device: &Device) -> String {
         .join(", ");
     let hidden = device.mounts.len().saturating_sub(MAX_LISTED_MOUNTS);
     if hidden > 0 {
-        format!("{listed} +{hidden} more · unmounted before writing")
+        Message::DetailMountedListMore.format(locale, &[("listed", &listed), ("hidden", &hidden)])
     } else {
-        format!("{listed} · unmounted before writing")
+        Message::DetailMountedList.format(locale, &[("listed", &listed)])
     }
 }
 
@@ -95,8 +111,11 @@ const fn entry(
     }
 }
 
+/// English-only guide text, kept for callers that have not adopted
+/// [`help_intro`]. A test pins it to the English catalog.
 pub const HELP_INTRO: &str = "Source → Target → Review & write. Nothing is written until you review the plan and acknowledge the erase.";
 
+/// English-only guide sections; see [`help_sections`] for the localized form.
 pub const HELP_SECTIONS: &[HelpSection] = &[
     HelpSection {
         title: "Source",
@@ -175,6 +194,150 @@ pub const HELP_SECTIONS: &[HelpSection] = &[
     },
 ];
 
+/// A [`HelpSection`] rendered for one locale.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalizedHelpSection {
+    pub title: &'static str,
+    pub entries: Vec<HelpEntry>,
+}
+
+/// How a help entry names the input for one interface: a key chord that is the
+/// same in every language, or a localized description such as "Stop button".
+#[derive(Clone, Copy)]
+enum Input {
+    Keys(&'static str),
+    Text(Message),
+}
+
+impl Input {
+    fn render(self, locale: Locale) -> &'static str {
+        match self {
+            Self::Keys(keys) => keys,
+            Self::Text(message) => message.text(locale),
+        }
+    }
+}
+
+struct EntrySpec {
+    action: Message,
+    detail: Message,
+    desktop: Input,
+    terminal: Input,
+}
+
+const fn spec(action: Message, detail: Message, desktop: Input, terminal: Input) -> EntrySpec {
+    EntrySpec {
+        action,
+        detail,
+        desktop,
+        terminal,
+    }
+}
+
+use Input::{Keys, Text};
+
+const SOURCE_ENTRIES: &[EntrySpec] = &[
+    spec(
+        Message::HelpSourceChooseAction,
+        Message::HelpSourceChooseDetail,
+        Keys("Ctrl+O"),
+        Keys("o"),
+    ),
+    spec(
+        Message::HelpSourceRecentAction,
+        Message::HelpSourceRecentDetail,
+        Text(Message::HelpSourceRecentDesktop),
+        Keys("1–4"),
+    ),
+    spec(
+        Message::HelpSourceDiscoverAction,
+        Message::HelpSourceDiscoverDetail,
+        Keys("Ctrl+G"),
+        Keys("g"),
+    ),
+    spec(
+        Message::HelpSourceDownloadsAction,
+        Message::HelpSourceDownloadsDetail,
+        Text(Message::HelpSourceDownloadsDesktop),
+        Keys("m"),
+    ),
+];
+
+const TARGET_ENTRIES: &[EntrySpec] = &[
+    spec(
+        Message::HelpTargetRefreshAction,
+        Message::HelpTargetRefreshDetail,
+        Keys("Ctrl+R"),
+        Keys("r"),
+    ),
+    spec(
+        Message::HelpTargetChooseAction,
+        Message::HelpTargetChooseDetail,
+        Text(Message::HelpTargetChooseDesktop),
+        Keys("↑ ↓ · j k"),
+    ),
+];
+
+const REVIEW_ENTRIES: &[EntrySpec] = &[
+    spec(
+        Message::HelpReviewPlanAction,
+        Message::HelpReviewPlanDetail,
+        Keys("Ctrl+P"),
+        Keys("p"),
+    ),
+    spec(
+        Message::HelpReviewStopAction,
+        Message::HelpReviewStopDetail,
+        Text(Message::HelpReviewStopDesktop),
+        Keys("x"),
+    ),
+];
+
+const GENERAL_ENTRIES: &[EntrySpec] = &[
+    spec(
+        Message::HelpGeneralToggleAction,
+        Message::HelpGeneralToggleDetail,
+        Keys("F1 · Ctrl+/"),
+        Keys("?"),
+    ),
+    spec(
+        Message::HelpGeneralCloseAction,
+        Message::HelpGeneralCloseDetail,
+        Keys("Esc"),
+        Keys("Esc"),
+    ),
+];
+
+/// The one-line workflow summary shown at the top of the guide.
+pub fn help_intro(locale: Locale) -> &'static str {
+    Message::HelpIntro.text(locale)
+}
+
+/// The guide, in the same section and entry order for every locale. Key
+/// chords are identical across languages; only descriptions are translated.
+pub fn help_sections(locale: Locale) -> Vec<LocalizedHelpSection> {
+    [
+        (Message::HelpSectionSource, SOURCE_ENTRIES),
+        (Message::HelpSectionTarget, TARGET_ENTRIES),
+        (Message::HelpSectionReview, REVIEW_ENTRIES),
+        (Message::HelpSectionGeneral, GENERAL_ENTRIES),
+    ]
+    .into_iter()
+    .map(|(title, entries)| LocalizedHelpSection {
+        title: title.text(locale),
+        entries: entries
+            .iter()
+            .map(|entry| HelpEntry {
+                action: entry.action.text(locale),
+                detail: entry.detail.text(locale),
+                desktop: entry.desktop.render(locale),
+                terminal: entry.terminal.render(locale),
+            })
+            .collect(),
+    })
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -244,6 +407,52 @@ mod tests {
         assert_eq!(
             value(&device_details(&internal), "Status"),
             "Internal disk · blocked"
+        );
+    }
+
+    #[test]
+    fn english_help_from_the_catalog_matches_the_constants() {
+        assert_eq!(help_intro(Locale::En), HELP_INTRO);
+        let sections = help_sections(Locale::En);
+        assert_eq!(sections.len(), HELP_SECTIONS.len());
+        for (localized, constant) in sections.iter().zip(HELP_SECTIONS) {
+            assert_eq!(localized.title, constant.title);
+            assert_eq!(localized.entries, constant.entries);
+        }
+    }
+
+    #[test]
+    fn help_has_the_same_shape_in_every_locale() {
+        let english = help_sections(Locale::En);
+        for locale in Locale::ALL {
+            let sections = help_sections(*locale);
+            assert_eq!(sections.len(), english.len());
+            for (section, reference) in sections.iter().zip(&english) {
+                assert_eq!(section.entries.len(), reference.entries.len());
+                for (entry, reference) in section.entries.iter().zip(&reference.entries) {
+                    assert!(!entry.action.is_empty() && !entry.detail.is_empty());
+                    assert!(!entry.desktop.is_empty() && !entry.terminal.is_empty());
+                    // Terminal inputs are key chords and never translated.
+                    assert_eq!(entry.terminal, reference.terminal);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn device_details_keep_their_order_and_translate_labels() {
+        let mut unmounted = device();
+        unmounted.serial = None;
+        let english = device_details_in(Locale::En, &unmounted);
+        let spanish = device_details_in(Locale::Es, &unmounted);
+        assert_eq!(english.len(), spanish.len());
+        assert_eq!(english[0].label, "Drive");
+        assert_eq!(spanish[0].label, "Unidad");
+        assert_eq!(value(&spanish, "N.º de serie"), "no informado");
+        assert_eq!(value(&spanish, "Estado"), "Extraíble · apto");
+        assert_eq!(
+            value(&device_details_in(Locale::Fr, &unmounted), "Monté"),
+            "rien n'est monté"
         );
     }
 

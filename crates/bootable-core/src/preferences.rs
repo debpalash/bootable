@@ -1,10 +1,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::checksum::ChecksumAlgorithm;
 use crate::error::{Error, Result, io_error};
+use crate::locale::Locale;
 use crate::model::ImageReport;
 
 const PREFERENCES_VERSION: u32 = 1;
@@ -37,6 +38,19 @@ pub struct Preferences {
     pub image_directory: Option<PathBuf>,
     pub checksum_algorithm: ChecksumAlgorithm,
     recent_images: Vec<RecentImage>,
+    /// Explicit interface language. `None` follows the system language. Files
+    /// written before this field existed load as `None`, and an unrecognized
+    /// tag (for example from a newer release) is ignored instead of discarding
+    /// the whole file.
+    #[serde(default, deserialize_with = "lenient_language")]
+    pub language: Option<Locale>,
+}
+
+fn lenient_language<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Locale>, D::Error> {
+    let tag = Option::<String>::deserialize(deserializer)?;
+    Ok(tag.and_then(|tag| Locale::parse(&tag)))
 }
 
 impl Default for Preferences {
@@ -46,6 +60,7 @@ impl Default for Preferences {
             image_directory: None,
             checksum_algorithm: ChecksumAlgorithm::Sha256,
             recent_images: Vec::new(),
+            language: None,
         }
     }
 }
@@ -116,6 +131,13 @@ impl Preferences {
             .filter(|recent| recent.path.is_file())
             .cloned()
             .collect()
+    }
+
+    /// The language to render with: the explicit choice, else the system
+    /// language, else English. Detection reads the environment, so call it once
+    /// at startup and when the user changes the setting.
+    pub fn locale(&self) -> Locale {
+        Locale::resolve(self.language)
     }
 
     /// The remembered folder if it still exists.
@@ -205,6 +227,39 @@ mod tests {
         assert_eq!(preferences.recent_images().len(), 1);
         preferences.forget_image(&kept);
         assert!(preferences.recent_images().is_empty());
+    }
+
+    #[test]
+    fn files_without_a_language_still_load_and_unknown_tags_are_ignored() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let file = directory.path().join("preferences.json");
+        // Written by a release that predates `language`.
+        fs::write(
+            &file,
+            br#"{"version":1,"image_directory":null,"checksum_algorithm":"Sha512","recent_images":[]}"#,
+        )
+        .expect("old file");
+        let loaded = Preferences::load_from(&file);
+        assert_eq!(loaded.language, None);
+        assert_eq!(loaded.checksum_algorithm, ChecksumAlgorithm::Sha512);
+
+        fs::write(
+            &file,
+            br#"{"version":1,"image_directory":null,"checksum_algorithm":"Sha512","recent_images":[],"language":"tlh"}"#,
+        )
+        .expect("unknown language");
+        let loaded = Preferences::load_from(&file);
+        assert_eq!(loaded.language, None);
+        assert_eq!(loaded.checksum_algorithm, ChecksumAlgorithm::Sha512);
+
+        let preferences = Preferences {
+            language: Some(Locale::PtBr),
+            ..Preferences::default()
+        };
+        preferences.save_to(&file).expect("save");
+        assert!(fs::read_to_string(&file).expect("read").contains("pt-BR"));
+        assert_eq!(Preferences::load_from(&file).language, Some(Locale::PtBr));
+        assert_eq!(preferences.locale(), Locale::PtBr);
     }
 
     #[test]

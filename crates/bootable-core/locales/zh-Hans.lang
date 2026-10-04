@@ -1,0 +1,94 @@
+# Bootable message catalog: Simplified Chinese (zh-Hans).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Chinese has no plural forms, so plural messages define only `.other`.
+
+help.intro = 源 → 目标 → 检查并写入。在您检查计划并确认擦除之前，不会写入任何内容。
+help.section.source = 源
+help.section.target = 目标
+help.section.review = 检查并写入
+help.section.general = 常规
+
+help.source.choose.action = 选择镜像
+help.source.choose.detail = 浏览 ISO、IMG、RAW 或压缩镜像
+help.source.recent.action = 使用最近的镜像
+help.source.recent.detail = 重新检查最近使用的镜像之一
+help.source.recent.desktop = 点击最近的镜像
+help.source.discover.action = 发现镜像
+help.source.discover.detail = 打开或关闭发行版目录
+help.source.downloads.action = 下载
+help.source.downloads.detail = 打开或关闭下载管理器
+help.source.downloads.desktop = “下载”按钮
+
+help.target.refresh.action = 刷新驱动器
+help.target.refresh.detail = 重新扫描可移动介质
+help.target.choose.action = 选择驱动器
+help.target.choose.detail = 选择始终需要明确操作；固定磁盘已被阻止
+help.target.choose.desktop = 点击驱动器
+
+help.review.plan.action = 检查计划
+help.review.plan.detail = 打开计划；目前尚未写入任何内容
+help.review.stop.action = 停止写入
+help.review.stop.detail = 在下一个安全点停止
+help.review.stop.desktop = “停止”按钮
+
+help.general.toggle.action = 显示或隐藏本指南
+help.general.toggle.detail = 可随时重新打开
+help.general.close.action = 关闭面板
+help.general.close.detail = 关闭本指南或目录
+
+detail.drive = 驱动器
+detail.path = 路径
+detail.capacity = 容量
+detail.connection = 连接
+detail.serial = 序列号
+detail.status = 状态
+detail.mounted = 已挂载
+detail.connection.unknown = 未知
+detail.serial.not_reported = 未报告
+detail.mounted.none = 未挂载任何内容
+detail.mounted.list = {listed} · 写入前将卸载
+detail.mounted.list_more = {listed} 等另外 {hidden} 项 · 写入前将卸载
+
+target.system_blocked = 系统磁盘 · 已阻止
+target.internal_blocked = 内部磁盘 · 已阻止
+target.read_only_blocked = 只读 · 已阻止
+target.eligible = 可移动 · 可用
+
+media.none = 未连接可移动驱动器
+media.ready.other = {count} 个可移动驱动器就绪
+media.none_eligible.other = 已连接 {count} 个可移动驱动器 · 无可用
+media.some_ready.other = 已连接 {count} 个可移动驱动器 · {ready} 个就绪
+
+readiness.needs_image.action = 请先选择镜像
+readiness.needs_target.action = 选择可移动驱动器
+readiness.ready.action = 检查计划
+readiness.needs_image.guidance = 选择或下载镜像以继续
+readiness.needs_target.guidance = 连接并选择可移动驱动器以继续
+readiness.ready.guidance = 可以检查镜像、目标和擦除计划
+workspace.needs_image.status = 选择或下载镜像以继续
+workspace.needs_target.status = 选择可移动驱动器 · 尚未写入任何内容
+workspace.ready.status = 可以检查 · 尚未写入任何内容
+
+step.source = 源
+step.target = 目标
+step.review = 检查并写入
+
+phase.preparing = 准备中
+phase.downloading = 下载中
+phase.reading = 读取中
+phase.writing = 写入中
+phase.syncing = 同步中
+phase.verifying = 验证中
+phase.finished = 已完成
+
+integrity.transfer_checked = 已检查 HTTPS 传输和启动结构 · 发布者校验和不可用
+integrity.checksum_verified = 发布者校验和已验证
+integrity.checksum_unsigned = 发布者校验和已验证 · 签名未验证（{note}）
+integrity.signature_verified = 签名已验证 · {publisher}（密钥 {fingerprint}）· {algorithm} 与已签名清单匹配
+integrity.completion = {label} · 就绪
+integrity.ready = 就绪 · {label} · {path}
+integrity.finalized.transfer = 阶段 4/5 · HTTPS 传输长度已验证 · 发布者校验和不可用 · 已在 {path} 完成
+integrity.finalized.checksum = 阶段 4/5 · 发布者 {algorithm} 已验证 · 已在 {path} 完成
+integrity.finalized.checksum_unsigned = 阶段 4/5 · 发布者 {algorithm} 已验证 · 签名未验证（{note}）· 已在 {path} 完成
+integrity.finalized.signature = 阶段 4/5 · {label} · 已在 {path} 完成
