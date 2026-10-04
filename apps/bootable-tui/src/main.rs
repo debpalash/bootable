@@ -12,9 +12,9 @@ use bootable_core::{
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
     DownloadStatus, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message,
     OperationState, PiCatalog, Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness,
-    ReviewedWriteSession, WorkspaceProgress, WorkspaceStepState, WriteCompletion, WriteOptions,
-    WritePlan, catalog_search_summary, device_details_in, distribution_matches_query, format_bytes,
-    help_intro, help_sections, removable_media_status_in, review_readiness,
+    ReviewedWriteSession, Strings, WorkspaceProgress, WorkspaceStepState, WriteCompletion,
+    WriteOptions, WritePlan, catalog_search_summary, device_details_in, distribution_matches_query,
+    format_bytes, help_intro, help_sections, removable_media_status_in, review_readiness,
     target_eligibility_label, target_eligibility_label_in, workspace_progress,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
@@ -1166,6 +1166,12 @@ struct HitRegions {
 }
 
 impl App {
+    /// The active locale bound to the shared catalog. `Copy`, so it can be held
+    /// across `&mut self` calls.
+    fn t(&self) -> Strings {
+        self.locale.strings()
+    }
+
     fn load(engine: Bootable, image_path: Option<PathBuf>, artwork_picker: Picker) -> Self {
         let preferences = Preferences::load();
         let locale = preferences.locale();
@@ -3432,10 +3438,11 @@ fn draw_help(frame: &mut ratatui::Frame<'_>, area: Rect, locale: Locale) {
         height,
     );
     frame.render_widget(Clear, modal);
+    let guide_title = format!(" {} ", locale.strings().text(Message::GuideTitle));
     frame.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
-            .block(panel_block(" Guide ").style(Style::default().bg(PANEL))),
+            .block(panel_block(&guide_title).style(Style::default().bg(PANEL))),
         modal,
     );
 }
@@ -3575,15 +3582,16 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         format_bytes(plan.target.capacity)
     );
     let method = plan.strategy.to_string();
+    let t = app.t();
     let steps = plan
         .steps
         .iter()
         .enumerate()
         .map(|(index, step)| {
             let marker = if step.destructive {
-                "ERASES DATA"
+                t.heading(Message::ReviewStepErases)
             } else {
-                "safe"
+                t.text(Message::ReviewStepSafe).to_string()
             };
             ListItem::new(format!("{}. {}  ·  {marker}", index + 1, step.title)).style(
                 Style::default().fg(if step.destructive {
@@ -3595,6 +3603,35 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         })
         .collect::<Vec<_>>();
 
+    let mut permanent_lines = vec![Line::styled(
+        t.text(Message::ReviewConsequence),
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    )];
+    if app.write_session.active() {
+        permanent_lines.push(Line::styled(
+            t.text(Message::ReviewWarningWriting),
+            Style::default().fg(Color::Yellow),
+        ));
+    } else {
+        permanent_lines.push(Line::styled(
+            t.text(Message::ReviewSubtitle),
+            Style::default().fg(MUTED),
+        ));
+        permanent_lines.push(Line::styled(
+            t.text(Message::ReviewHintOpenConfirmation),
+            Style::default().fg(MUTED),
+        ));
+    }
+    // Longer wording (German, Russian) wraps onto more lines; give the panel
+    // the rows it needs instead of clipping a safety sentence.
+    let permanent_height = (permanent_lines
+        .iter()
+        .map(|line| wrapped_height(&line.to_string(), usize::from(area.width.saturating_sub(2))))
+        .sum::<usize>() as u16
+        + 2)
+    .clamp(6, if compact { 7 } else { 9 });
     let mut constraints = vec![
         Constraint::Length(if compact { 3 } else { 4 }),
         Constraint::Length(if compact { 5 } else { 6 }),
@@ -3605,7 +3642,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         constraints.push(Constraint::Min(0));
     }
     if show_confirmation {
-        constraints.push(Constraint::Length(6));
+        constraints.push(Constraint::Length(permanent_height));
     }
     if show_progress {
         constraints.push(Constraint::Length(5));
@@ -3626,60 +3663,71 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(
         Paragraph::new(brand_lockup(
             area.width >= 60,
-            "Review write plan",
-            if app.write_session.active() {
-                "Writing and verification are active • do not unplug the target."
+            t.text(Message::ReviewTitle),
+            t.text(if app.write_session.active() {
+                Message::ReviewSubtitleWriting
             } else {
-                "Nothing is written until the consequences are reviewed and acknowledged."
-            },
+                Message::HeaderSubtitleReview
+            }),
+            t.text(Message::HeaderTagline),
+            usize::from(rows[row].width),
         ))
         .style(Style::default().bg(BG)),
         rows[row],
     );
     row += 1;
+    let summary_labels = [
+        t.heading(Message::ReviewFieldSource),
+        t.heading(Message::ReviewFieldTarget),
+        t.heading(Message::ReviewFieldMethod),
+    ];
+    let label_width = summary_labels
+        .iter()
+        .map(|label| display_width(label))
+        .max()
+        .unwrap_or(0)
+        + 2;
+    let summary_label = |index: usize| {
+        Span::styled(
+            pad_display(&summary_labels[index], label_width),
+            Style::default().fg(MUTED),
+        )
+    };
+    let plan_summary_title = format!(" {} ", t.text(Message::ReviewPlanSummary));
     frame.render_widget(
         Paragraph::new(vec![
             Line::from(vec![
-                Span::styled("SOURCE  ", Style::default().fg(MUTED)),
+                summary_label(0),
                 Span::styled(source, Style::default().fg(Color::White)),
             ]),
             Line::from(vec![
-                Span::styled("TARGET  ", Style::default().fg(MUTED)),
+                summary_label(1),
                 Span::styled(target, Style::default().fg(Color::White)),
             ]),
             Line::from(vec![
-                Span::styled("METHOD  ", Style::default().fg(MUTED)),
+                summary_label(2),
                 Span::styled(method, Style::default().fg(ACCENT)),
             ]),
         ])
         .wrap(Wrap { trim: true })
-        .block(panel_block(" Plan summary ")),
+        .block(panel_block(&plan_summary_title)),
         rows[row],
     );
     row += 1;
     if show_steps {
+        let operations_title = format!(" {} ", t.text(Message::ReviewOrderedOperations));
         frame.render_widget(
-            List::new(steps).block(panel_block(" Ordered operations ")),
+            List::new(steps).block(panel_block(&operations_title)),
             rows[row],
         );
     }
     row += 1;
     if show_confirmation {
+        let permanent_title = format!(" {} ", t.text(Message::ReviewPermanentChanges));
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "All existing data and partitions on the selected target will be erased.",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Line::styled(
-                    "Open the confirmation to review changes, consequences, and the physical target.",
-                    Style::default().fg(MUTED),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Permanent changes ")),
+            Paragraph::new(permanent_lines)
+                .wrap(Wrap { trim: true })
+                .block(panel_block(&permanent_title)),
             rows[row],
         );
         row += 1;
@@ -3714,30 +3762,17 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         row += 1;
     }
     if let Some(completion) = app.write_session.completion() {
-        let (title, message, color) = match completion {
-            WriteCompletion::Succeeded => (
-                " Write complete ",
-                "Image written and verified. The removable drive can now be safely removed."
-                    .to_string(),
-                ACCENT,
-            ),
-            WriteCompletion::AuthenticationDenied => (
-                " Write cancelled before erasure ",
-                "Administrator authentication was cancelled or denied.".into(),
-                Color::Yellow,
-            ),
-            WriteCompletion::Cancelled => (
-                " Write stopped safely ",
-                "The media is incomplete and must be rewritten before use.".into(),
-                Color::LightRed,
-            ),
-            WriteCompletion::Failed(error) => (" Write failed ", error.clone(), Color::LightRed),
+        let color = match completion {
+            WriteCompletion::Succeeded => ACCENT,
+            WriteCompletion::AuthenticationDenied => Color::Yellow,
+            WriteCompletion::Cancelled | WriteCompletion::Failed(_) => Color::LightRed,
         };
+        let result_title = format!(" {} ", completion.title_in(app.locale));
         frame.render_widget(
-            Paragraph::new(message)
+            Paragraph::new(completion.detail_in(app.locale))
                 .style(Style::default().fg(color))
                 .wrap(Wrap { trim: true })
-                .block(panel_block(title)),
+                .block(panel_block(&result_title)),
             rows[row],
         );
         row += 1;
@@ -3749,30 +3784,32 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     ])
     .spacing(1)
     .split(rows[row]);
+    let back_label = format!("←  {}", t.text(Message::ActionBack));
     if app.write_session.active() {
-        render_disabled_button(frame, actions[0], "←  Back locked");
+        render_disabled_button(frame, actions[0], &back_label);
     } else {
-        render_button(frame, actions[0], "←  Back to selection", false);
+        render_button(frame, actions[0], &back_label, false);
     }
     let write_enabled = !write_succeeded;
     let write_label = if app.write_session.active() {
-        "■  Stop safely"
+        format!("■  {}", t.text(Message::ReviewActionStopSafely))
     } else if write_succeeded {
-        "✓  Written & verified"
+        format!("✓  {}", t.text(Message::ReviewActionWritten))
     } else if app.write_session.completion().is_some() {
-        "!  Review & retry"
+        format!("!  {}", t.text(Message::ReviewActionRetry))
     } else {
-        "!  Review consequences"
+        format!("!  {}", t.text(Message::ReviewActionConsequences))
     };
     if write_enabled {
-        render_button(frame, actions[1], write_label, true);
+        render_button(frame, actions[1], &write_label, true);
     } else {
-        render_disabled_button(frame, actions[1], write_label);
+        render_disabled_button(frame, actions[1], &write_label);
     }
+    let quit_label = format!("×  {}", t.text(Message::ActionQuit));
     if app.write_session.active() {
-        render_disabled_button(frame, actions[2], "×  Quit locked");
+        render_disabled_button(frame, actions[2], &quit_label);
     } else {
-        render_button(frame, actions[2], "×  Quit", false);
+        render_button(frame, actions[2], &quit_label, false);
     }
     app.hit_regions.review_back = (!app.write_session.active()).then_some(actions[0]);
     app.hit_regions.review_write = write_enabled.then_some(actions[1]);
@@ -3783,6 +3820,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     let Some(plan) = app.write_session.plan() else {
         return;
     };
@@ -3794,7 +3832,12 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         width,
         height,
     );
-    let compact = modal.height < 28;
+    let inner = modal.inner(ratatui::layout::Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    // Text columns inside a bordered panel in the modal.
+    let text_width = usize::from(inner.width.saturating_sub(2));
     let target = format!(
         "{} • {}\n{} • {}",
         plan.target.display_name(),
@@ -3808,9 +3851,9 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         .enumerate()
         .map(|(index, step)| {
             let marker = if step.destructive {
-                "ERASES DATA"
+                t.heading(Message::ReviewStepErases)
             } else {
-                "verifies"
+                t.text(Message::ReviewStepVerifies).to_string()
             };
             ListItem::new(format!("{}. {}  ·  {marker}", index + 1, step.title)).style(
                 Style::default().fg(if step.destructive {
@@ -3821,11 +3864,53 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
             )
         })
         .collect::<Vec<_>>();
+    let bullets = [
+        (Message::ConfirmConsequenceErase, Color::LightRed),
+        (Message::ConfirmConsequenceWrongDrive, Color::Yellow),
+        (Message::ConfirmConsequenceInterrupted, Color::Yellow),
+        (Message::ConfirmConsequenceRecheck, MUTED),
+    ];
+    let bullet_lines = |count: usize| {
+        bullets
+            .iter()
+            .take(count)
+            .map(|(message, color)| {
+                Line::styled(
+                    format!("• {}", t.text(*message)),
+                    Style::default().fg(*color),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let bullet_height = |count: usize| {
+        bullet_lines(count)
+            .iter()
+            .map(|line| wrapped_height(&line.to_string(), text_width))
+            .sum::<usize>() as u16
+            + 2
+    };
+    // The acknowledgement must always be fully visible; size its row to it.
+    let acknowledged = app.write_session.acknowledged();
+    let acknowledgment = format!(
+        "{} {}",
+        if acknowledged { "■" } else { "□" },
+        t.text(Message::ConfirmAck)
+    );
+    let acknowledgment_height = wrapped_height(&acknowledgment, text_width) as u16 + 2;
+    // Full layout: target (4), changes (>= 5), consequences, acknowledgement,
+    // buttons (3) and four gaps.
+    let full_height = 4 + 5 + bullet_height(4) + acknowledgment_height + 3 + 4;
+    let compact = inner.height < full_height;
 
     frame.render_widget(Clear, modal);
+    let modal_title = format!(
+        " {} · {} ",
+        t.text(Message::ConfirmTitle),
+        t.heading(Message::ConfirmBadge)
+    );
     frame.render_widget(
         Block::default()
-            .title(" Confirm permanent changes · PERMANENT ")
+            .title(modal_title)
             .title_style(
                 Style::default()
                     .fg(Color::Yellow)
@@ -3837,15 +3922,11 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
             .style(Style::default().bg(PANEL)),
         modal,
     );
-    let inner = modal.inner(ratatui::layout::Margin {
-        horizontal: 1,
-        vertical: 1,
-    });
     let rows = if compact {
         Layout::vertical([
             Constraint::Length(4),
             Constraint::Min(4),
-            Constraint::Length(3),
+            Constraint::Length(acknowledgment_height),
             Constraint::Length(3),
         ])
         .spacing(1)
@@ -3853,83 +3934,49 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
     } else {
         Layout::vertical([
             Constraint::Length(4),
-            Constraint::Min(7),
-            Constraint::Length(7),
-            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(bullet_height(4)),
+            Constraint::Length(acknowledgment_height),
             Constraint::Length(3),
         ])
         .spacing(1)
         .split(inner)
     };
+    let physical_title = format!(" {} ", t.text(Message::ConfirmPhysicalTarget));
     frame.render_widget(
         Paragraph::new(target)
             .wrap(Wrap { trim: true })
-            .block(panel_block(" Physical target · check carefully ")),
+            .block(panel_block(&physical_title)),
         rows[0],
     );
+    let consequences_title = format!(" {} ", t.text(Message::ConfirmConsequences));
     if compact {
+        // Narrow terminals show the two consequences that matter most; the
+        // full list appears on a taller screen.
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "• All existing files and partitions on this drive will be permanently erased.",
-                    Style::default().fg(Color::LightRed),
-                ),
-                Line::styled(
-                    "• Choosing the wrong physical drive destroys its data.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Do not close, power off, or unplug until verification finishes.",
-                    Style::default().fg(Color::Yellow),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Changes and consequences ")),
+            Paragraph::new(bullet_lines(2))
+                .wrap(Wrap { trim: true })
+                .block(panel_block(&consequences_title)),
             rows[1],
         );
     } else {
+        let changes_title = format!(" {} ", t.text(Message::ConfirmChanges));
         frame.render_widget(
-            List::new(changes).block(panel_block(" Changes to this drive ")),
+            List::new(changes).block(panel_block(&changes_title)),
             rows[1],
         );
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "• Every existing file and partition on this physical drive becomes unrecoverable without a separate backup.",
-                    Style::default().fg(Color::LightRed),
-                ),
-                Line::styled(
-                    "• Selecting the wrong drive destroys the data on that drive.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Power loss, closing, or unplugging can leave incomplete and unbootable media.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Bootable rechecks target identity before erasure and verifies the result afterward.",
-                    Style::default().fg(MUTED),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Consequences ")),
+            Paragraph::new(bullet_lines(4))
+                .wrap(Wrap { trim: true })
+                .block(panel_block(&consequences_title)),
             rows[2],
         );
     }
     let acknowledgment_row = if compact { rows[2] } else { rows[3] };
     let actions_row = if compact { rows[3] } else { rows[4] };
-    let acknowledgment = if app.write_session.acknowledged() {
-        "■ I checked the physical target and understand its existing data will be permanently erased."
-    } else {
-        "□ I checked the physical target and understand its existing data will be permanently erased."
-    };
     frame.render_widget(
         Paragraph::new(acknowledgment)
-            .style(Style::default().fg(if app.write_session.acknowledged() {
-                ACCENT
-            } else {
-                Color::White
-            }))
+            .style(Style::default().fg(if acknowledged { ACCENT } else { Color::White }))
             .wrap(Wrap { trim: true })
             .block(panel_block(" Space/click to acknowledge ")),
         acknowledgment_row,
@@ -3937,12 +3984,25 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
     let actions = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
         .spacing(1)
         .split(actions_row);
-    render_button(frame, actions[0], "←  Cancel · target unchanged", false);
+    render_button(
+        frame,
+        actions[0],
+        &format!("←  {}", t.text(Message::ActionCancel)),
+        false,
+    );
     let confirm_ready = app.write_session.can_confirm();
     if confirm_ready {
-        render_danger_button(frame, actions[1], "!  Confirm erase & write");
+        render_danger_button(
+            frame,
+            actions[1],
+            &format!("!  {}", t.text(Message::ConfirmSubmit)),
+        );
     } else {
-        render_disabled_button(frame, actions[1], "□  Acknowledge first");
+        render_disabled_button(
+            frame,
+            actions[1],
+            &format!("□  {}", t.text(Message::ConfirmAcknowledgeFirst)),
+        );
     }
     app.hit_regions.confirm_acknowledge = Some(acknowledgment_row);
     app.hit_regions.confirm_cancel = Some(actions[0]);
@@ -3989,11 +4049,14 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(columns[1]);
     render_button(frame, action_columns[1], "?", app.help_open);
     app.hit_regions.guide = Some(action_columns[1]);
+    let t = app.t();
     frame.render_widget(
         Paragraph::new(brand_lockup(
             wide,
-            "Create boot media",
-            "One deliberate path from image to removable drive.",
+            t.text(Message::HeaderTitleCreate),
+            t.text(Message::HeaderSubtitleCreate),
+            t.text(Message::HeaderTagline),
+            usize::from(columns[0].width),
         ))
         .style(Style::default().bg(BG)),
         columns[0],
@@ -4007,16 +4070,34 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[0],
-        if wide { "⇩ Downloads" } else { "⇩ Jobs" },
+        &glyph_label(
+            actions[0],
+            !wide,
+            "⇩",
+            t.text(Message::ActionDownloads),
+            t.text(Message::ActionDownloadsCompact),
+        ),
         app.downloads_open,
     );
     render_button(
         frame,
         actions[1],
-        if app.catalog_open {
-            if wide { "× Catalog" } else { "× Cat" }
+        &if app.catalog_open {
+            glyph_label(
+                actions[1],
+                !wide,
+                "×",
+                t.text(Message::ActionCatalogClose),
+                t.text(Message::ActionCatalogCloseCompact),
+            )
         } else {
-            if wide { "⌄ Discover" } else { "⌄ Find" }
+            glyph_label(
+                actions[1],
+                !wide,
+                "⌄",
+                t.text(Message::ActionDiscover),
+                t.text(Message::ActionDiscoverCompact),
+            )
         },
         app.workspace_focus == WorkspaceFocus::Discover,
     );
@@ -4024,14 +4105,22 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         render_button(
             frame,
             actions[2],
-            if app.advanced {
-                if wide { "⚙ Hide options" } else { "⚙ Hide" }
+            &if app.advanced {
+                glyph_label(
+                    actions[2],
+                    !wide,
+                    "⚙",
+                    t.text(Message::ActionHideOptions),
+                    t.text(Message::ActionHideOptionsCompact),
+                )
             } else {
-                if wide {
-                    "⚙ Setup options"
-                } else {
-                    "⚙ Setup"
-                }
+                glyph_label(
+                    actions[2],
+                    !wide,
+                    "⚙",
+                    t.text(Message::ActionSetupOptions),
+                    t.text(Message::ActionSetupOptionsCompact),
+                )
             },
             false,
         );
@@ -4043,7 +4132,13 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[refresh_index],
-        if wide { "↻ Refresh" } else { "↻ USB" },
+        &glyph_label(
+            actions[refresh_index],
+            !wide,
+            "↻",
+            t.text(Message::ActionRefreshDrives),
+            t.text(Message::ActionRefresh),
+        ),
         app.workspace_focus == WorkspaceFocus::Refresh,
     );
     app.hit_regions.downloads = Some(actions[0]);
@@ -4097,7 +4192,15 @@ fn step_span(label: String, state: WorkspaceStepState) -> Span<'static> {
     Span::styled(format!(" {marker} {label} "), style)
 }
 
-fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line<'a>> {
+/// The brand lockup. `tagline` is shown after the context only when `room`
+/// terminal columns leave space for it (the same rule the desktop header uses).
+fn brand_lockup<'a>(
+    wide: bool,
+    context: &'a str,
+    subtitle: &'a str,
+    tagline: &'a str,
+    room: usize,
+) -> Vec<Line<'a>> {
     if !wide {
         return vec![Line::from(vec![
             Span::styled(
@@ -4110,6 +4213,11 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
             Span::styled(format!("  {context}"), Style::default().fg(Color::White)),
         ])];
     }
+    let brand = format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION"));
+    let context = format!("  ·  {context}");
+    let tagline = format!("  ·  {tagline}");
+    let used = 4 + display_width(&brand) + display_width(&context);
+    let show_tagline = used + display_width(&tagline) <= room;
     vec![
         Line::from(vec![
             Span::styled(
@@ -4117,12 +4225,16 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION")),
+                brand,
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!("  ·  {context}"), Style::default().fg(Color::White)),
+            Span::styled(context, Style::default().fg(Color::White)),
+            Span::styled(
+                if show_tagline { tagline } else { String::new() },
+                Style::default().fg(MUTED),
+            ),
         ]),
         Line::from(vec![
             Span::styled("╰♨─╯", Style::default().fg(ACCENT)),
@@ -4132,21 +4244,27 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
 }
 
 fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     let source = app
         .image
         .as_ref()
         .map(|image| {
             format!(
-                "{}\n{} • {}  ·  ✓ Inspected",
+                "{}\n{} • {}  ·  ✓ {}",
                 image.path.display(),
                 image.kind,
-                format_bytes(image.size)
+                format_bytes(image.size),
+                t.text(Message::SourceInspected)
             )
         })
         .unwrap_or_else(|| {
-            "ISO, IMG, RAW, or compressed disk image\nInspected before writing".into()
+            format!(
+                "{}\n{}",
+                t.text(Message::SourceFormats),
+                t.text(Message::SourceHint)
+            )
         });
-    let source_title = panel_heading(app.locale, 1, " · choose an image");
+    let source_title = panel_heading(t, 1, Message::SourceTitle);
     let source_block =
         focused_panel_block(&source_title, app.workspace_focus == WorkspaceFocus::Source);
     let source_inner = source_block.inner(area);
@@ -4160,9 +4278,21 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let source_rows = Layout::vertical([Constraint::Min(3), Constraint::Length(recent_lines)])
         .split(source_inner);
     draw_recent_images(frame, app, &recents, source_rows[1]);
-    let source_columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(14)])
-        .spacing(1)
-        .split(source_rows[0]);
+    // The button column grows to fit the longest caption in this language.
+    let button_columns = [
+        Message::ActionBrowse,
+        Message::ActionChange,
+        Message::ActionInspecting,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)) + 5)
+    .max()
+    .unwrap_or(14)
+    .clamp(14, usize::from(source_rows[0].width / 2).max(14)) as u16;
+    let source_columns =
+        Layout::horizontal([Constraint::Min(16), Constraint::Length(button_columns)])
+            .spacing(1)
+            .split(source_rows[0]);
     frame.render_widget(
         Paragraph::new(source)
             .style(Style::default().fg(Color::White))
@@ -4171,17 +4301,20 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let button_area = centered_button_area(source_columns[1]);
     if app.image_loading {
-        render_disabled_button(frame, button_area, "…  Inspecting");
+        render_disabled_button(frame, button_area, t.text(Message::ActionInspecting));
         app.hit_regions.open_image = None;
     } else {
         render_button(
             frame,
             button_area,
-            if app.image.is_some() {
-                "▣  Change"
-            } else {
-                "▣  Browse"
-            },
+            &format!(
+                "▣  {}",
+                t.text(if app.image.is_some() {
+                    Message::ActionChange
+                } else {
+                    Message::ActionBrowse
+                })
+            ),
             true,
         );
         app.hit_regions.open_image = Some(button_area);
@@ -4200,14 +4333,18 @@ fn draw_recent_images(
     }
     if recents.is_empty() {
         frame.render_widget(
-            Paragraph::new("Images you use appear here for one-click reuse")
+            Paragraph::new(app.t().text(Message::SourceRecentEmpty))
                 .style(Style::default().fg(MUTED)),
             Rect::new(area.x, area.y, area.width, 1),
         );
         return;
     }
     frame.render_widget(
-        Paragraph::new("RECENT IMAGES · press 1-4").style(Style::default().fg(MUTED)),
+        Paragraph::new(format!(
+            "{} · 1-4",
+            app.t().heading(Message::SourceRecentTitle)
+        ))
+        .style(Style::default().fg(MUTED)),
         Rect::new(area.x, area.y, area.width, 1),
     );
     for (index, recent) in recents
@@ -4221,7 +4358,7 @@ fn draw_recent_images(
             .as_ref()
             .is_some_and(|image| image.path == recent.path);
         let size = if current {
-            "In use".to_string()
+            app.t().text(Message::SourceRecentInUse).to_string()
         } else {
             format_bytes(recent.size)
         };
@@ -4363,6 +4500,36 @@ fn display_width(value: &str) -> usize {
     UnicodeWidthStr::width(value)
 }
 
+/// The first of `variants` (longest first) that fits in `columns` terminal
+/// columns, else the last one.
+fn fit_variant(columns: usize, variants: &[String]) -> String {
+    variants
+        .iter()
+        .find(|variant| display_width(variant) <= columns)
+        .or(variants.last())
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// A button caption: `glyph` (drawn by the adapter, never part of the
+/// translated text) plus the long wording, or the compact wording when the
+/// layout is narrow or the long form would not fit inside `area`.
+fn glyph_label(area: Rect, narrow: bool, glyph: &str, long: &str, compact: &str) -> String {
+    let compact = format!("{glyph} {compact}");
+    if narrow {
+        return compact;
+    }
+    fit_variant(
+        usize::from(area.width.saturating_sub(2)),
+        &[format!("{glyph} {long}"), compact],
+    )
+}
+
+/// Rows `text` needs when wrapped to `width` terminal columns.
+fn wrapped_height(text: &str, width: usize) -> usize {
+    wrap_styled(&[(text, Style::default())], width).len()
+}
+
 /// Pads `value` with spaces to `width` terminal columns (never truncates).
 fn pad_display(value: &str, width: usize) -> String {
     let padding = width.saturating_sub(display_width(value));
@@ -4382,6 +4549,14 @@ fn take_columns(value: impl Iterator<Item = char>, columns: usize) -> String {
         taken.push(character);
     }
     taken
+}
+
+/// `value` cut to `limit` terminal columns with a trailing ellipsis.
+fn truncate_end(value: &str, limit: usize) -> String {
+    if display_width(value) <= limit {
+        return value.into();
+    }
+    format!("{}…", take_columns(value.chars(), limit.saturating_sub(1)))
 }
 
 fn truncate_middle(value: &str, limit: usize) -> String {
@@ -4525,15 +4700,17 @@ fn draw_language_hint(
     width + 1
 }
 
-/// Heading of a numbered workspace panel. The English-only qualifier is
-/// dropped in other languages rather than leaving a mixed-language title.
-fn panel_heading(locale: Locale, step: usize, english_qualifier: &str) -> String {
-    let title = WorkspaceProgress::step_titles(locale)[step - 1];
-    if locale.is_source() {
-        format!(" {step}  {title}{english_qualifier} ")
-    } else {
-        format!(" {step}  {title} ")
-    }
+/// Heading of a numbered workspace panel: the step title, then the panel's
+/// own call to action (`source.title` / `target.title`) when it has one.
+fn panel_heading(t: Strings, step: usize, qualifier: Message) -> String {
+    let title = WorkspaceProgress::step_titles(t.locale())[step - 1];
+    format!(" {step}  {title} · {} ", t.text(qualifier))
+}
+
+/// Heading of the review panel, which has no qualifier.
+fn plain_panel_heading(t: Strings, step: usize) -> String {
+    let title = WorkspaceProgress::step_titles(t.locale())[step - 1];
+    format!(" {step}  {title} ")
 }
 
 fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
@@ -5508,43 +5685,58 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let locale = app.locale;
+    let t = app.t();
+    // Columns available to a device row: the panel interior minus the
+    // highlight symbol.
+    let row_room = usize::from(area.width.saturating_sub(2)).saturating_sub(2);
     let items = if app.devices.is_empty() {
-        vec![
-            ListItem::new("Connect a removable USB or SD drive, then refresh")
-                .style(Style::default().fg(MUTED)),
-        ]
+        vec![ListItem::new(t.text(Message::TargetEmpty)).style(Style::default().fg(MUTED))]
     } else {
         app.devices
             .iter()
             .enumerate()
             .map(|(index, device)| {
                 let action = if !device.is_eligible_target() {
-                    "Blocked"
+                    t.text(Message::ActionBlocked).to_string()
                 } else if app.selected == Some(index) {
-                    "Selected"
+                    t.text(Message::ActionSelected).to_string()
                 } else {
-                    "Select →"
+                    format!("{} →", t.text(Message::ActionSelect))
                 };
+                // Path and capacity stay whole, the action stays visible; the
+                // name and eligibility text gives way when the row is tight.
+                let path = format!("{:<12}", device.path.display());
+                let capacity = format!(" {:>9}  ", format_bytes(device.capacity));
+                let action = format!("  ·  {action}");
+                let middle_room = row_room
+                    .saturating_sub(display_width(&path))
+                    .saturating_sub(display_width(&capacity))
+                    .saturating_sub(display_width(&action));
+                let middle = format!(
+                    "{}  ·  {}",
+                    device.display_name(),
+                    target_eligibility_label_in(app.locale, device)
+                );
                 ListItem::new(Line::from(vec![
                     Span::styled(
-                        format!("{:<12}", device.path.display()),
+                        path,
                         Style::default().fg(if device.is_eligible_target() {
                             ACCENT
                         } else {
                             Color::LightRed
                         }),
                     ),
-                    Span::raw(format!(
-                        " {:>9}  {}  ·  {}  ·  {action}",
-                        format_bytes(device.capacity),
-                        device.display_name(),
-                        target_eligibility_label_in(app.locale, device)
+                    Span::raw(capacity),
+                    Span::raw(pad_display(
+                        &truncate_end(&middle, middle_room),
+                        middle_room,
                     )),
+                    Span::raw(action),
                 ]))
             })
             .collect::<Vec<_>>()
     };
-    let target_title = panel_heading(app.locale, 2, " · removable media");
+    let target_title = panel_heading(app.t(), 2, Message::TargetTitle);
     let target_block =
         focused_panel_block(&target_title, app.workspace_focus == WorkspaceFocus::Target);
     let target_inner = target_block.inner(area);
@@ -5570,11 +5762,13 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                 join(&[Message::DetailMounted.text(locale)]),
             ]
         });
+    let reminder = t.text(Message::TargetConfirmPhysical);
+    let reminder_height = wrapped_height(reminder, usize::from(target_inner.width)).min(2) as u16;
     let target_rows = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
         Constraint::Length(if detail_rows.is_some() { 2 } else { 0 }),
-        Constraint::Length(1),
+        Constraint::Length(reminder_height),
     ])
     .split(target_inner);
     if let Some(details) = detail_rows {
@@ -5605,8 +5799,9 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         &mut state,
     );
     frame.render_widget(
-        Paragraph::new("Confirm the physical drive · erasure starts only after review")
-            .style(Style::default().fg(MUTED)),
+        Paragraph::new(reminder)
+            .style(Style::default().fg(MUTED))
+            .wrap(Wrap { trim: true }),
         target_rows[3],
     );
     app.hit_regions.device_rows = (0..app.devices.len())
@@ -5621,7 +5816,8 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let review_title = panel_heading(app.locale, 3, "");
+    let t = app.t();
+    let review_title = plain_panel_heading(app.t(), 3);
     let status_block =
         focused_panel_block(&review_title, app.workspace_focus == WorkspaceFocus::Review);
     let status_inner = status_block.inner(area);
@@ -5684,20 +5880,20 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         render_button(
             frame,
             actions[0],
-            if state == OperationState::Paused {
-                "▶  Resume"
+            &if state == OperationState::Paused {
+                format!("▶  {}", t.text(Message::ActionResume))
             } else {
-                "Ⅱ  Pause"
+                format!("Ⅱ  {}", t.text(Message::ActionPause))
             },
             state != OperationState::Cancelled,
         );
         render_button(
             frame,
             actions[1],
-            if state == OperationState::Cancelled {
-                "Cancelling…"
+            &if state == OperationState::Cancelled {
+                t.text(Message::ActionCancelling).to_string()
             } else {
-                "×  Cancel download"
+                format!("×  {}", t.text(Message::DownloadsActionCancel))
             },
             false,
         );
@@ -5713,8 +5909,8 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(status_rows[2]);
     let readiness = app.review_readiness();
     let review_label = if readiness == ReviewReadiness::Ready {
-        if compact && app.locale.is_source() {
-            "✓ Review".to_string()
+        if compact {
+            format!("✓ {}", t.text(Message::ActionReview))
         } else {
             format!("✓  {}", readiness.action_label_in(app.locale))
         }
@@ -5730,7 +5926,11 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[1],
-        if compact { "× Quit" } else { "×  Quit" },
+        &format!(
+            "×{}{}",
+            if compact { " " } else { "  " },
+            t.text(Message::ActionQuit)
+        ),
         false,
     );
     app.hit_regions.preview = (readiness == ReviewReadiness::Ready).then_some(actions[0]);
@@ -6077,7 +6277,13 @@ mod layout_tests {
 
     #[test]
     fn terminal_brand_matches_the_download_to_drive_logo() {
-        let lines = brand_lockup(true, "Create boot media", "Deliberate writing");
+        let lines = brand_lockup(
+            true,
+            "Create boot media",
+            "Deliberate writing",
+            "Tagline",
+            200,
+        );
         assert_eq!(lines.len(), 2);
         assert!(
             lines[0]
@@ -6396,8 +6602,8 @@ mod workspace_render_tests {
         let mut app = app_with_drive();
         let screen = render(&mut app, 130, 40);
         for heading in [
-            " 1  Source \u{b7} choose an image ",
-            " 2  Target \u{b7} removable media ",
+            " 1  Source \u{b7} Choose an image ",
+            " 2  Target \u{b7} Choose a drive ",
             " 3  Review & write ",
             "Language: System default (English)",
         ] {
