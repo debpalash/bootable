@@ -11,6 +11,17 @@ All notable changes to Bootable are documented here.
   volumes that will be unmounted before writing.
 - Added a shared Guide (`?` button, F1 or `?`) listing every action and its key in each interface,
   plus desktop shortcuts: Ctrl/Cmd+O image, G discover, R refresh drives, P review plan, Esc close.
+- Added OpenPGP and minisign verification of publisher checksum manifests against pinned keys
+  (Ubuntu, Debian, Linux Mint, Kali, Fedora, AlmaLinux). A bad signature refuses the download; a
+  missing signature or unknown key falls back to checksum-only and says so. See `docs/signatures.md`.
+- Added headless CLI `bootable flash <slug-or-image> <target>` (still requires the exact
+  `--confirm` phrase), `bootable completions <shell>`, and stable exit codes. See `docs/cli.md`.
+  `write` without `--confirm` now exits 3 instead of 1.
+- Added package-manager manifest templates (winget, Scoop, Homebrew, AUR, Nix, Flatpak) and a
+  renderer script; nothing is published automatically. See `docs/package-managers.md`.
+- Made the release workflow signing-ready for macOS notarization, Windows Authenticode, and
+  cosign-signed checksums. Builds stay unsigned until secrets are configured (`docs/signing.md`).
+- Added comparison and roadmap pages to the website.
 
 ## 0.1.1 — 2026-08-27
 
