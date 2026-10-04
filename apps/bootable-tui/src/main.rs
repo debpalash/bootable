@@ -183,6 +183,11 @@ enum Commands {
 struct WindowsArgs {
     #[arg(long, default_value = "gpt", value_name = "gpt|mbr")]
     windows_partition_scheme: bootable_core::WindowsPartitionScheme,
+    /// Experimental: also boot Windows installer media on legacy BIOS (CSM)
+    /// machines. Needs --windows-partition-scheme mbr; core refuses
+    /// unsupported combinations.
+    #[arg(long, default_value = "uefi", value_name = "uefi|bios-uefi")]
+    windows_boot_firmware: bootable_core::WindowsBootFirmware,
     #[arg(long)]
     bypass_windows_11_requirements: bool,
     #[arg(long)]
@@ -872,6 +877,7 @@ fn flash_image(backend: &impl WriteBackend, request: FlashRequest) -> Result<()>
 fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteOptions {
     WriteOptions {
         windows_partition_scheme: windows.windows_partition_scheme,
+        windows_boot_firmware: windows.windows_boot_firmware,
         windows: bootable_core::WindowsExperienceOptions {
             bypass_hardware_requirements: windows.bypass_windows_11_requirements,
             allow_offline_account: windows.allow_windows_offline_account,
@@ -887,7 +893,6 @@ fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteO
             force_s_mode: windows.force_windows_s_mode,
         },
         bad_block_check,
-        windows_boot_firmware: Default::default(),
     }
 }
 
@@ -1122,6 +1127,7 @@ struct HitRegions {
     windows_skusi_policy: Option<Rect>,
     windows_s_mode: Option<Rect>,
     windows_partition_scheme: Option<Rect>,
+    windows_boot_firmware: Option<Rect>,
     advanced: Option<Rect>,
     checksum_algorithm: Option<Rect>,
     bad_blocks: Option<Rect>,
@@ -1842,6 +1848,7 @@ impl App {
         match self.download_session.use_completed(&self.engine, &id) {
             Ok(report) => {
                 self.remember_image(&report);
+                self.reset_image_scoped_options();
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
@@ -1970,6 +1977,7 @@ impl App {
                                     report.path.display()
                                 );
                             }
+                            self.reset_image_scoped_options();
                             self.image = Some(report.clone());
                             self.advanced = false;
                         }
@@ -2024,6 +2032,7 @@ impl App {
                 KeyCode::Char('k') => self.toggle_windows_skusi_policy(),
                 KeyCode::Char('s') => self.toggle_windows_s_mode(),
                 KeyCode::Char('p') => self.cycle_windows_partition_scheme(),
+                KeyCode::Char('f') => self.cycle_windows_boot_firmware(),
                 KeyCode::Char('1') => self.show_quick_access(QuickAccess::All),
                 KeyCode::Char('2') => self.show_quick_access(QuickAccess::Arch),
                 KeyCode::Char('3') => self.show_quick_access(QuickAccess::Debian),
@@ -2358,6 +2367,7 @@ impl App {
                 self.image_loading = false;
                 self.status = format!("Recognized {}", image.kind);
                 self.remember_image(&image);
+                self.reset_image_scoped_options();
                 self.image = Some(image);
                 self.advanced = false;
             }
@@ -2365,6 +2375,7 @@ impl App {
                 self.image_loading = false;
                 self.preferences.forget_image(&path);
                 self.save_preferences();
+                self.reset_image_scoped_options();
                 self.image = None;
                 self.advanced = false;
                 self.status = error;
@@ -2718,18 +2729,28 @@ impl App {
         if !self.windows_options_available() {
             return;
         }
-        self.options.windows_partition_scheme = match self.options.windows_partition_scheme {
-            bootable_core::WindowsPartitionScheme::Gpt => {
-                bootable_core::WindowsPartitionScheme::Mbr
-            }
-            bootable_core::WindowsPartitionScheme::Mbr => {
-                bootable_core::WindowsPartitionScheme::Gpt
-            }
-        };
+        cycle_partition_scheme(&mut self.options);
         self.status = format!(
-            "Windows partition scheme: {} · target firmware: UEFI",
-            self.options.windows_partition_scheme
+            "Windows partition scheme: {} · boot firmware: {}",
+            self.options.windows_partition_scheme, self.options.windows_boot_firmware
         );
+    }
+
+    fn cycle_windows_boot_firmware(&mut self) {
+        if !self.windows_options_available() {
+            return;
+        }
+        cycle_boot_firmware(&mut self.options);
+        self.status = format!(
+            "Boot firmware: {} (experimental) · partition scheme: {}",
+            self.options.windows_boot_firmware, self.options.windows_partition_scheme
+        );
+    }
+
+    /// Destructive or advanced choices tied to one image are never carried to
+    /// the next image or persisted in preferences.
+    fn reset_image_scoped_options(&mut self) {
+        self.options.windows_boot_firmware = bootable_core::WindowsBootFirmware::default();
     }
 
     fn windows_options_available(&mut self) -> bool {
@@ -2864,6 +2885,8 @@ impl App {
             self.toggle_windows_s_mode();
         } else if contains(self.hit_regions.windows_partition_scheme, point) {
             self.cycle_windows_partition_scheme();
+        } else if contains(self.hit_regions.windows_boot_firmware, point) {
+            self.cycle_windows_boot_firmware();
         } else if contains(self.hit_regions.bad_blocks, point) {
             self.cycle_bad_blocks();
         } else if contains(self.hit_regions.checksum_algorithm, point) {
@@ -4706,7 +4729,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         )
     });
     let columns = windows_option_columns(area.width);
-    let option_rows = 11_usize.div_ceil(columns);
+    let option_rows = 12_usize.div_ceil(columns);
     let option_height = (option_rows * 3 + option_rows.saturating_sub(1)) as u16;
     let header_height = if area.height >= option_height.saturating_add(13) {
         7
@@ -4777,7 +4800,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
             .block(panel_block(" Windows media features ")),
         rows[0],
     );
-    let options = grid_areas(rows[1], columns, 11);
+    let options = grid_areas(rows[1], columns, 12);
     render_checkbox(
         frame,
         options[0],
@@ -4845,6 +4868,14 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         true,
     );
     if windows_image {
+        render_button(
+            frame,
+            options[11],
+            &boot_firmware_label(app.options.windows_boot_firmware, options[11].width),
+            true,
+        );
+    }
+    if windows_image {
         app.hit_regions.windows_options = Some(options[0]);
         app.hit_regions.windows_offline = Some(options[1]);
         app.hit_regions.windows_privacy = Some(options[2]);
@@ -4856,6 +4887,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         app.hit_regions.windows_skusi_policy = Some(options[8]);
         app.hit_regions.windows_s_mode = Some(options[9]);
         app.hit_regions.windows_partition_scheme = Some(options[10]);
+        app.hit_regions.windows_boot_firmware = Some(options[11]);
     } else {
         app.hit_regions.windows_options = None;
         app.hit_regions.windows_offline = None;
@@ -4868,28 +4900,36 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         app.hit_regions.windows_skusi_policy = None;
         app.hit_regions.windows_s_mode = None;
         app.hit_regions.windows_partition_scheme = None;
+        app.hit_regions.windows_boot_firmware = None;
     }
+    let mut coverage = vec![
+        Line::styled(
+            "✓ Standard install · GPT/UEFI/FAT32 · split WIM · requirements · account · region · privacy · BitLocker",
+            Style::default().fg(ACCENT),
+        ),
+        Line::styled(
+            "✓ QoL · CA 2023 · SkuSiPolicy · S Mode · checksums · bad blocks · verified write · safety gates",
+            Style::default().fg(ACCENT),
+        ),
+    ];
+    if windows_image {
+        coverage.push(Line::styled(
+            "Boot firmware (f): UEFI or BIOS + UEFI (CSM) · BIOS option is experimental and needs MBR",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    coverage.push(Line::styled(
+        "○ Windows To Go/internal-disk isolation · NTFS/UEFI:NTFS · silent install",
+        Style::default().fg(Color::Yellow),
+    ));
+    coverage.push(Line::styled(
+        "Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.",
+        Style::default().fg(MUTED),
+    ));
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled(
-                "✓ Standard install · GPT/UEFI/FAT32 · split WIM · requirements · account · region · privacy · BitLocker",
-                Style::default().fg(ACCENT),
-            ),
-            Line::styled(
-                "✓ QoL · CA 2023 · SkuSiPolicy · S Mode · checksums · bad blocks · verified write · safety gates",
-                Style::default().fg(ACCENT),
-            ),
-            Line::styled(
-                "○ Windows To Go/internal-disk isolation · legacy BIOS + NTFS/UEFI:NTFS · silent install",
-                Style::default().fg(Color::Yellow),
-            ),
-            Line::styled(
-                "Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.",
-                Style::default().fg(MUTED),
-            ),
-        ])
-        .wrap(Wrap { trim: true })
-        .block(panel_block(" Complete Rufus 4.15 Windows coverage ")),
+        Paragraph::new(coverage)
+            .wrap(Wrap { trim: true })
+            .block(panel_block(" Complete Rufus 4.15 Windows coverage ")),
         rows[2],
     );
 }
@@ -5357,6 +5397,7 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     app.hit_regions.windows_skusi_policy = None;
     app.hit_regions.windows_s_mode = None;
     app.hit_regions.windows_partition_scheme = None;
+    app.hit_regions.windows_boot_firmware = None;
     let block = focused_panel_block(
         " Setup options ",
         app.workspace_focus == WorkspaceFocus::Setup,
@@ -5829,6 +5870,49 @@ fn centered_button_area(area: Rect) -> Rect {
     }
     let y = area.y + area.height.saturating_sub(3) / 2;
     Rect::new(area.x, y, area.width, 3)
+}
+
+/// Cycle the Windows partition scheme. Choosing GPT forces the firmware back
+/// to UEFI because GPT media cannot boot under legacy BIOS; core stays the
+/// final validator.
+fn cycle_partition_scheme(options: &mut WriteOptions) {
+    options.windows_partition_scheme = match options.windows_partition_scheme {
+        bootable_core::WindowsPartitionScheme::Gpt => bootable_core::WindowsPartitionScheme::Mbr,
+        bootable_core::WindowsPartitionScheme::Mbr => bootable_core::WindowsPartitionScheme::Gpt,
+    };
+    if options.windows_partition_scheme == bootable_core::WindowsPartitionScheme::Gpt {
+        options.windows_boot_firmware = bootable_core::WindowsBootFirmware::Uefi;
+    }
+}
+
+/// Cycle the experimental boot firmware in `WindowsBootFirmware::ALL` order.
+/// Choosing BIOS + UEFI forces the MBR scheme it requires.
+fn cycle_boot_firmware(options: &mut WriteOptions) {
+    let all = bootable_core::WindowsBootFirmware::ALL;
+    let index = all
+        .iter()
+        .position(|firmware| *firmware == options.windows_boot_firmware)
+        .unwrap_or(0);
+    options.windows_boot_firmware = all[(index + 1) % all.len()];
+    if options.windows_boot_firmware.includes_legacy_bios() {
+        options.windows_partition_scheme = bootable_core::WindowsPartitionScheme::Mbr;
+    }
+}
+
+/// Widest label that fits the cell, so the experimental marker survives
+/// wherever the layout leaves room for it.
+fn boot_firmware_label(firmware: bootable_core::WindowsBootFirmware, width: u16) -> String {
+    let room = usize::from(width.saturating_sub(2));
+    let candidates = [
+        format!("Boot firmware: {firmware} · experimental"),
+        format!("Boot firmware: {firmware}"),
+        format!("Firmware: {firmware}"),
+    ];
+    candidates
+        .iter()
+        .find(|label| display_width(label) <= room)
+        .unwrap_or(&candidates[2])
+        .clone()
 }
 
 fn windows_option_columns(width: u16) -> usize {
@@ -6320,6 +6404,159 @@ mod workspace_render_tests {
             assert!(screen.contains(heading), "{heading}\n{screen}");
         }
     }
+
+    fn image_report(kind: bootable_core::ImageKind) -> bootable_core::ImageReport {
+        bootable_core::ImageReport {
+            path: PathBuf::from("/tmp/image.iso"),
+            size: 4 * 1024 * 1024 * 1024,
+            kind,
+            volume_label: None,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn windows_catalog_app(kind: bootable_core::ImageKind) -> App {
+        let mut app = app_with_drive();
+        app.catalog_open = true;
+        app.show_quick_access(QuickAccess::Windows);
+        app.image = Some(image_report(kind));
+        app
+    }
+
+    fn windows_kind() -> bootable_core::ImageKind {
+        bootable_core::ImageKind::WindowsInstaller {
+            payload: bootable_core::WindowsPayload::Wim,
+            payload_size: None,
+        }
+    }
+
+    #[test]
+    fn boot_firmware_control_is_shown_only_for_a_windows_image() {
+        let mut app = windows_catalog_app(windows_kind());
+        let screen = render(&mut app, 130, 70);
+        assert!(screen.contains("Boot firmware: UEFI"), "{screen}");
+        assert!(screen.contains("Scheme: GPT"), "{screen}");
+        assert!(screen.contains("experimental"), "{screen}");
+        assert!(app.hit_regions.windows_boot_firmware.is_some());
+
+        let mut app = windows_catalog_app(bootable_core::ImageKind::HybridIso);
+        let screen = render(&mut app, 130, 70);
+        assert!(!screen.contains("Boot firmware"), "{screen}");
+        assert!(!screen.contains("experimental"), "{screen}");
+        assert!(app.hit_regions.windows_boot_firmware.is_none());
+    }
+
+    #[test]
+    fn boot_firmware_key_and_click_cycle_with_coupling() {
+        let mut app = windows_catalog_app(windows_kind());
+        render(&mut app, 130, 70);
+        app.handle_catalog_key(KeyCode::Char('f'));
+        assert_eq!(
+            app.options.windows_boot_firmware,
+            bootable_core::WindowsBootFirmware::BiosAndUefi
+        );
+        assert_eq!(
+            app.options.windows_partition_scheme,
+            bootable_core::WindowsPartitionScheme::Mbr
+        );
+        let screen = render(&mut app, 130, 70);
+        assert!(
+            screen.contains("Boot firmware: BIOS + UEFI (CSM)"),
+            "{screen}"
+        );
+        assert!(screen.contains("Scheme: MBR"), "{screen}");
+
+        let region = app.hit_regions.windows_boot_firmware.expect("region");
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: region.x + 1,
+            row: region.y + 1,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            app.options.windows_boot_firmware,
+            bootable_core::WindowsBootFirmware::Uefi
+        );
+    }
+
+    #[test]
+    fn boot_firmware_is_ignored_without_a_windows_image_and_reset_on_new_image() {
+        let mut app = windows_catalog_app(bootable_core::ImageKind::HybridIso);
+        app.handle_catalog_key(KeyCode::Char('f'));
+        assert_eq!(
+            app.options.windows_boot_firmware,
+            bootable_core::WindowsBootFirmware::Uefi
+        );
+
+        let mut app = windows_catalog_app(windows_kind());
+        app.handle_catalog_key(KeyCode::Char('f'));
+        assert!(app.options.windows_boot_firmware.includes_legacy_bios());
+        app.reset_image_scoped_options();
+        assert_eq!(
+            app.options.windows_boot_firmware,
+            bootable_core::WindowsBootFirmware::Uefi
+        );
+    }
+
+    #[test]
+    fn boot_firmware_never_reaches_preferences() {
+        let mut app = windows_catalog_app(windows_kind());
+        app.handle_catalog_key(KeyCode::Char('f'));
+        let saved = serde_json::to_string(&app.preferences).expect("preferences");
+        assert!(!saved.to_lowercase().contains("firmware"), "{saved}");
+    }
+
+    #[test]
+    fn core_refusal_for_bios_on_gpt_keeps_the_review_locked() {
+        let mut app = windows_catalog_app(windows_kind());
+        // Bypass the TUI coupling to prove core stays the final validator.
+        app.options.windows_boot_firmware = bootable_core::WindowsBootFirmware::BiosAndUefi;
+        app.options.windows_partition_scheme = bootable_core::WindowsPartitionScheme::Gpt;
+        app.preview();
+        assert!(
+            app.status.contains("requires the MBR partition scheme"),
+            "{}",
+            app.status
+        );
+        assert!(!app.write_session.is_reviewing());
+    }
+
+    #[test]
+    fn coupling_forces_mbr_for_bios_and_uefi_for_gpt() {
+        use bootable_core::{WindowsBootFirmware as Firmware, WindowsPartitionScheme as Scheme};
+        let mut options = WriteOptions::default();
+        assert_eq!(options.windows_boot_firmware, Firmware::Uefi);
+        assert_eq!(options.windows_partition_scheme, Scheme::Gpt);
+
+        cycle_boot_firmware(&mut options);
+        assert_eq!(options.windows_boot_firmware, Firmware::BiosAndUefi);
+        assert_eq!(options.windows_partition_scheme, Scheme::Mbr);
+
+        // Switching to GPT drops legacy BIOS again.
+        cycle_partition_scheme(&mut options);
+        assert_eq!(options.windows_partition_scheme, Scheme::Gpt);
+        assert_eq!(options.windows_boot_firmware, Firmware::Uefi);
+
+        // MBR alone keeps UEFI; cycling firmware back to UEFI keeps MBR.
+        cycle_partition_scheme(&mut options);
+        assert_eq!(options.windows_partition_scheme, Scheme::Mbr);
+        assert_eq!(options.windows_boot_firmware, Firmware::Uefi);
+        cycle_boot_firmware(&mut options);
+        cycle_boot_firmware(&mut options);
+        assert_eq!(options.windows_boot_firmware, Firmware::Uefi);
+        assert_eq!(options.windows_partition_scheme, Scheme::Mbr);
+    }
+
+    #[test]
+    fn boot_firmware_label_degrades_to_fit_narrow_cells() {
+        let uefi = bootable_core::WindowsBootFirmware::Uefi;
+        assert_eq!(
+            boot_firmware_label(uefi, 60),
+            "Boot firmware: UEFI · experimental"
+        );
+        assert_eq!(boot_firmware_label(uefi, 24), "Boot firmware: UEFI");
+        assert_eq!(boot_firmware_label(uefi, 10), "Firmware: UEFI");
+    }
 }
 
 #[cfg(test)]
@@ -6680,5 +6917,74 @@ mod cli_tests {
         .expect_err("refused");
         assert_eq!(exit_status(&error), ExitStatus::Confirmation);
         assert!(backend.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn windows_boot_firmware_flag_defaults_to_uefi_and_parses_on_every_write_command() {
+        use bootable_core::WindowsBootFirmware as Firmware;
+        fn firmware(cli: Cli) -> Firmware {
+            match cli.command {
+                Some(
+                    Commands::Plan { windows, .. }
+                    | Commands::Write { windows, .. }
+                    | Commands::Flash { windows, .. },
+                ) => windows.windows_boot_firmware,
+                other => panic!("unexpected command {other:?}"),
+            }
+        }
+        assert_eq!(
+            firmware(parse(&["bootable", "plan", "w.iso", "/dev/x"])),
+            Firmware::Uefi
+        );
+        for command in ["plan", "write"] {
+            let cli = parse(&[
+                "bootable",
+                command,
+                "w.iso",
+                "/dev/x",
+                "--windows-partition-scheme",
+                "mbr",
+                "--windows-boot-firmware",
+                "bios-uefi",
+            ]);
+            assert_eq!(firmware(cli), Firmware::BiosAndUefi, "{command}");
+        }
+        let cli = parse(&[
+            "bootable",
+            "flash",
+            "w.iso",
+            "/dev/x",
+            "--windows-boot-firmware",
+            "uefi",
+        ]);
+        assert_eq!(firmware(cli), Firmware::Uefi);
+        assert!(
+            Cli::try_parse_from([
+                "bootable",
+                "plan",
+                "w.iso",
+                "/dev/x",
+                "--windows-boot-firmware",
+                "efi"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn windows_boot_firmware_flag_reaches_write_options() {
+        let cli = parse(&[
+            "bootable",
+            "plan",
+            "w.iso",
+            "/dev/x",
+            "--windows-boot-firmware",
+            "bios-uefi",
+        ]);
+        let Some(Commands::Plan { windows, .. }) = cli.command else {
+            panic!("expected plan");
+        };
+        let options = super::write_options(windows, Default::default());
+        assert!(options.windows_boot_firmware.includes_legacy_bios());
     }
 }

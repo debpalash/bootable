@@ -147,11 +147,23 @@ bootable plan ubuntu.iso /dev/sdb --json | jq -r .confirmation_phrase
 bootable plan win11.iso /dev/sdb --windows-partition-scheme gpt --bad-block-check off
 ```
 
-Windows installer options (`--windows-partition-scheme`, `--bypass-windows-11-requirements`,
+Windows installer options (`--windows-partition-scheme`, `--windows-boot-firmware`,
+`--bypass-windows-11-requirements`,
 `--allow-windows-offline-account`, `--windows-local-account`, `--copy-windows-regional-options`,
 `--minimize-windows-data-collection`, `--disable-windows-bitlocker`, `--windows-quality-of-life`,
 `--use-windows-ca-2023`, `--apply-windows-skusi-policy`, `--force-windows-s-mode`) and
 `--bad-block-check off|1|2|4` are shared by `plan`, `write`, and `flash`.
+
+`--windows-boot-firmware <uefi|bios-uefi>` (default `uefi`) is **experimental**. `bios-uefi` also
+makes Windows installer media boot on legacy BIOS (CSM) machines; it is currently written only by
+the Linux adapter and is not yet verified against Microsoft's real `bootmgr` or on real hardware
+(see [legacy-bios.md](legacy-bios.md)). It needs `--windows-partition-scheme mbr` and media of at most 2 TiB;
+`plan`, `write`, and `flash` print core's refusal verbatim and write nothing
+when the combination is not allowed.
+
+```sh
+bootable plan win11.iso /dev/sdb --windows-partition-scheme mbr --windows-boot-firmware bios-uefi
+```
 
 ### write
 
