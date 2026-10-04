@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bootable_core::{
-    BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device,
-    DiscoverySession, DiscoverySource, DistributionBundle, DistributionDetails,
-    DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
-    ImageKind, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message, OperationState,
-    PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
+    Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device, DiscoverySession,
+    DiscoverySource, DistributionBundle, DistributionDetails, DistributionSummary,
+    DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus, ImageKind, ImageReport,
+    IsoRelease, Locale, ManagedDownloadSession, Message, OperationState, PiCatalog, PiImage,
+    Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
+    Strings, WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
     WriteCompletion, WriteOptions, catalog_search_summary, device_details_in,
     distribution_matches_query, format_bytes, help_intro, help_sections, removable_media_status_in,
     review_readiness, target_eligibility_label_in, workspace_progress,
@@ -271,6 +271,10 @@ struct BootableView {
     help_open: bool,
     focus_handle: FocusHandle,
     status: String,
+    /// Set when core's final `Finished`-phase progress message has been shown
+    /// for the running download; the completion handler then keeps it instead
+    /// of writing a generic ready line. Replaces matching the English text.
+    download_final_shown: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -319,8 +323,6 @@ enum WriteUpdate {
     Finished(WriteCompletion),
 }
 
-const BOOT_FIRMWARE_HINT: &str = "Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware.";
-
 /// Applies a firmware choice; BIOS + UEFI forces MBR. Returns whether the
 /// partition scheme changed. Core remains the final validator.
 fn choose_boot_firmware(options: &mut WriteOptions, firmware: WindowsBootFirmware) -> bool {
@@ -348,11 +350,35 @@ fn choose_partition_scheme(options: &mut WriteOptions, scheme: WindowsPartitionS
 }
 
 impl BootableView {
+    /// The catalog bound to the active language. Cheap (`Copy`); take it at the
+    /// top of every render function and thread it into helpers.
+    fn t(&self) -> Strings {
+        self.locale.strings()
+    }
+
+    /// The status line after a Windows option is toggled: its own on/off text.
+    fn toggle_status(&self, checked: bool, on: Message, off: Message) -> String {
+        self.t().text(if checked { on } else { off }).into()
+    }
+
+    /// The setup-options toggle caption (`compact` for the narrow header).
+    fn advanced_label(&self, compact: bool) -> &'static str {
+        let t = self.t();
+        t.text(match (self.advanced, compact) {
+            (true, false) => Message::ActionHideOptions,
+            (false, false) => Message::ActionSetupOptions,
+            (true, true) => Message::ActionHideOptionsCompact,
+            (false, true) => Message::ActionSetupOptionsCompact,
+        })
+    }
+
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let engine = Bootable::native();
+        let preferences = Preferences::load();
+        let locale = preferences.locale();
         let catalog_search = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Search by name, slug, or base family…")
+                .placeholder(locale.strings().text(Message::DiscoverSearchPlaceholder))
                 .clean_on_escape()
         });
         let search_subscription = cx.subscribe(&catalog_search, |view, input, event, cx| {
@@ -395,9 +421,12 @@ impl BootableView {
                     if choose_partition_scheme(&mut view.options, scheme) {
                         view.sync_firmware_select(window, cx);
                     }
-                    view.status = format!(
-                        "Windows partition scheme: {} · target firmware: {}",
-                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
+                    view.status = view.t().format(
+                        Message::StatusWindowsScheme,
+                        &[
+                            ("scheme", &view.options.windows_partition_scheme),
+                            ("firmware", &view.options.windows_boot_firmware),
+                        ],
                     );
                     cx.notify();
                 }
@@ -417,16 +446,17 @@ impl BootableView {
                     if choose_boot_firmware(&mut view.options, firmware) {
                         view.sync_partition_select(window, cx);
                     }
-                    view.status = format!(
-                        "Windows partition scheme: {} · target firmware: {} (experimental)",
-                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
+                    view.status = view.t().format(
+                        Message::StatusWindowsFirmware,
+                        &[
+                            ("scheme", &view.options.windows_partition_scheme),
+                            ("firmware", &view.options.windows_boot_firmware),
+                        ],
                     );
                     cx.notify();
                 }
             },
         );
-        let preferences = Preferences::load();
-        let locale = preferences.locale();
         let language_select = cx.new(|cx| {
             SelectState::new(
                 language_choices(locale),
@@ -443,9 +473,9 @@ impl BootableView {
             });
         let (devices, status) = match engine.discover_devices() {
             Ok(devices) => {
-                let status = format!(
-                    "{} · choose an image to begin",
-                    removable_media_status_in(locale, &devices)
+                let status = locale.strings().format(
+                    Message::StatusStartup,
+                    &[("media", &removable_media_status_in(locale, &devices))],
                 );
                 (devices, status)
             }
@@ -498,6 +528,7 @@ impl BootableView {
             help_open: false,
             focus_handle,
             status,
+            download_final_shown: false,
         };
         Self::schedule_initial_catalog_load(cx);
         view
@@ -520,9 +551,12 @@ impl BootableView {
     fn toggle_catalog(&mut self, cx: &mut Context<Self>) {
         self.catalog_open = !self.catalog_open;
         if !self.catalog_open {
-            self.status = format!(
-                "Catalog closed • {}",
-                self.review_readiness().guidance_in(self.locale)
+            self.status = self.t().format(
+                Message::StatusCatalogClosed,
+                &[(
+                    "guidance",
+                    &self.review_readiness().guidance_in(self.locale),
+                )],
             );
             cx.notify();
             return;
@@ -531,8 +565,7 @@ impl BootableView {
         if self.distributions.is_empty() {
             self.load_catalog(cx);
         } else {
-            self.status =
-                "DistroWatch catalog ready • rankings indicate interest, not quality".into();
+            self.status = self.t().text(Message::StatusCatalogReady).into();
             cx.notify();
         }
     }
@@ -545,7 +578,10 @@ impl BootableView {
         if !self.discovery_session.begin(CatalogFacet::Popular) {
             return;
         }
-        self.status = "Loading DistroWatch six-month popularity…".into();
+        self.status = self
+            .t()
+            .text(Message::StatusCatalogLoadingPopularity)
+            .into();
         cx.notify();
         let task = cx
             .background_executor()
@@ -561,7 +597,7 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let distributions = fetch.value;
                             let count = distributions.len();
                             view.popular_distributions = distributions.clone();
@@ -571,7 +607,11 @@ impl BootableView {
                             if showing_popular {
                                 view.distributions = distributions;
                             }
-                            view.status = format!("{count} distributions · {source}");
+                            view.status = view.t().plural(
+                                Message::StatusCatalogDistributionsLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             if count > 0 && showing_popular {
                                 view.select_distribution(0, cx);
                             }
@@ -582,7 +622,10 @@ impl BootableView {
                             view.status = view
                                 .discovery_session
                                 .state(CatalogFacet::Popular)
-                                .short_label("distributions");
+                                .short_label_in(
+                                    view.locale,
+                                    view.t().text(Message::CatalogSubjectDistributions),
+                                );
                         }
                     }
                     cx.notify();
@@ -602,7 +645,7 @@ impl BootableView {
         self.catalog_visible = 20;
         if query.trim().is_empty() {
             self.distributions = self.popular_distributions.clone();
-            self.status = "Showing DistroWatch six-month popularity".into();
+            self.status = self.t().text(Message::StatusCatalogPopularity).into();
             cx.notify();
             return;
         }
@@ -625,7 +668,10 @@ impl BootableView {
         if !self.discovery_session.begin(CatalogFacet::Directory) {
             return;
         }
-        self.status = "Searching DistroWatch's full distribution directory…".into();
+        self.status = self
+            .t()
+            .text(Message::StatusCatalogSearchingDirectory)
+            .into();
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             Bootable::native().distribution_directory_cached(CacheMode::PreferCache)
@@ -667,7 +713,10 @@ impl BootableView {
                                 view.status = view
                                     .discovery_session
                                     .state(CatalogFacet::Directory)
-                                    .short_label("search catalog");
+                                    .short_label_in(
+                                        view.locale,
+                                        view.t().text(Message::CatalogSubjectSearchCatalog),
+                                    );
                             }
                         }
                     }
@@ -688,11 +737,11 @@ impl BootableView {
         if (self.pi_catalog.is_some() && mode == CacheMode::PreferCache)
             || !self.discovery_session.begin(CatalogFacet::RaspberryPi)
         {
-            self.status = "Raspberry Pi image discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPiSelected).into();
             cx.notify();
             return;
         }
-        self.status = "Loading the official Raspberry Pi Imager catalog…".into();
+        self.status = self.t().text(Message::StatusCatalogPiLoading).into();
         cx.notify();
         let task = cx
             .background_executor()
@@ -708,14 +757,18 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.images.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let catalog = fetch.value;
                             let count = catalog.images.len();
                             view.pi_catalog = Some(catalog);
                             view.selected_pi_device = None;
                             view.selected_pi_image = (count > 0).then_some(0);
                             if view.discovery_session.source() == DiscoverySource::RaspberryPi {
-                                view.status = format!("{count} Raspberry Pi images · {source}");
+                                view.status = view.t().plural(
+                                    Message::StatusCatalogPiImagesLoaded,
+                                    count as u64,
+                                    &[("source", &source)],
+                                );
                             }
                         }
                         Err(error) => {
@@ -725,7 +778,10 @@ impl BootableView {
                                 view.status = view
                                     .discovery_session
                                     .state(CatalogFacet::RaspberryPi)
-                                    .short_label("Raspberry Pi images");
+                                    .short_label_in(
+                                        view.locale,
+                                        view.t().text(Message::CatalogSubjectPiImages),
+                                    );
                             }
                         }
                     }
@@ -754,7 +810,7 @@ impl BootableView {
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
-                self.status = "Showing DistroWatch six-month popularity".into();
+                self.status = self.t().text(Message::StatusCatalogPopularity).into();
             }
             QuickAccess::Arch | QuickAccess::Debian => {
                 let cached = if preset == QuickAccess::Arch {
@@ -767,14 +823,17 @@ impl BootableView {
                     return;
                 }
                 self.distributions = cached.clone();
-                self.status = format!(
-                    "Showing {} active {}-based distributions from DistroWatch",
-                    cached.len(),
-                    if preset == QuickAccess::Arch {
-                        "Arch"
-                    } else {
-                        "Debian"
-                    }
+                self.status = self.locale.strings().plural(
+                    Message::StatusCatalogShowingBase,
+                    cached.len() as u64,
+                    &[(
+                        "base",
+                        &if preset == QuickAccess::Arch {
+                            "Arch"
+                        } else {
+                            "Debian"
+                        },
+                    )],
                 );
             }
             QuickAccess::Omarchy => {
@@ -794,12 +853,11 @@ impl BootableView {
                         logo_url: "https://distrowatch.com/images/icon-large/omarchy.png".into(),
                     });
                 self.distributions = vec![omarchy];
-                self.status = "Omarchy family · ISO releases are writable; installer-only derivatives are clearly marked".into();
+                self.status = self.t().text(Message::StatusCatalogOmarchy).into();
             }
             QuickAccess::Windows => {
                 self.distributions.clear();
-                self.status =
-                    "Windows media tools · choose a Windows ISO to unlock setup options".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsTools).into();
             }
         }
         cx.notify();
@@ -828,7 +886,9 @@ impl BootableView {
         } else {
             "Debian"
         };
-        self.status = format!("Searching DistroWatch for active {base}-based distributions…");
+        self.status = self
+            .t()
+            .format(Message::StatusCatalogLoadingBase, &[("base", &base)]);
         cx.notify();
         let task = cx
             .background_executor()
@@ -841,7 +901,7 @@ impl BootableView {
                         Ok(fetch) => {
                             view.discovery_session
                                 .complete(facet, &fetch, fetch.value.is_empty());
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let distributions = fetch.value;
                             let count = distributions.len();
                             if preset == QuickAccess::Arch {
@@ -851,17 +911,24 @@ impl BootableView {
                             }
                             if view.discovery_session.quick_access() == preset {
                                 view.distributions = distributions;
-                                view.status =
-                                    format!("{count} active {base}-based distributions · {source}");
+                                view.status = view.t().plural(
+                                    Message::StatusCatalogBaseLoaded,
+                                    count as u64,
+                                    &[("base", &base), ("source", &source)],
+                                );
                             }
                         }
                         Err(error) => {
                             view.discovery_session.fail(facet, error.to_string());
                             if view.discovery_session.quick_access() == preset {
+                                let subject = view.t().format(
+                                    Message::CatalogSubjectBaseDistributions,
+                                    &[("base", &base)],
+                                );
                                 view.status = view
                                     .discovery_session
                                     .state(facet)
-                                    .short_label(&format!("{base}-based distributions"));
+                                    .short_label_in(view.locale, &subject);
                             }
                         }
                     }
@@ -876,9 +943,13 @@ impl BootableView {
     fn select_pi_device(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
         self.selected_pi_device = index;
         self.selected_pi_image = self.visible_pi_images().first().map(|(index, _)| *index);
+        let t = self.t();
         self.status = match index.and_then(|index| self.pi_catalog.as_ref()?.devices.get(index)) {
-            Some(device) => format!("Showing images compatible with {}", device.name),
-            None => "Showing every Raspberry Pi image".into(),
+            Some(device) => t.format(
+                Message::StatusCatalogPiCompatible,
+                &[("board", &device.name)],
+            ),
+            None => t.text(Message::StatusCatalogPiAll).into(),
         };
         cx.notify();
     }
@@ -945,21 +1016,25 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     match update {
                         DownloadUpdate::Progress(progress) => {
+                            // Core text (stage names, integrity result): English for now.
+                            view.download_final_shown = progress.phase == ProgressPhase::Finished;
                             view.status = progress.message.clone();
                             view.download_session.apply_progress(progress);
                         }
                         DownloadUpdate::Finished(completion) => {
                             match &completion {
-                                DownloadCompletion::Ready { report, destination } => {
-                                    view.browse_directory = destination
-                                        .parent()
-                                        .map(std::path::PathBuf::from);
+                                DownloadCompletion::Ready {
+                                    report,
+                                    destination,
+                                } => {
+                                    view.browse_directory =
+                                        destination.parent().map(std::path::PathBuf::from);
                                     // Core's final progress message already names the integrity result
                                     // (for example a verified signature); keep it instead of a generic line.
-                                    if !view.status.starts_with("Ready ·") {
-                                        view.status = format!(
-                                            "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                            report.path.display()
+                                    if !view.download_final_shown {
+                                        view.status = view.t().format(
+                                            Message::StatusDownloadReady,
+                                            &[("name", &report.path.display())],
                                         );
                                     }
                                     view.image = Some(report.clone());
@@ -967,13 +1042,19 @@ impl BootableView {
                                     view.reset_boot_firmware();
                                 }
                                 DownloadCompletion::Cancelled => {
-                                    view.status =
-                                        "Download cancelled • temporary data cleaned up".into();
+                                    view.status = view
+                                        .t()
+                                        .text(Message::StatusDownloadCancelledCleaned)
+                                        .into();
                                 }
                                 DownloadCompletion::Failed(error) => {
-                                    view.status = format!("Download stopped · {error}");
+                                    view.status = view.t().format(
+                                        Message::StatusDownloadStopped,
+                                        &[("error", error)],
+                                    );
                                 }
                             }
+                            view.download_final_shown = false;
                             view.download_session.finish(completion);
                             view.refresh_download_jobs(cx);
                             view.start_next_queued_download(cx);
@@ -990,7 +1071,12 @@ impl BootableView {
     fn refresh_download_jobs(&mut self, cx: &mut Context<Self>) {
         match self.download_session.refresh(&self.engine) {
             Ok(_) => {}
-            Err(error) => self.status = format!("Download history unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadHistoryUnavailable,
+                    &[("error", &error)],
+                )
+            }
         }
         cx.notify();
     }
@@ -999,9 +1085,10 @@ impl BootableView {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs(cx);
-            self.status = format!(
-                "{} download job(s) in history",
-                self.download_session.jobs().len()
+            self.status = self.t().plural(
+                Message::DownloadsJobsInHistory,
+                self.download_session.jobs().len() as u64,
+                &[],
             );
         }
         cx.notify();
@@ -1016,7 +1103,7 @@ impl BootableView {
     ) {
         let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
         else {
-            self.status = "Download queued · it will start when the active job finishes".into();
+            self.status = self.t().text(Message::StatusDownloadQueued).into();
             self.refresh_download_jobs(cx);
             return;
         };
@@ -1024,11 +1111,15 @@ impl BootableView {
     }
 
     fn launch_download_worker(&mut self, launch: DownloadLaunch, cx: &mut Context<Self>) {
-        self.status = if launch.retry {
-            "Retrying download · preserved bytes will be resumed when supported".into()
-        } else {
-            "Starting managed download…".into()
-        };
+        self.download_final_shown = false;
+        self.status = self
+            .t()
+            .text(if launch.retry {
+                Message::StatusDownloadRetrying
+            } else {
+                Message::StatusDownloadStarting
+            })
+            .into();
         let DownloadLaunch {
             id,
             destination,
@@ -1064,7 +1155,7 @@ impl BootableView {
         match self.download_session.retry(&self.engine, &id) {
             Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch, cx),
             Ok(DownloadRequest::Queued) => {
-                self.status = "Retry queued · it will start after the active download".into();
+                self.status = self.t().text(Message::StatusDownloadRetryQueued).into();
                 cx.notify();
             }
             Err(error) => {
@@ -1079,7 +1170,9 @@ impl BootableView {
             Ok(Some(launch)) => self.launch_download_worker(launch, cx),
             Ok(None) => {}
             Err(error) => {
-                self.status = format!("Could not start queued download · {error}");
+                self.status = self
+                    .t()
+                    .format(Message::StatusDownloadStartFailed, &[("error", &error)]);
                 cx.notify();
             }
         }
@@ -1087,7 +1180,7 @@ impl BootableView {
 
     fn use_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(job) = self.download_session.jobs().iter().find(|job| job.id == id) else {
-            self.status = "Download job no longer exists".into();
+            self.status = self.t().text(Message::StatusDownloadJobGone).into();
             cx.notify();
             return;
         };
@@ -1101,9 +1194,17 @@ impl BootableView {
                 self.advanced = false;
                 self.reset_boot_firmware();
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", destination.display());
+                self.status = self.t().format(
+                    Message::StatusDownloadUsingCompleted,
+                    &[("path", &destination.display())],
+                );
             }
-            Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadCompletedUnavailable,
+                    &[("error", &error)],
+                )
+            }
         }
         cx.notify();
     }
@@ -1111,7 +1212,7 @@ impl BootableView {
     fn remove_managed_download(&mut self, id: &str, cx: &mut Context<Self>) {
         match self.download_session.remove(&self.engine, id) {
             Ok(()) => {
-                self.status = "Download history entry removed · completed image kept".into();
+                self.status = self.t().text(Message::StatusDownloadHistoryRemoved).into();
                 self.refresh_download_jobs(cx);
             }
             Err(error) => {
@@ -1127,7 +1228,7 @@ impl BootableView {
             .and_then(|index| self.pi_catalog.as_ref()?.images.get(index))
             .cloned()
         else {
-            self.status = "Choose a Raspberry Pi image to download".into();
+            self.status = self.t().text(Message::StatusCatalogPiChoose).into();
             cx.notify();
             return;
         };
@@ -1136,7 +1237,7 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Raspberry Pi image download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadPiCancelled).into();
             cx.notify();
             return;
         };
@@ -1163,7 +1264,10 @@ impl BootableView {
         self.catalog_releases.clear();
         self.discovery_session
             .expect_details(distribution.slug.clone());
-        self.status = format!("Resolving current {} ISO files…", distribution.name);
+        self.status = self.t().format(
+            Message::StatusCatalogLoadingReleases,
+            &[("name", &distribution.name)],
+        );
         cx.notify();
         let request_slug = distribution.slug.clone();
         let fetch_slug = request_slug.clone();
@@ -1184,7 +1288,7 @@ impl BootableView {
                                 &fetch,
                                 fetch.value.releases.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.status_suffix_in(view.locale);
                             let DistributionBundle {
                                 details,
                                 releases,
@@ -1194,21 +1298,37 @@ impl BootableView {
                             view.selected_details = Some(details);
                             view.catalog_releases = releases;
                             view.selected_release = (count > 0).then_some(0);
+                            let t = view.t();
+                            let loaded = t.plural(
+                                Message::StatusCatalogReleasesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             view.status = if count == 0 && !warnings.is_empty() {
-                                format!(
-                                    "Profile ready · no direct ISO found · {} source error(s)",
-                                    warnings.len()
+                                t.plural(
+                                    Message::StatusCatalogProfileReadyErrors,
+                                    warnings.len() as u64,
+                                    &[],
                                 )
                             } else if count == 0 {
-                                "Profile loaded • no direct ISO was resolved from its current links"
-                                    .into()
+                                t.text(Message::StatusCatalogProfileReadyNoIso).into()
                             } else if !warnings.is_empty() {
-                                format!(
-                                    "{count} direct ISO release(s) · {source} · {} source warning(s)",
-                                    warnings.len()
+                                t.format(
+                                    Message::StatusCatalogWithWarnings,
+                                    &[
+                                        ("summary", &loaded),
+                                        (
+                                            "warnings",
+                                            &t.plural(
+                                                Message::StatusCatalogSourceWarnings,
+                                                warnings.len() as u64,
+                                                &[],
+                                            ),
+                                        ),
+                                    ],
                                 )
                             } else {
-                                format!("{count} direct ISO release(s) · {source}")
+                                loaded
                             };
                         }
                         Err(error) => {
@@ -1217,7 +1337,10 @@ impl BootableView {
                             view.status = view
                                 .discovery_session
                                 .state(CatalogFacet::Details)
-                                .short_label("ISO releases");
+                                .short_label_in(
+                                    view.locale,
+                                    view.t().text(Message::CatalogSubjectIsoReleases),
+                                );
                         }
                     }
                     cx.notify();
@@ -1234,12 +1357,15 @@ impl BootableView {
             .and_then(|index| self.distributions.get(index))
             .map(|distribution| distribution.page_url.clone())
         else {
-            self.status = "Choose a distribution first".into();
+            self.status = self
+                .t()
+                .text(Message::StatusCatalogChooseDistribution)
+                .into();
             cx.notify();
             return;
         };
         self.status = match self.engine.open_distrowatch_page(&page_url) {
-            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Ok(()) => self.t().text(Message::StatusCatalogBrowserOpened).into(),
             Err(error) => error.to_string(),
         };
         cx.notify();
@@ -1266,7 +1392,7 @@ impl BootableView {
                 );
             }
             QuickAccess::Windows => {
-                self.status = "Windows tools use the selected local ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsUsesIso).into();
                 cx.notify();
             }
         }
@@ -1278,7 +1404,7 @@ impl BootableView {
             .and_then(|index| self.catalog_releases.get(index))
             .cloned()
         else {
-            self.status = "Choose an ISO release to download".into();
+            self.status = self.t().text(Message::StatusCatalogChooseRelease).into();
             cx.notify();
             return;
         };
@@ -1287,7 +1413,7 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "ISO download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadIsoCancelled).into();
             cx.notify();
             return;
         };
@@ -1303,9 +1429,11 @@ impl BootableView {
     fn toggle_download_pause(&mut self, cx: &mut Context<Self>) {
         match self.download_session.toggle_pause(&self.engine) {
             Ok(Some(OperationState::Paused)) => {
-                self.status = "Download paused • resume or cancel when ready".into()
+                self.status = self.t().text(Message::StatusDownloadPaused).into()
             }
-            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Running)) => {
+                self.status = self.t().text(Message::StatusDownloadResumed).into()
+            }
             Ok(Some(OperationState::Cancelled) | None) => {}
             Err(error) => self.status = error.to_string(),
         }
@@ -1314,7 +1442,7 @@ impl BootableView {
 
     fn cancel_download(&mut self, cx: &mut Context<Self>) {
         if self.download_session.cancel() {
-            self.status = "Cancelling download safely • cleaning temporary data…".into();
+            self.status = self.t().text(Message::StatusDownloadCancelling).into();
             cx.notify();
         }
     }
@@ -1362,12 +1490,12 @@ impl BootableView {
 
     fn choose_image(&mut self, cx: &mut Context<Self>) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             cx.notify();
             return;
         }
         let mut dialog = rfd::FileDialog::new().add_filter(
-            "Boot images",
+            self.t().text(Message::SourceDialogTitle),
             &[
                 "iso", "img", "raw", "xz", "gz", "gzip", "zst", "zstd", "bz2", "bzip2",
             ],
@@ -1382,12 +1510,12 @@ impl BootableView {
 
     fn inspect_image_path(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             cx.notify();
             return;
         }
         self.image_loading = true;
-        self.status = "Inspecting image • compressed sources are measured after expansion…".into();
+        self.status = self.t().text(Message::StatusImageInspecting).into();
         cx.notify();
         let inspected_path = path.clone();
         let task = cx.background_executor().spawn(async move {
@@ -1402,7 +1530,9 @@ impl BootableView {
                     view.image_loading = false;
                     match result {
                         Ok(report) => {
-                            view.status = format!("Recognized {}", report.kind);
+                            view.status = view
+                                .t()
+                                .format(Message::StatusImageRecognized, &[("kind", &report.kind)]);
                             view.preferences.remember_image(&report);
                             view.save_preferences();
                             view.browse_directory = view.preferences.image_directory();
@@ -1429,7 +1559,9 @@ impl BootableView {
 
     fn save_preferences(&mut self) {
         if let Err(error) = self.preferences.save() {
-            self.status = format!("Preferences were not saved: {error}");
+            self.status = self
+                .t()
+                .format(Message::StatusPrefsSaveFailed, &[("error", &error)]);
         }
     }
 
@@ -1450,6 +1582,13 @@ impl BootableView {
         self.status = self.review_readiness().guidance_in(self.locale).into();
         self.save_preferences();
         let locale = self.locale;
+        self.catalog_search.update(cx, |input, cx| {
+            input.set_placeholder(
+                locale.strings().text(Message::DiscoverSearchPlaceholder),
+                window,
+                cx,
+            );
+        });
         self.language_select.update(cx, |select, cx| {
             select.set_items(language_choices(locale), window, cx);
             select.set_selected_index(language_index(language), window, cx);
@@ -1512,10 +1651,13 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         if let Some(directory) = dialog.pick_folder() {
-            self.status = format!("Image browser folder: {}", directory.display());
+            self.status = self.t().format(
+                Message::StatusImageFolder,
+                &[("path", &directory.display())],
+            );
             self.browse_directory = Some(directory);
         } else {
-            self.status = "Folder selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageFolderCancelled).into();
         }
         cx.notify();
     }
@@ -1526,23 +1668,29 @@ impl BootableView {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a removable drive to back up".into();
+            self.status = self.t().text(Message::StatusBackupChooseDrive).into();
             cx.notify();
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Raw drive image", &["img", "raw", "dd"])
+            .add_filter(
+                self.t().text(Message::SourceDialogFilterBackup),
+                &["img", "raw", "dd"],
+            )
             .set_file_name("bootable-backup.img");
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Drive backup cancelled".into();
+            self.status = self.t().text(Message::StatusBackupCancelled).into();
             cx.notify();
             return;
         };
         self.browse_directory = destination.parent().map(std::path::PathBuf::from);
-        self.status = format!("Backing up {} in the background…", device.display_name());
+        self.status = self.t().format(
+            Message::StatusBackupRunning,
+            &[("drive", &device.display_name())],
+        );
         cx.notify();
 
         let device_id = device.id.to_string();
@@ -1557,9 +1705,10 @@ impl BootableView {
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
                     view.status = match result {
-                        Ok(destination) => {
-                            format!("Drive image saved to {}", destination.display())
-                        }
+                        Ok(destination) => view.t().format(
+                            Message::StatusBackupDone,
+                            &[("path", &destination.display())],
+                        ),
                         Err(error) => error.to_string(),
                     };
                     cx.notify();
@@ -1572,7 +1721,7 @@ impl BootableView {
 
     fn checksum_image(&mut self, cx: &mut Context<Self>) {
         let Some(image) = &self.image else {
-            self.status = "Choose an image before computing its checksum".into();
+            self.status = self.t().text(Message::StatusChecksumChooseImage).into();
             cx.notify();
             return;
         };
@@ -1588,7 +1737,10 @@ impl BootableView {
 
     fn cycle_checksum_algorithm(&mut self, cx: &mut Context<Self>) {
         self.checksum_algorithm = self.checksum_algorithm.next();
-        self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.status = self.t().format(
+            Message::StatusChecksumAlgorithm,
+            &[("algorithm", &self.checksum_algorithm)],
+        );
         self.preferences.checksum_algorithm = self.checksum_algorithm;
         self.save_preferences();
         cx.notify();
@@ -1597,28 +1749,25 @@ impl BootableView {
     fn toggle_advanced(&mut self, cx: &mut Context<Self>) {
         if self.image.is_none() {
             self.advanced = false;
-            self.status = "Choose or download an image before opening media options".into();
+            self.status = self.t().text(Message::StatusOptionsOpenNeedsImage).into();
             cx.notify();
             return;
         }
         self.advanced = !self.advanced;
-        self.status = if self.advanced {
-            "Advanced options expanded • every choice is included in the reviewed plan".into()
-        } else {
-            "Advanced options collapsed • configured values remain active".into()
-        };
+        self.status = self
+            .t()
+            .text(if self.advanced {
+                Message::StatusOptionsExpanded
+            } else {
+                Message::StatusOptionsCollapsed
+            })
+            .into();
         cx.notify();
     }
 
     fn cycle_bad_blocks(&mut self, cx: &mut Context<Self>) {
         self.options.bad_block_check = self.options.bad_block_check.next();
-        self.status = match self.options.bad_block_check {
-            BadBlockCheck::Disabled => "Destructive bad-block check disabled".into(),
-            mode => format!(
-                "Bad-block check: {} destructive pattern(s) before writing",
-                mode.passes()
-            ),
-        };
+        self.status = self.options.bad_block_check.status_in(self.locale);
         cx.notify();
     }
 
@@ -1629,8 +1778,7 @@ impl BootableView {
     fn scan_devices(&mut self, manual: bool, cx: &mut Context<Self>) {
         if self.write_session.active() {
             if manual {
-                self.status =
-                    "Drive refresh is paused while writing • do not unplug the target".into();
+                self.status = self.t().text(Message::StatusDrivesRefreshPaused).into();
                 cx.notify();
             }
             return;
@@ -1639,7 +1787,7 @@ impl BootableView {
             Ok(devices) => {
                 if devices == self.devices {
                     if manual {
-                        self.status = "Drive list is up to date • automatic detection is on".into();
+                        self.status = self.t().text(Message::StatusDrivesUpToDate).into();
                         cx.notify();
                     }
                     return;
@@ -1660,7 +1808,7 @@ impl BootableView {
                 self.selected_device =
                     selected_id.and_then(|id| devices.iter().position(|device| device.id == id));
                 self.devices = devices;
-                self.status = device_change_message(added, removed);
+                self.status = device_change_message(self.t(), added, removed);
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -1669,7 +1817,7 @@ impl BootableView {
 
     fn preview_plan(&mut self, cx: &mut Context<Self>) {
         let Some(image) = self.image.clone() else {
-            self.status = "Choose an image first".into();
+            self.status = self.t().text(Message::StatusImageChooseFirst).into();
             cx.notify();
             return;
         };
@@ -1678,7 +1826,7 @@ impl BootableView {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a target drive first".into();
+            self.status = self.t().text(Message::StatusTargetChooseFirst).into();
             cx.notify();
             return;
         };
@@ -1689,7 +1837,7 @@ impl BootableView {
             Ok(plan) => {
                 self.catalog_open = false;
                 self.write_session.open(plan);
-                "Reviewing the write plan • nothing has been written".into()
+                self.t().text(Message::StatusReviewOpen).into()
             }
             Err(error) => error.to_string(),
         };
@@ -1706,7 +1854,7 @@ impl BootableView {
 
     fn close_review(&mut self, cx: &mut Context<Self>) {
         if !self.write_session.close() {
-            self.status = "Writing is active • do not close the app or unplug the target".into();
+            self.status = self.t().text(Message::StatusWriteActive).into();
             cx.notify();
             return;
         }
@@ -1716,14 +1864,14 @@ impl BootableView {
 
     fn open_write_confirmation(&mut self, cx: &mut Context<Self>) {
         if self.write_session.open_confirmation() {
-            self.status = "Review the target changes and consequences before writing".into();
+            self.status = self.t().text(Message::StatusReviewConsequences).into();
             cx.notify();
         }
     }
 
     fn close_write_confirmation(&mut self, cx: &mut Context<Self>) {
         self.write_session.close_confirmation();
-        self.status = "Write cancelled before erasure • the target is unchanged".into();
+        self.status = self.t().text(Message::StatusWriteCancelled).into();
         cx.notify();
     }
 
@@ -1736,7 +1884,7 @@ impl BootableView {
                 return;
             }
         };
-        self.status = "Write started • do not unplug the target".into();
+        self.status = self.t().text(Message::StatusWriteStarted).into();
         cx.notify();
 
         let (sender, receiver) = mpsc::unbounded();
@@ -1772,10 +1920,18 @@ impl BootableView {
                 view.update(cx, |view, cx| {
                     match update {
                         WriteUpdate::Progress(progress) => {
-                            view.status = view.write_session.apply_progress(progress);
+                            // The phase name is localized here; the step text is
+                            // produced by core and stays English for now.
+                            view.status = format!(
+                                "{} • {}",
+                                progress.phase.label_in(view.locale),
+                                progress.message
+                            );
+                            view.write_session.apply_progress(progress);
                         }
                         WriteUpdate::Finished(completion) => {
-                            view.status = view.write_session.finish(completion);
+                            view.status = completion.status_in(view.locale);
+                            view.write_session.finish(completion);
                         }
                     }
                     cx.notify();
@@ -1788,14 +1944,13 @@ impl BootableView {
 
     fn cancel_write(&mut self, cx: &mut Context<Self>) {
         if self.write_session.cancel() {
-            self.status =
-                "Stopping safely • flushing completed writes; the media will remain incomplete"
-                    .into();
+            self.status = self.t().text(Message::StatusWriteStopping).into();
             cx.notify();
         }
     }
 
     fn review_card(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let plan = self
             .write_session
             .plan()
@@ -1820,9 +1975,14 @@ impl BootableView {
                     .py_3()
                     .rounded_lg()
                     .bg(rgb(0x0d151f))
-                    .child(format!("{}. {}", index + 1, step.title))
+                    .child(div().flex_1().min_w(px(0.)).child(format!(
+                        "{}. {}",
+                        index + 1,
+                        step.title
+                    )))
                     .child(
                         div()
+                            .flex_shrink_0()
                             .text_xs()
                             .text_color(if step.destructive {
                                 rgb(0xe5b95f)
@@ -1830,9 +1990,9 @@ impl BootableView {
                                 rgb(0x8fa4bd)
                             })
                             .child(if step.destructive {
-                                "ERASES DATA"
+                                t.heading(Message::ReviewStepErases)
                             } else {
-                                "safe"
+                                t.text(Message::ReviewStepSafe).to_string()
                             }),
                     )
             })
@@ -1847,29 +2007,31 @@ impl BootableView {
             .border_color(rgb(0x243244))
             .bg(rgb(0x111923))
             .child(
+                div().flex().items_start().justify_between().gap_4().child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xl()
+                                .font_weight(FontWeight::BOLD)
+                                .child(t.text(Message::ReviewTitle)),
+                        )
+                        .child(div().text_sm().text_color(rgb(0x8fa4bd)).child(t.text(
+                            if self.write_session.active() {
+                                Message::ReviewSubtitleWriting
+                            } else {
+                                Message::ReviewSubtitle
+                            },
+                        ))),
+                ),
+            )
+            .child(
                 div()
-                    .flex()
-                    .items_start()
-                    .justify_between()
-                    .gap_4()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_xl()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Review write plan"),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(0x8fa4bd))
-                                    .child("Nothing is written until a separate destructive confirmation succeeds."),
-                            ),
-                    ),
+                    .text_sm()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(t.text(Message::ReviewPlanSummary)),
             )
             .child(
                 div()
@@ -1877,7 +2039,7 @@ impl BootableView {
                     .grid_cols(2)
                     .gap_3()
                     .child(review_value(
-                        "SOURCE",
+                        t.heading(Message::ReviewFieldSource),
                         format!(
                             "{}\n{} • {}",
                             plan.image.path.display(),
@@ -1886,7 +2048,7 @@ impl BootableView {
                         ),
                     ))
                     .child(review_value(
-                        "TARGET",
+                        t.heading(Message::ReviewFieldTarget),
                         format!(
                             "{}\n{} • {}",
                             plan.target.path.display(),
@@ -1894,11 +2056,13 @@ impl BootableView {
                             format_bytes(plan.target.capacity)
                         ),
                     ))
-                    .child(review_value("METHOD", plan.strategy.to_string()))
                     .child(review_value(
-                        "CONSEQUENCE",
-                        "All existing data and partitions on the selected target will be erased"
-                            .into(),
+                        t.heading(Message::ReviewFieldMethod),
+                        plan.strategy.to_string(),
+                    ))
+                    .child(review_value(
+                        t.heading(Message::ReviewFieldConsequence),
+                        t.text(Message::ReviewConsequence).into(),
                     )),
             )
             .child(
@@ -1910,7 +2074,7 @@ impl BootableView {
                         div()
                             .text_sm()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("Ordered operations"),
+                            .child(t.text(Message::ReviewOrderedOperations)),
                     )
                     .children(step_rows),
             )
@@ -1929,27 +2093,45 @@ impl BootableView {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
                             .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xb6a17a))
+                                    .child(t.heading(Message::ReviewPermanentChanges)),
+                            )
                             .child(
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child(if self.write_session.active() {
-                                        "Writing and verification are active"
+                                    .child(t.text(if self.write_session.active() {
+                                        Message::ReviewStateWriting
                                     } else {
-                                        "One final confirmation is required"
-                                    }),
+                                        Message::ReviewStateFinalConfirm
+                                    })),
                             )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(0xb6a17a))
-                                    .child(if self.write_session.active() {
-                                        "Do not close the app, power off, or unplug the target drive."
-                                    } else {
-                                        "Review the exact target changes and irreversible consequences before writing."
-                                    }),
+                            .child(div().text_xs().text_color(rgb(0xb6a17a)).child(t.text(
+                                if self.write_session.active() {
+                                    Message::ReviewWarningWriting
+                                } else {
+                                    Message::ReviewWarningIdle
+                                },
+                            )))
+                            .when(
+                                !self.write_session.active()
+                                    && self.write_session.completion().is_none(),
+                                |column| {
+                                    column.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0xb6a17a))
+                                            .child(t.text(Message::ReviewHintOpenConfirmation)),
+                                    )
+                                },
                             ),
                     ),
             )
@@ -1972,6 +2154,8 @@ impl BootableView {
                                 .justify_between()
                                 .child(
                                     div()
+                                        .flex_1()
+                                        .min_w(px(0.))
                                         .text_sm()
                                         .font_weight(FontWeight::BOLD)
                                         .child(format!(
@@ -1982,6 +2166,7 @@ impl BootableView {
                                 )
                                 .child(
                                     div()
+                                        .flex_shrink_0()
                                         .text_xs()
                                         .text_color(rgb(0x8fa4bd))
                                         .child(progress.metrics(elapsed)),
@@ -2004,29 +2189,14 @@ impl BootableView {
                 )
             })
             .when_some(self.write_session.completion(), |panel, completion| {
-                let (title, message, color) = match completion {
-                    WriteCompletion::Succeeded => (
-                        "Write complete",
-                        "The image was written and verified. The removable drive can now be safely removed."
-                            .to_string(),
-                        0x5bd7c0,
-                    ),
-                    WriteCompletion::AuthenticationDenied => (
-                        "Write cancelled before erasure",
-                        "Administrator authentication was cancelled or denied.".into(),
-                        0xf0cc7d,
-                    ),
-                    WriteCompletion::Cancelled => (
-                        "Write stopped safely",
-                        "The media is incomplete and must be rewritten before use.".into(),
-                        0xf29a9a,
-                    ),
-                    WriteCompletion::Failed(error) => (
-                        "Write failed",
-                        error.clone(),
-                        0xf29a9a,
-                    ),
+                let color = match completion {
+                    WriteCompletion::Succeeded => 0x5bd7c0,
+                    WriteCompletion::AuthenticationDenied => 0xf0cc7d,
+                    WriteCompletion::Cancelled | WriteCompletion::Failed(_) => 0xf29a9a,
                 };
+                // A failure body is core's error text, shown as received.
+                let title = completion.title_in(self.locale);
+                let message = completion.detail_in(self.locale);
                 panel.child(
                     div()
                         .flex()
@@ -2050,16 +2220,17 @@ impl BootableView {
     }
 
     fn review_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let write_succeeded = self.write_session.succeeded();
-        let action_label = if self.write_session.active() {
-            "Stop safely"
+        let action_label = t.text(if self.write_session.active() {
+            Message::ReviewActionStopSafely
         } else if write_succeeded {
-            "Written & verified"
+            Message::ReviewActionWritten
         } else if self.write_session.completion().is_some() {
-            "Review & retry"
+            Message::ReviewActionRetry
         } else {
-            "Review consequences"
-        };
+            Message::ReviewActionConsequences
+        });
         div()
             .flex()
             .items_center()
@@ -2074,28 +2245,31 @@ impl BootableView {
             .child(
                 div()
                     .flex_1()
+                    .min_w(px(0.))
                     .text_sm()
                     .text_color(rgb(if self.write_session.active() {
                         0xe5b95f
                     } else {
                         0xa9b8c9
                     }))
-                    .child(if self.write_session.active() {
-                        "Writing and verification are active · do not unplug the target"
+                    .child(t.text(if self.write_session.active() {
+                        Message::ReviewStatusWriting
                     } else if write_succeeded {
-                        "Complete · the written media passed byte verification"
+                        Message::ReviewStatusComplete
                     } else {
-                        "Review the physical target and permanent changes before writing"
-                    }),
+                        Message::ReviewStatusReview
+                    })),
             )
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
+                    .justify_end()
                     .items_center()
                     .gap_2()
                     .child(
                         Button::new("review-back")
-                            .label("Back")
+                            .label(t.text(Message::ActionBack))
                             .disabled(self.write_session.active())
                             .on_click(cx.listener(|this, _, _, cx| this.close_review(cx))),
                     )
@@ -2116,6 +2290,7 @@ impl BootableView {
     }
 
     fn write_confirmation_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let plan = self
             .write_session
             .plan()
@@ -2146,40 +2321,48 @@ impl BootableView {
                             .text_color(rgb(if step.destructive { 0xf29a9a } else { 0x5bd7c0 }))
                             .child((index + 1).to_string()),
                     )
-                    .child(div().flex_1().text_sm().child(step.title.clone()))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .text_sm()
+                            .child(step.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
                             .text_xs()
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(if step.destructive { 0xf29a9a } else { 0x8fa4bd }))
                             .child(if step.destructive {
-                                "ERASES DATA"
+                                t.heading(Message::ReviewStepErases)
                             } else {
-                                "verifies"
+                                t.text(Message::ReviewStepVerifies).to_string()
                             }),
                     )
             })
             .collect::<Vec<_>>();
         let consequences = [
-            "Every existing file and partition on this physical drive will be permanently erased.",
-            "Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below.",
-            "Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media.",
-            "Bootable rechecks the target identity immediately before erasure and verifies the result afterward.",
+            Message::ConfirmConsequenceErase,
+            Message::ConfirmConsequenceWrongDrive,
+            Message::ConfirmConsequenceInterrupted,
+            Message::ConfirmConsequenceRecheck,
         ]
         .into_iter()
+        .map(|message| t.text(message))
         .map(|message| {
             div()
                 .flex()
                 .items_start()
                 .gap_3()
+                .child(div().mt_1().size(px(7.)).rounded_full().bg(rgb(0xe5b95f)))
                 .child(
                     div()
-                        .mt_1()
-                        .size(px(7.))
-                        .rounded_full()
-                        .bg(rgb(0xe5b95f)),
+                        .flex_1()
+                        .text_sm()
+                        .text_color(rgb(0xc7b58f))
+                        .child(message),
                 )
-                .child(div().flex_1().text_sm().text_color(rgb(0xc7b58f)).child(message))
         })
         .collect::<Vec<_>>();
 
@@ -2217,23 +2400,26 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .gap_1()
                                     .child(
                                         div()
                                             .text_xl()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(rgb(0xf0cc7d))
-                                            .child("Confirm permanent changes"),
+                                            .child(t.text(Message::ConfirmTitle)),
                                     )
                                     .child(
                                         div()
                                             .text_sm()
                                             .text_color(rgb(0x8fa4bd))
-                                            .child("Review what Bootable will change and what can go wrong."),
+                                            .child(t.text(Message::ConfirmSubtitle)),
                                     ),
                             )
                             .child(
                                 div()
+                                    .flex_shrink_0()
                                     .px_3()
                                     .py_1()
                                     .rounded_full()
@@ -2241,7 +2427,7 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xf29a9a))
-                                    .child("PERMANENT"),
+                                    .child(t.heading(Message::ConfirmBadge)),
                             ),
                     )
                     .child(
@@ -2264,7 +2450,7 @@ impl BootableView {
                                         div()
                                             .text_xs()
                                             .text_color(rgb(0xb6a17a))
-                                            .child("PHYSICAL TARGET"),
+                                            .child(t.heading(Message::ConfirmPhysicalTarget)),
                                     )
                                     .child(
                                         div()
@@ -2296,7 +2482,7 @@ impl BootableView {
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Changes to this drive"),
+                                    .child(t.text(Message::ConfirmChanges)),
                             )
                             .children(change_rows),
                     )
@@ -2313,14 +2499,14 @@ impl BootableView {
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0xe5b95f))
-                                    .child("Consequences"),
+                                    .child(t.text(Message::ConfirmConsequences)),
                             )
                             .children(consequences),
                     )
                     .child(
                         Checkbox::new("acknowledge-write-consequences")
                             .checked(self.write_session.acknowledged())
-                            .label("I checked the physical target and understand that all of its existing data will be permanently erased.")
+                            .label(t.text(Message::ConfirmAck))
                             .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                 this.write_session.set_acknowledged(*checked);
                                 cx.notify();
@@ -2329,12 +2515,13 @@ impl BootableView {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .justify_end()
                             .gap_3()
                             .child(
                                 Button::new("cancel-confirm-write")
-                                    .label("Cancel")
+                                    .label(t.text(Message::ActionCancel))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.close_write_confirmation(cx)
                                     })),
@@ -2342,7 +2529,11 @@ impl BootableView {
                             .child(
                                 Button::new("confirm-write")
                                     .danger()
-                                    .label("Confirm erase & write")
+                                    .label(t.text(if self.write_session.can_confirm() {
+                                        Message::ConfirmSubmit
+                                    } else {
+                                        Message::ConfirmAcknowledgeFirst
+                                    }))
                                     .disabled(!self.write_session.can_confirm())
                                     .on_click(cx.listener(|this, _, _, cx| this.start_write(cx))),
                             ),
@@ -2355,6 +2546,7 @@ impl BootableView {
         cx: &mut Context<Self>,
         layout: ViewportLayout,
     ) -> impl IntoElement {
+        let t = self.t();
         let show_page_fallback = self.selected_distribution.is_some()
             && self.catalog_releases.is_empty()
             && !self
@@ -2421,9 +2613,9 @@ impl BootableView {
                                     .child(div().text_xs().text_color(rgb(0x7890a8)).child(
                                         distribution.based_on.clone().unwrap_or_else(|| {
                                             if distribution.rank == 0 {
-                                                "DistroWatch directory".into()
+                                                t.text(Message::DiscoverItemDirectorySource).into()
                                             } else {
-                                                "Independent".into()
+                                                t.text(Message::DiscoverItemIndependent).into()
                                             }
                                         }),
                                     )),
@@ -2436,9 +2628,12 @@ impl BootableView {
                             .items_end()
                             .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
                                 if distribution.rank == 0 {
-                                    "Directory".into()
+                                    t.text(Message::DiscoverItemDirectory).to_string()
                                 } else {
-                                    format!("{} / day", distribution.hits_per_day)
+                                    t.format(
+                                        Message::DiscoverItemHitsPerDay,
+                                        &[("hits", &distribution.hits_per_day)],
+                                    )
                                 },
                             ))
                             .child(
@@ -2446,7 +2641,11 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(if selected { 0x5bd7c0 } else { 0x8fc7ff }))
-                                    .child(if selected { "Selected" } else { "Select →" }),
+                                    .child(if selected {
+                                        t.text(Message::ActionSelected).to_string()
+                                    } else {
+                                        format!("{} →", t.text(Message::ActionSelect))
+                                    }),
                             ),
                     )
             })
@@ -2461,12 +2660,18 @@ impl BootableView {
                 let size = release
                     .size
                     .map(format_bytes)
-                    .unwrap_or_else(|| "Size unknown".into());
-                let integrity = release
+                    .unwrap_or_else(|| t.text(Message::DiscoverItemSizeUnknown).into());
+                let publisher_checksum = release
                     .checksum_algorithm
-                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
-                    .map(|algorithm| format!("Publisher {algorithm}"))
-                    .unwrap_or_else(|| "No publisher checksum".into());
+                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some());
+                let has_publisher_checksum = publisher_checksum.is_some();
+                let integrity = match publisher_checksum {
+                    Some(algorithm) => t.format(
+                        Message::DiscoverItemPublisherChecksum,
+                        &[("algorithm", &algorithm)],
+                    ),
+                    None => t.text(Message::DiscoverItemNoPublisherChecksum).into(),
+                };
                 div()
                     .id(("release", index))
                     .flex()
@@ -2482,14 +2687,18 @@ impl BootableView {
                     .border_color(rgb(if selected { 0x3ebfa7 } else { 0x1f2c3c }))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected_release = Some(index);
-                        let has_checksum = this.catalog_releases.get(index).is_some_and(|release| {
-                            release.checksum.is_some() || release.checksum_url.is_some()
-                        });
-                        this.status = if has_checksum {
-                            "ISO selected • publisher checksum will be verified before use".into()
-                        } else {
-                            "ISO selected • publisher checksum unavailable; HTTPS length and boot structure will be checked".into()
-                        };
+                        let has_checksum =
+                            this.catalog_releases.get(index).is_some_and(|release| {
+                                release.checksum.is_some() || release.checksum_url.is_some()
+                            });
+                        this.status = this
+                            .t()
+                            .text(if has_checksum {
+                                Message::StatusCatalogIsoSelectedChecksum
+                            } else {
+                                Message::StatusCatalogIsoSelectedHttps
+                            })
+                            .into();
                         cx.notify();
                     }))
                     .child(
@@ -2508,7 +2717,7 @@ impl BootableView {
                             .child(
                                 div()
                                     .text_xs()
-                                    .text_color(rgb(if integrity.starts_with("Publisher") {
+                                    .text_color(rgb(if has_publisher_checksum {
                                         0x5bd7c0
                                     } else {
                                         0x7890a8
@@ -2534,27 +2743,28 @@ impl BootableView {
             ) {
             catalog_search_summary(&query, 0)
         } else {
-            distribution_state.short_label("distributions")
+            distribution_state
+                .short_label_in(self.locale, t.text(Message::CatalogSubjectDistributions))
         };
         let release_message = if self.selected_distribution.is_none()
             && matches!(
                 self.discovery_session.state(CatalogFacet::Details),
                 CatalogState::Idle
             ) {
-            "Choose a distribution to resolve its current ISO files".into()
+            t.text(Message::DiscoverDetailEmpty).into()
         } else {
             self.discovery_session
                 .state(CatalogFacet::Details)
-                .short_label("ISO releases")
+                .short_label_in(self.locale, t.text(Message::CatalogSubjectIsoReleases))
         };
         let distribution_heading = if !query.is_empty() {
-            "SEARCH RESULTS"
+            t.heading(Message::DiscoverSectionSearch)
         } else {
             match self.discovery_session.quick_access() {
-                QuickAccess::Arch => "ARCH-BASED",
-                QuickAccess::Debian => "DEBIAN-BASED",
-                QuickAccess::Omarchy => "OMARCHY",
-                _ => "POPULAR · SIX MONTHS",
+                QuickAccess::Arch => t.heading(Message::DiscoverSectionArch),
+                QuickAccess::Debian => t.heading(Message::DiscoverSectionDebian),
+                QuickAccess::Omarchy => "OMARCHY".to_string(),
+                _ => t.heading(Message::DiscoverSectionPopular),
             }
         };
         let refresh_label = if distribution_state.is_failed()
@@ -2563,9 +2773,9 @@ impl BootableView {
                 .state(CatalogFacet::Details)
                 .is_failed()
         {
-            "Retry"
+            t.text(Message::ActionRetry)
         } else {
-            "Refresh"
+            t.text(Message::ActionRefresh)
         };
 
         div()
@@ -2582,9 +2792,12 @@ impl BootableView {
                     .flex()
                     .items_center()
                     .justify_between()
+                    .gap_3()
                     .child(
                         div()
                             .flex()
+                            .flex_1()
+                            .min_w(px(0.))
                             .items_center()
                             .gap_3()
                             .child(Icon::empty().path("ui/discover.svg"))
@@ -2592,19 +2805,19 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .child(
                                         div()
                                             .text_base()
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .child("Discover distributions"),
+                                            .child(t.text(Message::DiscoverTitle)),
                                     )
                                     .child(
                                         div()
                                             .text_xs()
                                             .text_color(rgb(0x7890a8))
-                                            .child(
-                                                "DistroWatch page-hit ranking measures interest—not quality or market share",
-                                            ),
+                                            .child(t.text(Message::DiscoverDisclaimer)),
                                     ),
                             ),
                     )
@@ -2613,7 +2826,7 @@ impl BootableView {
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
                             .label(refresh_label)
-                            .tooltip("Refresh DistroWatch data")
+                            .tooltip(t.text(Message::TooltipRefreshDistrowatch))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.retry_discovery(cx);
                             })),
@@ -2691,7 +2904,10 @@ impl BootableView {
                                                             .path("ui/image.svg")
                                                             .size(px(18.)),
                                                     )
-                                                    .child(format!("{} screenshot", details.name)),
+                                                    .child(t.format(
+                                                        Message::DiscoverDetailScreenshotOf,
+                                                        &[("name", &details.name)],
+                                                    )),
                                             )
                                             .child(
                                                 img(url.clone())
@@ -2744,15 +2960,15 @@ impl BootableView {
                                                                 details
                                                                     .os_type
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown OS"),
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownOs)),
                                                                 details
                                                                     .origin
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown origin"),
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownOrigin)),
                                                                 details
                                                                     .status
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown status")
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownStatus))
                                                             )),
                                                     )
                                                     .when_some(
@@ -2762,11 +2978,13 @@ impl BootableView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(rgb(0x5bd7c0))
-                                                                    .child(format!(
-                                                                        "★ {rating}/10 · {} reviews",
+                                                                    .child(t.plural(
+                                                                        Message::DiscoverDetailRating,
                                                                         details
                                                                             .visitor_review_count
                                                                             .unwrap_or_default()
+                                                                            as u64,
+                                                                        &[("rating", rating)],
                                                                     )),
                                                             )
                                                         },
@@ -2788,9 +3006,17 @@ impl BootableView {
                                             .text_xs()
                                             .text_color(rgb(0x7890a8))
                                             .child(format!(
-                                                "Architecture: {}  ·  Desktop: {}",
-                                                compact_list(&details.architectures, 4),
-                                                compact_list(&details.desktops, 4)
+                                                "{}  ·  {}",
+                                                labeled(
+                                                    t,
+                                                    Message::DiscoverDetailArchitecture,
+                                                    &compact_list(t, &details.architectures, 4)
+                                                ),
+                                                labeled(
+                                                    t,
+                                                    Message::DiscoverDetailDesktop,
+                                                    &compact_list(t, &details.desktops, 4)
+                                                )
                                             )),
                                     )
                             })
@@ -2804,7 +3030,7 @@ impl BootableView {
                                             .text_xs()
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(rgb(0x8fa4bd))
-                                            .child("DIRECT ISO FILES"),
+                                            .child(t.heading(Message::DiscoverDetailDirectIsos)),
                                     )
                                     .child(
                                         div()
@@ -2815,9 +3041,12 @@ impl BootableView {
                                                 .state(CatalogFacet::Details)
                                                 .is_loading()
                                             {
-                                                "Loading…".into()
+                                                t.text(Message::DiscoverDetailLoading).into()
                                             } else {
-                                                format!("{} found", self.catalog_releases.len())
+                                                t.format(
+                                                    Message::DiscoverDetailFound,
+                                                    &[("count", &self.catalog_releases.len())],
+                                                )
                                             }),
                                     ),
                             )
@@ -2846,7 +3075,7 @@ impl BootableView {
                                     Button::new("open-distrowatch-page")
                                         .primary()
                                         .icon(Icon::empty().path("ui/discover.svg"))
-                                        .label("Open DistroWatch download page")
+                                        .label(t.text(Message::DiscoverDetailOpenPage))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.open_selected_distrowatch_page(cx)
                                         })),
@@ -2858,7 +3087,7 @@ impl BootableView {
                                         .primary()
                                         .disabled(self.selected_release.is_none())
                                         .icon(Icon::empty().path("ui/download.svg"))
-                                        .label("Download & use ISO")
+                                        .label(t.text(Message::DiscoverDetailDownloadUse))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.download_catalog_release(cx)
                                         })),
@@ -2869,11 +3098,8 @@ impl BootableView {
     }
 
     fn catalog_card(&self, cx: &mut Context<Self>, layout: ViewportLayout) -> impl IntoElement {
-        let advanced_label = if self.advanced {
-            "Hide options"
-        } else {
-            "Setup options"
-        };
+        let t = self.t();
+        let advanced_label = self.advanced_label(false);
         let content = if self.discovery_session.quick_access() == QuickAccess::Windows {
             self.windows_quick_card(cx).into_any_element()
         } else if self.discovery_session.quick_access() == QuickAccess::Omarchy {
@@ -2895,6 +3121,7 @@ impl BootableView {
                     .flex()
                     .items_center()
                     .gap_3()
+                    .when(!layout.compact, |toolbar| toolbar.flex_wrap())
                     .when(layout.compact, |toolbar| toolbar.flex_col().items_start())
                     .child(
                         div()
@@ -2907,7 +3134,7 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Discover"),
+                                    .child(t.text(Message::ActionDiscover)),
                             ),
                     )
                     .child(
@@ -2924,7 +3151,7 @@ impl BootableView {
                                                 == DiscoverySource::DistroWatch,
                                         |button| button.primary(),
                                     )
-                                    .label("All")
+                                    .label(t.text(Message::DiscoverQuickAll))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::All, window, cx)
                                     })),
@@ -3017,9 +3244,9 @@ impl BootableView {
                                     Button::new("downloads")
                                         .compact()
                                         .icon(Icon::empty().path("ui/download.svg"))
-                                        .label(format!(
-                                            "Downloads · {}",
-                                            self.download_session.jobs().len()
+                                        .label(t.format(
+                                            Message::ActionDownloadsCount,
+                                            &[("count", &self.download_session.jobs().len())],
                                         ))
                                         .when(self.downloads_open, |button| button.primary())
                                         .on_click(
@@ -3030,7 +3257,7 @@ impl BootableView {
                                     Button::new("catalog")
                                         .compact()
                                         .icon(Icon::empty().path("ui/discover.svg"))
-                                        .label("Close catalog")
+                                        .label(t.text(Message::ActionCatalogClose))
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.toggle_catalog(cx)),
                                         ),
@@ -3050,7 +3277,7 @@ impl BootableView {
                                     Button::new("refresh")
                                         .compact()
                                         .icon(Icon::empty().path("ui/refresh.svg"))
-                                        .tooltip("Refresh removable drives")
+                                        .tooltip(t.text(Message::TooltipRefreshDrives))
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.refresh_devices(cx)),
                                         ),
@@ -3116,6 +3343,7 @@ impl BootableView {
     }
 
     fn windows_quick_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let windows_image = self
             .image
             .as_ref()
@@ -3166,7 +3394,7 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Windows installer media"),
+                                    .child(t.text(Message::OptionsWindowsHeading)),
                             )
                             .child(
                                 div()
@@ -3179,11 +3407,11 @@ impl BootableView {
                         Button::new("windows-choose-iso")
                             .primary()
                             .icon(Icon::empty().path("ui/image.svg"))
-                            .label(if windows_image {
-                                "Replace Windows ISO"
+                            .label(t.text(if windows_image {
+                                Message::OptionsWindowsReplaceIso
                             } else {
-                                "Choose Windows ISO"
-                            })
+                                Message::OptionsWindowsChooseIso
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.choose_image(cx))),
                     ),
             )
@@ -3237,10 +3465,24 @@ impl BootableView {
                         div()
                             .text_xs()
                             .text_color(rgb(0x806f55))
-                            .child("Unavailable items are intentionally not clickable. Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design."),
+                            .child(format!(
+                                "{} {}",
+                                t.text(Message::OptionsWindowsUnavailableNote),
+                                t.text(Message::OptionsWindowsSilentInstallWarning)
+                            )),
                     ),
             )
-            .when(windows_image, |panel| panel.child(self.advanced_card(cx)))
+            .when(windows_image, |panel| {
+                panel
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x5bd7c0))
+                            .child(t.text(Message::OptionsWindowsInstallerReady)),
+                    )
+                    .child(self.advanced_card(cx))
+            })
             .when(!windows_image, |panel| {
                 panel.child(
                     div()
@@ -3249,12 +3491,13 @@ impl BootableView {
                         .bg(rgb(0x0f1925))
                         .text_sm()
                         .text_color(rgb(0x8fa4bd))
-                        .child("Choose an inspected Windows installer ISO to reveal the independent Windows setup checkboxes. No Windows option is applied silently."),
+                        .child(t.text(Message::OptionsWindowsInstallerLocked)),
                 )
             })
     }
 
     fn pi_catalog_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let query = self.catalog_search_query(cx);
         let devices = self
             .pi_catalog
@@ -3347,9 +3590,7 @@ impl BootableView {
                     .border_color(rgb(if selected { 0x3ebfa7 } else { 0x1f2c3c }))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected_pi_image = Some(index);
-                        this.status =
-                            "Raspberry Pi image selected • download will be extracted and verified"
-                                .into();
+                        this.status = this.t().text(Message::StatusCatalogPiSelectedVerify).into();
                         cx.notify();
                     }))
                     .when_some(image.icon_url.as_ref(), |row, icon| {
@@ -3372,7 +3613,10 @@ impl BootableView {
                             )
                             .child(div().text_xs().text_color(rgb(0x7890a8)).child(format!(
                                 "{} · {}",
-                                image.release_date.as_deref().unwrap_or("Date unknown"),
+                                image
+                                    .release_date
+                                    .as_deref()
+                                    .unwrap_or(t.text(Message::PiDateUnknown)),
                                 image.download_size.map(format_bytes).unwrap_or_default()
                             ))),
                     )
@@ -3384,11 +3628,11 @@ impl BootableView {
         let pi_message = self
             .discovery_session
             .state(CatalogFacet::RaspberryPi)
-            .short_label("Raspberry Pi images");
+            .short_label_in(self.locale, t.text(Message::CatalogSubjectPiImages));
         let image_message = if self.pi_catalog.is_some() && !query.is_empty() {
-            format!("No Raspberry Pi images match “{query}”")
+            t.format(Message::PiEmptyQuery, &[("query", &query)])
         } else if self.pi_catalog.is_some() {
-            "No compatible Raspberry Pi images found".into()
+            t.text(Message::PiEmpty).into()
         } else {
             pi_message.clone()
         };
@@ -3415,11 +3659,14 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Official Raspberry Pi Imager catalog"),
+                                    .child(t.text(Message::PiTitle)),
                             )
-                            .child(div().text_xs().text_color(rgb(0x7890a8)).child(
-                                "Board compatibility, compressed and extracted checksums included",
-                            )),
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x7890a8))
+                                    .child(t.text(Message::PiSubtitle)),
+                            ),
                     )
                     .child(
                         Button::new("reload-pi-catalog")
@@ -3431,12 +3678,12 @@ impl BootableView {
                                     .state(CatalogFacet::RaspberryPi)
                                     .is_failed()
                                 {
-                                    "Retry"
+                                    t.text(Message::ActionRetry)
                                 } else {
-                                    "Refresh"
+                                    t.text(Message::ActionRefresh)
                                 },
                             )
-                            .tooltip("Refresh Raspberry Pi catalog")
+                            .tooltip(t.text(Message::TooltipRefreshPi))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.show_raspberry_pi_with(CacheMode::Refresh, cx);
                             })),
@@ -3457,14 +3704,14 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0x8fa4bd))
-                                    .child("BOARD FILTER"),
+                                    .child(t.heading(Message::PiBoardFilter)),
                             )
                             .child(
                                 Button::new("pi-device-all")
                                     .when(self.selected_pi_device.is_none(), |button| {
                                         button.primary()
                                     })
-                                    .label("All images")
+                                    .label(t.text(Message::PiAllImages))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.select_pi_device(None, cx)
                                     })),
@@ -3502,7 +3749,7 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0x8fa4bd))
-                                    .child("COMPATIBLE IMAGES"),
+                                    .child(t.heading(Message::PiCompatibleImages)),
                             )
                             .child(
                                 div()
@@ -3553,40 +3800,64 @@ impl BootableView {
                                                 .child(description.clone()),
                                         )
                                     })
-                                    .child(div().text_xs().text_color(rgb(0x7890a8)).child(
-                                        format!(
-                                            "Download {} · Expanded {}\nReleased {}\n{}",
-                                            image
-                                                .download_size
-                                                .map(format_bytes)
-                                                .unwrap_or_default(),
-                                            image
-                                                .extracted_size
-                                                .map(format_bytes)
-                                                .unwrap_or_default(),
-                                            image.release_date.as_deref().unwrap_or("unknown"),
-                                            image
-                                                .category
-                                                .as_deref()
-                                                .unwrap_or("Raspberry Pi image")
+                                    .child(
+                                        div().text_xs().text_color(rgb(0x7890a8)).child(
+                                            t.format(
+                                                Message::PiDetails,
+                                                &[
+                                                    (
+                                                        "download",
+                                                        &image
+                                                            .download_size
+                                                            .map(format_bytes)
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                    (
+                                                        "expanded",
+                                                        &image
+                                                            .extracted_size
+                                                            .map(format_bytes)
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                    (
+                                                        "date",
+                                                        &image.release_date.as_deref().unwrap_or(
+                                                            t.text(Message::PiDateUnknown),
+                                                        ),
+                                                    ),
+                                                    (
+                                                        "description",
+                                                        &image.category.as_deref().unwrap_or(
+                                                            t.text(Message::PiDefaultCategory),
+                                                        ),
+                                                    ),
+                                                ],
+                                            ),
                                         ),
-                                    ))
+                                    )
                             })
                             .child(
                                 Button::new("download-pi-image")
                                     .primary()
                                     .disabled(selected.is_none())
                                     .icon(Icon::empty().path("ui/download.svg"))
-                                    .label("Download, verify & use")
+                                    .label(t.text(Message::PiDownloadUse))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.download_pi_catalog_image(cx)
                                     })),
                             ),
                     ),
             )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x7890a8))
+                    .child(t.text(Message::PiHint)),
+            )
     }
 
     fn source_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let details = self
             .image
             .as_ref()
@@ -3598,7 +3869,7 @@ impl BootableView {
                     format_bytes(image.size)
                 )
             })
-            .unwrap_or_else(|| "ISO, IMG, RAW, or compressed disk image".into());
+            .unwrap_or_else(|| t.text(Message::SourceFormats).into());
         div()
             .flex()
             .flex_1()
@@ -3636,7 +3907,7 @@ impl BootableView {
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(0xe8f0f8))
                             .child(Icon::empty().path("ui/image.svg"))
-                            .child("Choose an image"),
+                            .child(t.text(Message::SourceTitle)),
                     ),
             )
             .child(
@@ -3655,6 +3926,8 @@ impl BootableView {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
                             .gap_2()
                             .child(div().text_sm().text_color(rgb(0xa9b8c9)).child(details))
                             .when(self.image.is_some(), |details| {
@@ -3663,14 +3936,14 @@ impl BootableView {
                                         .text_xs()
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .text_color(rgb(0x5bd7c0))
-                                        .child("✓ Inspected"),
+                                        .child(format!("✓ {}", t.text(Message::SourceInspected))),
                                 )
                             })
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x6f8299))
-                                    .child("The image is inspected before any write is allowed"),
+                                    .child(t.text(Message::SourceHint)),
                             ),
                     )
                     .child(
@@ -3678,13 +3951,13 @@ impl BootableView {
                             .primary()
                             .disabled(self.image_loading)
                             .icon(Icon::empty().path("ui/image.svg"))
-                            .label(if self.image_loading {
-                                "Inspecting…"
+                            .label(t.text(if self.image_loading {
+                                Message::ActionInspecting
                             } else if self.image.is_some() {
-                                "Change"
+                                Message::ActionChange
                             } else {
-                                "Browse"
-                            })
+                                Message::ActionBrowse
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.choose_image(cx))),
                     ),
             )
@@ -3692,6 +3965,7 @@ impl BootableView {
     }
 
     fn recent_images_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let recents = self.preferences.recent_images();
         div()
             .flex()
@@ -3702,7 +3976,7 @@ impl BootableView {
                     div()
                         .text_xs()
                         .text_color(rgb(0x6f8299))
-                        .child("Images you use appear here for one-click reuse"),
+                        .child(t.text(Message::SourceRecentEmpty)),
                 )
             })
             .when(!recents.is_empty(), |row| {
@@ -3711,7 +3985,7 @@ impl BootableView {
                         .text_xs()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(rgb(0x8fa4bd))
-                        .child("RECENT IMAGES"),
+                        .child(t.heading(Message::SourceRecentTitle)),
                 )
                 .children(
                     recents
@@ -3756,7 +4030,7 @@ impl BootableView {
                                         .text_xs()
                                         .text_color(rgb(if current { 0x5bd7c0 } else { 0x8fa4bd }))
                                         .child(if current {
-                                            "In use".to_string()
+                                            t.text(Message::SourceRecentInUse).to_string()
                                         } else {
                                             format_bytes(recent.size)
                                         }),
@@ -3767,6 +4041,7 @@ impl BootableView {
     }
 
     fn advanced_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let windows_available = self
             .image
             .as_ref()
@@ -3811,14 +4086,12 @@ impl BootableView {
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(Icon::empty().path("ui/settings.svg"))
-                                    .child("Windows installer options"),
+                                    .child(t.text(Message::OptionsWindowsTitle)),
                             )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(0x7890a8))
-                                    .child(format!("{selected_count} selected")),
-                            ),
+                            .child(div().text_sm().text_color(rgb(0x7890a8)).child(t.format(
+                                Message::OptionsSelectedCount,
+                                &[("count", &selected_count)],
+                            ))),
                     )
                     .child(
                         div()
@@ -3829,7 +4102,7 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Partition scheme"),
+                                    .child(t.text(Message::OptionsWindowsPartitionScheme)),
                             )
                             .child(Select::new(&self.windows_partition_scheme).w_full()),
                     )
@@ -3842,14 +4115,14 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Boot firmware · experimental"),
+                                    .child(t.text(Message::OptionsWindowsBootFirmwareExperimental)),
                             )
                             .child(Select::new(&self.windows_boot_firmware).w_full())
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child(BOOT_FIRMWARE_HINT),
+                                    .child(t.text(Message::OptionsWindowsBootFirmwareHint)),
                             ),
                     )
                     .child(
@@ -3860,113 +4133,172 @@ impl BootableView {
                             .child(
                                 Checkbox::new("windows-requirements")
                                     .checked(self.options.windows.bypass_hardware_requirements)
-                                    .label("Bypass TPM, Secure Boot and RAM checks")
+                                    .label(t.text(Message::OptionsWindowsBypassHardwareLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.bypass_hardware_requirements =
                                             *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsBypassHardwareOn,
+                                            Message::OptionsWindowsBypassHardwareOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-offline-account")
                                     .checked(self.options.windows.allow_offline_account)
-                                    .label("Expose local/offline account setup")
+                                    .label(t.text(Message::OptionsWindowsOfflineAccountLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.allow_offline_account = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsOfflineAccountOn,
+                                            Message::OptionsWindowsOfflineAccountOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-local-account")
                                     .checked(self.options.windows.local_account.is_some())
-                                    .label(format!(
-                                        "Create local account: {}",
-                                        self.options
-                                            .windows
-                                            .local_account
-                                            .clone()
-                                            .or_else(bootable_core::suggested_account_name)
-                                            .unwrap_or_else(|| "User".into())
-                                    ))
+                                    .label(
+                                        t.format(
+                                            Message::OptionsWindowsNamedAccountLabel,
+                                            &[(
+                                                "name",
+                                                &self
+                                                    .options
+                                                    .windows
+                                                    .local_account
+                                                    .clone()
+                                                    .or_else(bootable_core::suggested_account_name)
+                                                    .unwrap_or_else(|| "User".into()),
+                                            )],
+                                        ),
+                                    )
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.local_account = checked.then(|| {
                                             bootable_core::suggested_account_name()
                                                 .unwrap_or_else(|| "User".into())
                                         });
-                                        this.status = "Windows installer selections updated".into();
+                                        let t = this.t();
+                                        this.status = match &this.options.windows.local_account {
+                                            Some(account) => t.format(
+                                                Message::OptionsWindowsNamedAccountOn,
+                                                &[("account", account)],
+                                            ),
+                                            None => t
+                                                .text(Message::OptionsWindowsNamedAccountOff)
+                                                .into(),
+                                        };
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-regional")
                                     .checked(self.options.windows.regional.is_some())
-                                    .label("Copy this computer's locale and time zone")
+                                    .label(t.text(Message::OptionsWindowsHostRegionLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        this.options.windows.regional = checked
-                                            .then(bootable_core::host_regional_options);
-                                        this.status = "Windows installer selections updated".into();
+                                        this.options.windows.regional =
+                                            checked.then(bootable_core::host_regional_options);
+                                        let t = this.t();
+                                        this.status = match &this.options.windows.regional {
+                                            Some(regional) => t.format(
+                                                Message::OptionsWindowsHostRegionOn,
+                                                &[
+                                                    ("locale", &regional.user_locale),
+                                                    ("zone", &regional.time_zone),
+                                                ],
+                                            ),
+                                            None => {
+                                                t.text(Message::OptionsWindowsHostRegionOff).into()
+                                            }
+                                        };
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-privacy")
                                     .checked(self.options.windows.minimize_data_collection)
-                                    .label("Apply privacy-focused OOBE defaults")
+                                    .label(t.text(Message::OptionsWindowsPrivacyLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.minimize_data_collection = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsPrivacyOn,
+                                            Message::OptionsWindowsPrivacyOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-bitlocker")
                                     .checked(self.options.windows.disable_bitlocker)
-                                    .label("Disable automatic BitLocker encryption")
+                                    .label(t.text(Message::OptionsWindowsBitlockerLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.disable_bitlocker = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsBitlockerOn,
+                                            Message::OptionsWindowsBitlockerOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-qol")
                                     .checked(self.options.windows.quality_of_life)
-                                    .label("QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup")
+                                    .label(t.text(Message::OptionsWindowsQolLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.quality_of_life = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsQolOn,
+                                            Message::OptionsWindowsQolOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-ca-2023")
                                     .checked(self.options.windows.use_windows_ca_2023)
-                                    .label("Use Windows UEFI CA 2023 signed bootloaders")
+                                    .label(t.text(Message::OptionsWindowsCa2023Label))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.use_windows_ca_2023 = *checked;
-                                        this.status = "CA 2023 media requires updated Secure Boot firmware certificates".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsCa2023On,
+                                            Message::OptionsWindowsCa2023Off,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-skusi-policy")
                                     .checked(self.options.windows.apply_skusi_policy)
-                                    .label("Apply SkuSiPolicy.p7b Secure Boot revocations")
+                                    .label(t.text(Message::OptionsWindowsSkusipolicyLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.apply_skusi_policy = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsSkusipolicyOn,
+                                            Message::OptionsWindowsSkusipolicyOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-s-mode")
                                     .checked(self.options.windows.force_s_mode)
-                                    .label("Force Windows S Mode (expert)")
+                                    .label(t.text(Message::OptionsWindowsSmodeLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.force_s_mode = *checked;
-                                        this.status = "S Mode may remain enforced after reinstall; review before writing".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsSmodeOn,
+                                            Message::OptionsWindowsSmodeOff,
+                                        );
                                         cx.notify();
                                     })),
                             ),
@@ -3982,7 +4314,7 @@ impl BootableView {
                             .text_base()
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(Icon::empty().path("ui/settings.svg"))
-                            .child("Linux / Unix boot media"),
+                            .child(t.text(Message::OptionsLinuxTitle)),
                     )
                     .child(
                         div()
@@ -3993,13 +4325,25 @@ impl BootableView {
                                 Checkbox::new("raw-image-write")
                                     .checked(true)
                                     .disabled(true)
-                                    .label("Preserve the complete bootable disk layout"),
+                                    .label(t.text(Message::OptionsLinuxLayout)),
                             )
                             .child(
                                 Checkbox::new("raw-image-verify")
                                     .checked(true)
                                     .disabled(true)
-                                    .label("Verify the written bytes with SHA-256"),
+                                    .label(t.text(Message::OptionsLinuxVerify)),
+                            )
+                            .child(
+                                Checkbox::new("raw-image-boot-records")
+                                    .checked(true)
+                                    .disabled(true)
+                                    .label(t.text(Message::OptionsLinuxBootRecordsShort)),
+                            )
+                            .child(
+                                Checkbox::new("raw-image-unmount")
+                                    .checked(true)
+                                    .disabled(true)
+                                    .label(t.text(Message::OptionsLinuxUnmountShort)),
                             ),
                     )
             })
@@ -4019,13 +4363,13 @@ impl BootableView {
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Media tools"),
+                                    .child(t.text(Message::OptionsToolsTitle)),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Verification and backup utilities"),
+                                    .child(t.text(Message::OptionsToolsSubtitle)),
                             ),
                     )
                     .child(
@@ -4036,7 +4380,7 @@ impl BootableView {
                             .child(
                                 Button::new("bad-block-check")
                                     .compact()
-                                    .label(format!("Bad blocks · {}", self.options.bad_block_check))
+                                    .label(self.options.bad_block_check.label_in(self.locale))
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.cycle_bad_blocks(cx)),
                                     ),
@@ -4054,7 +4398,7 @@ impl BootableView {
                                 Button::new("checksum-image")
                                     .compact()
                                     .icon(Icon::empty().path("ui/hash.svg"))
-                                    .label("Verify image")
+                                    .label(t.text(Message::OptionsToolsVerifyImage))
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.checksum_image(cx)),
                                     ),
@@ -4063,14 +4407,14 @@ impl BootableView {
                                 Button::new("choose-folder")
                                     .compact()
                                     .icon(Icon::empty().path("ui/folder.svg"))
-                                    .label("Image folder")
+                                    .label(t.text(Message::OptionsToolsImageFolder))
                                     .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
                             )
                             .child(
                                 Button::new("backup-device")
                                     .compact()
                                     .icon(Icon::empty().path("ui/backup.svg"))
-                                    .label("Back up drive")
+                                    .label(t.text(Message::OptionsToolsBackupDrive))
                                     .on_click(cx.listener(|this, _, _, cx| this.backup_device(cx))),
                             ),
                     ),
@@ -4078,6 +4422,7 @@ impl BootableView {
     }
 
     fn target_cards(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         if self.devices.is_empty() {
             return div()
                 .p_4()
@@ -4087,7 +4432,7 @@ impl BootableView {
                 .bg(rgb(0x0d151f))
                 .text_sm()
                 .text_color(rgb(0x8fa4bd))
-                .child("Connect a removable USB or SD drive, then refresh")
+                .child(t.text(Message::TargetEmpty))
                 .into_any_element();
         }
         let cards = self
@@ -4114,7 +4459,7 @@ impl BootableView {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected_device = Some(index);
-                                this.status = "Target selected · confirm the physical drive before reviewing the erase plan".into();
+                                this.status = this.t().text(Message::StatusTargetSelected).into();
                                 cx.notify();
                             }))
                     })
@@ -4160,11 +4505,11 @@ impl BootableView {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(if blocked { 0xf29a9a } else { 0x8fc7ff }))
                                     .child(if blocked {
-                                        "Blocked"
+                                        t.text(Message::ActionBlocked).to_string()
                                     } else if selected {
-                                        "Selected"
+                                        t.text(Message::ActionSelected).to_string()
                                     } else {
-                                        "Select →"
+                                        format!("{} →", t.text(Message::ActionSelect))
                                     }),
                             ),
                     )
@@ -4182,6 +4527,7 @@ impl BootableView {
     fn selected_device_details(&self) -> Option<impl IntoElement> {
         let device = self.devices.get(self.selected_device?)?;
         let locale = self.locale;
+        let t = self.t();
         // Translated labels (German, Russian) run longer than the English ones.
         let label_width = if locale.is_source() { 84. } else { 112. };
         let rows = device_details_in(locale, device)
@@ -4222,13 +4568,14 @@ impl BootableView {
                         .text_xs()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(rgb(0x8fa4bd))
-                        .child("SELECTED DRIVE"),
+                        .child(t.heading(Message::TargetSelectedDrive)),
                 )
                 .children(rows),
         )
     }
 
     fn help_overlay(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let sections = help_sections(self.locale)
             .iter()
             .map(|section| {
@@ -4311,10 +4658,15 @@ impl BootableView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_xl().font_weight(FontWeight::BOLD).child("Guide"))
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(t.text(Message::GuideTitle)),
+                            )
                             .child(
                                 Button::new("close-help")
-                                    .label("Close")
+                                    .label(t.text(Message::ActionClose))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.help_open = false;
                                         cx.notify();
@@ -4332,6 +4684,12 @@ impl BootableView {
     }
 
     fn download_history_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
+        let any_interrupted = self
+            .download_session
+            .jobs()
+            .iter()
+            .any(|job| job.status == DownloadStatus::Interrupted);
         let rows = self
             .download_session
             .jobs()
@@ -4368,6 +4726,7 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
                                     .min_w(px(0.))
                                     .child(
                                         div()
@@ -4385,6 +4744,8 @@ impl BootableView {
                             .child(
                                 div()
                                     .flex()
+                                    .flex_wrap()
+                                    .justify_end()
                                     .items_center()
                                     .gap_2()
                                     .child(
@@ -4392,13 +4753,13 @@ impl BootableView {
                                             .text_xs()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(rgb(status_color))
-                                            .child(job.status.to_string()),
+                                            .child(job.status.label_in(self.locale)),
                                     )
                                     .when(job.status.can_retry(), |actions| {
                                         actions.child(
                                             Button::new(("retry-download", index))
                                                 .compact()
-                                                .label("Retry")
+                                                .label(t.text(Message::DownloadsActionRetryResume))
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.retry_managed_download(
                                                         retry_id.clone(),
@@ -4412,7 +4773,7 @@ impl BootableView {
                                             Button::new(("use-download", index))
                                                 .compact()
                                                 .primary()
-                                                .label("Use")
+                                                .label(t.text(Message::DownloadsActionUseImage))
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.use_managed_download(&use_id, cx)
                                                 })),
@@ -4427,7 +4788,7 @@ impl BootableView {
                                             actions.child(
                                                 Button::new(("remove-download", index))
                                                     .compact()
-                                                    .label("Remove")
+                                                    .label(t.text(Message::DownloadsActionRemove))
                                                     .on_click(cx.listener(
                                                         move |this, _, _, cx| {
                                                             this.remove_managed_download(
@@ -4460,7 +4821,12 @@ impl BootableView {
                         div()
                             .text_xs()
                             .text_color(rgb(0x8fa4bd))
-                            .child(job.error.clone().unwrap_or_else(|| job.message.clone())),
+                            // The job message and error are core text, shown as received.
+                            .child(format!(
+                                "{} · {}",
+                                job.kind.label_in(self.locale),
+                                job.error.clone().unwrap_or_else(|| job.message.clone())
+                            )),
                     )
             })
             .collect::<Vec<_>>();
@@ -4484,14 +4850,18 @@ impl BootableView {
                             .items_center()
                             .gap_2()
                             .font_weight(FontWeight::SEMIBOLD)
+                            .flex_shrink_0()
                             .child(Icon::empty().path("ui/download.svg"))
-                            .child("Downloads"),
+                            .child(t.text(Message::ActionDownloads)),
                     )
                     .child(
                         div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .text_right()
                             .text_xs()
                             .text_color(rgb(0x7890a8))
-                            .child("Persistent history · interrupted transfers can resume"),
+                            .child(t.text(Message::DownloadsSubtitle)),
                     ),
             )
             .child(
@@ -4507,11 +4877,19 @@ impl BootableView {
                                 .p_3()
                                 .text_sm()
                                 .text_color(rgb(0x7890a8))
-                                .child("No managed downloads yet"),
+                                .child(t.text(Message::DownloadsEmpty)),
                         )
                     })
                     .children(rows),
             )
+            .when(any_interrupted, |card| {
+                card.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(0x7890a8))
+                        .child(t.text(Message::DownloadsInterruptedNote)),
+                )
+            })
     }
 
     /// The header language picker: "Language: <name>" or "Language: System
@@ -4525,11 +4903,9 @@ impl BootableView {
     }
 
     fn header_bar(&self, cx: &mut Context<Self>, compact: bool) -> impl IntoElement {
-        let advanced_label = if self.advanced {
-            "Hide options"
-        } else {
-            "Setup options"
-        };
+        let t = self.t();
+        let advanced_label = self.advanced_label(compact);
+        let job_count = self.download_session.jobs().len();
         div()
             .flex()
             .items_center()
@@ -4579,7 +4955,7 @@ impl BootableView {
                                     div()
                                         .text_xs()
                                         .text_color(rgb(0x7890a8))
-                                        .child("Boot media, written deliberately."),
+                                        .child(t.text(Message::HeaderTagline)),
                                 )
                             }),
                     )
@@ -4592,18 +4968,18 @@ impl BootableView {
                                     .flex_col()
                                     .gap_1()
                                     .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
-                                        if self.write_session.is_reviewing() {
-                                            "Review write plan"
+                                        t.text(if self.write_session.is_reviewing() {
+                                            Message::ReviewTitle
                                         } else {
-                                            "Create boot media"
-                                        },
+                                            Message::HeaderTitleCreate
+                                        }),
                                     ))
                                     .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                                        if self.write_session.is_reviewing() {
-                                            "Inspect every operation before confirmation."
+                                        t.text(if self.write_session.is_reviewing() {
+                                            Message::HeaderSubtitleReview
                                         } else {
-                                            "Image → removable drive → verified result"
-                                        },
+                                            Message::HeaderSubtitleCreate
+                                        }),
                                     )),
                             )
                     }),
@@ -4621,9 +4997,9 @@ impl BootableView {
                         Button::new("downloads")
                             .icon(Icon::empty().path("ui/download.svg"))
                             .label(if compact {
-                                format!("Jobs · {}", self.download_session.jobs().len())
+                                format!("{} · {job_count}", t.text(Message::ActionDownloadsCompact))
                             } else {
-                                format!("Downloads · {}", self.download_session.jobs().len())
+                                t.format(Message::ActionDownloadsCount, &[("count", &job_count)])
                             })
                             .when(self.downloads_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_downloads(cx))),
@@ -4631,16 +5007,12 @@ impl BootableView {
                     .child(
                         Button::new("catalog")
                             .icon(Icon::empty().path("ui/discover.svg"))
-                            .label(if compact {
-                                if self.catalog_open {
-                                    "Catalog ×"
-                                } else {
-                                    "Discover images"
-                                }
+                            .label(if self.catalog_open && compact {
+                                format!("{} ×", t.text(Message::ActionCatalogCloseCompact))
                             } else if self.catalog_open {
-                                "Close catalog"
+                                t.text(Message::ActionCatalogClose).to_string()
                             } else {
-                                "Discover images"
+                                t.text(Message::ActionDiscover).to_string()
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_catalog(cx))),
                     )
@@ -4648,7 +5020,7 @@ impl BootableView {
                         actions.child(
                             Button::new("advanced")
                                 .icon(Icon::empty().path("ui/settings.svg"))
-                                .label(if compact { "Options" } else { advanced_label })
+                                .label(advanced_label)
                                 .on_click(cx.listener(|this, _, _, cx| this.toggle_advanced(cx))),
                         )
                     })
@@ -4656,7 +5028,7 @@ impl BootableView {
                         Button::new("guide")
                             .compact()
                             .label("?")
-                            .tooltip("Guide and shortcuts (F1)")
+                            .tooltip(t.format(Message::TooltipGuide, &[("shortcut", &"F1")]))
                             .when(self.help_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_help(cx))),
                     )
@@ -4665,7 +5037,7 @@ impl BootableView {
                         Button::new("refresh")
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
-                            .tooltip("Refresh removable drives")
+                            .tooltip(t.text(Message::TooltipRefreshDrives))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_devices(cx))),
                     ),
             )
@@ -4695,10 +5067,8 @@ impl BootableView {
     }
 
     fn setup_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let bad_blocks = match self.options.bad_block_check.passes() {
-            0 => "Bad blocks off".into(),
-            passes => format!("Bad blocks {passes}x"),
-        };
+        let t = self.t();
+        let bad_blocks = self.options.bad_block_check.label_in(self.locale);
         div()
             .id("setup-summary")
             .flex()
@@ -4719,18 +5089,26 @@ impl BootableView {
                     .items_center()
                     .gap_2()
                     .font_weight(FontWeight::SEMIBOLD)
+                    .flex_shrink_0()
                     .child(Icon::empty().path("ui/settings.svg"))
-                    .child("Setup options"),
+                    .child(t.text(Message::ActionSetupOptions)),
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_right()
                     .text_sm()
                     .text_color(rgb(0x8fa4bd))
-                    .child(format!("Verification on · {bad_blocks}")),
+                    .child(t.format(
+                        Message::OptionsSummaryVerification,
+                        &[("bad_blocks", &bad_blocks)],
+                    )),
             )
     }
 
     fn discovery_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         div()
             .id("discovery-summary")
             .flex()
@@ -4751,18 +5129,23 @@ impl BootableView {
                     .items_center()
                     .gap_2()
                     .font_weight(FontWeight::SEMIBOLD)
+                    .flex_shrink_0()
                     .child(Icon::empty().path("ui/discover.svg"))
-                    .child("Discover images"),
+                    .child(t.text(Message::ActionDiscover)),
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_right()
                     .text_sm()
                     .text_color(rgb(0x8fa4bd))
-                    .child("Browse trusted catalogs · Open →"),
+                    .child(format!("{} →", t.text(Message::DiscoverCollapsedHint))),
             )
     }
 
     fn target_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         div()
             .flex()
             .flex_1()
@@ -4776,8 +5159,11 @@ impl BootableView {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .justify_between()
+                    .gap_x_3()
+                    .gap_y_1()
                     .child(
                         div()
                             .flex()
@@ -4788,6 +5174,7 @@ impl BootableView {
                                     .flex()
                                     .items_center()
                                     .justify_center()
+                                    .flex_shrink_0()
                                     .size(px(28.))
                                     .rounded_full()
                                     .bg(rgb(0x183932))
@@ -4804,7 +5191,7 @@ impl BootableView {
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(Icon::empty().path("ui/usb.svg"))
-                                    .child("Choose a drive"),
+                                    .child(t.text(Message::TargetTitle)),
                             ),
                     )
                     .child(
@@ -4822,12 +5209,16 @@ impl BootableView {
                     .child(self.target_cards(cx)),
             )
             .children(self.selected_device_details())
-            .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                "Confirm the physical drive before continuing · erasure starts only after review",
-            ))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x8fa4bd))
+                    .child(t.text(Message::TargetConfirmPhysical)),
+            )
     }
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let readiness = self.review_readiness();
         let download_state = self
             .download_session
@@ -4920,11 +5311,11 @@ impl BootableView {
                         actions
                             .child(
                                 Button::new("pause-download")
-                                    .label(if state == OperationState::Paused {
-                                        "Resume"
+                                    .label(t.text(if state == OperationState::Paused {
+                                        Message::ActionResume
                                     } else {
-                                        "Pause"
-                                    })
+                                        Message::ActionPause
+                                    }))
                                     .disabled(state == OperationState::Cancelled)
                                     .on_click(
                                         cx.listener(|this, _, _, cx| {
@@ -4934,11 +5325,11 @@ impl BootableView {
                             )
                             .child(
                                 Button::new("cancel-download")
-                                    .label(if state == OperationState::Cancelled {
-                                        "Cancelling…"
+                                    .label(t.text(if state == OperationState::Cancelled {
+                                        Message::ActionCancelling
                                     } else {
-                                        "Cancel"
-                                    })
+                                        Message::DownloadsActionCancel
+                                    }))
                                     .disabled(state == OperationState::Cancelled)
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.cancel_download(cx)),
@@ -5233,7 +5624,7 @@ fn workspace_step(
         )
 }
 
-fn review_value(label: &'static str, value: String) -> impl IntoElement {
+fn review_value(label: String, value: String) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -5247,9 +5638,17 @@ fn review_value(label: &'static str, value: String) -> impl IntoElement {
         .child(div().text_sm().child(value))
 }
 
-fn compact_list(values: &[String], limit: usize) -> String {
+/// `label: value` through the catalog, so spacing follows the language.
+fn labeled(t: Strings, label: Message, value: &str) -> String {
+    t.format(
+        Message::CommonLabeled,
+        &[("label", &t.text(label)), ("value", &value)],
+    )
+}
+
+fn compact_list(t: Strings, values: &[String], limit: usize) -> String {
     if values.is_empty() {
-        return "Not listed".into();
+        return t.text(Message::DiscoverDetailNotListed).into();
     }
     let mut result = values
         .iter()
@@ -5263,14 +5662,15 @@ fn compact_list(values: &[String], limit: usize) -> String {
     result
 }
 
-fn device_change_message(added: usize, removed: usize) -> String {
+fn device_change_message(t: Strings, added: usize, removed: usize) -> String {
     match (added, removed) {
-        (0, 0) => "Drive details changed • list updated automatically".into(),
-        (added, 0) => format!("Detected {added} new drive(s) • list updated automatically"),
-        (0, removed) => format!("Removed {removed} drive(s) • list updated automatically"),
-        (added, removed) => {
-            format!("Drive list changed: {added} added, {removed} removed • updated automatically")
-        }
+        (0, 0) => t.text(Message::StatusDrivesChanged).into(),
+        (added, 0) => t.plural(Message::StatusDrivesAdded, added as u64, &[]),
+        (0, removed) => t.plural(Message::StatusDrivesRemoved, removed as u64, &[]),
+        (added, removed) => t.format(
+            Message::StatusDrivesAddedRemoved,
+            &[("added", &added), ("removed", &removed)],
+        ),
     }
 }
 
@@ -5337,9 +5737,7 @@ fn main() {
                                 control.cancel();
                                 view.status = "Stopping write safely • close again after completed writes are flushed".into();
                             } else {
-                                view.status =
-                                    "Writing is active • do not close the app or unplug the target"
-                                        .into();
+                                view.status = view.t().text(Message::StatusWriteActive).into();
                             }
                             cx.notify();
                         });
@@ -5355,9 +5753,101 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{BootableAssets, ViewportLayout, choose_boot_firmware, choose_partition_scheme};
-    use bootable_core::{WindowsBootFirmware, WindowsPartitionScheme, WriteOptions};
+    use super::{
+        BootableAssets, ViewportLayout, choose_boot_firmware, choose_partition_scheme,
+        compact_list, device_change_message, labeled,
+    };
+    use bootable_core::{
+        Bootable, Device, DeviceId, ImageKind, ImageReport, Locale, Message, WindowsBootFirmware,
+        WindowsPartitionScheme, WriteOptions,
+    };
     use gpui::{AssetSource, px};
+
+    fn sample_plan() -> bootable_core::WritePlan {
+        let device = Device {
+            id: DeviceId::new("serial:ABC123456"),
+            path: "/dev/sdz".into(),
+            vendor: Some("SanDisk".into()),
+            model: Some("Ultra".into()),
+            serial: Some("ABC123456".into()),
+            transport: Some("usb".into()),
+            capacity: 32 * 1024 * 1024 * 1024,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        };
+        let image = ImageReport {
+            path: "linux.iso".into(),
+            size: 1024 * 1024 * 1024,
+            kind: ImageKind::HybridIso,
+            volume_label: None,
+            warnings: Vec::new(),
+        };
+        Bootable::native()
+            .plan_with_options(image, device, WriteOptions::default())
+            .expect("a removable target gets a plan")
+    }
+
+    /// The window text around the destructive step is translated; the erase
+    /// phrase is a protocol token that is compared verbatim, so it must never
+    /// come from, or appear in, any locale's catalog.
+    #[test]
+    fn erase_confirmation_phrase_is_identical_in_every_locale() {
+        let plan = sample_plan();
+        let phrase = plan.confirmation_phrase.clone();
+        assert_eq!(phrase, "ERASE /dev/sdz BC123456");
+        for &locale in Locale::ALL {
+            assert!(plan.confirmation_matches(&phrase), "{locale}");
+            let t = locale.strings();
+            for &message in Message::ALL {
+                let text = t.text(message);
+                assert!(
+                    !text.contains(&phrase) && !text.contains("ERASE "),
+                    "{locale}: {} carries the erase phrase",
+                    message.key()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn english_status_helpers_keep_the_documented_wording() {
+        let en = Locale::En.strings();
+        assert_eq!(
+            device_change_message(en, 0, 0),
+            "Drive details changed • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 1, 0),
+            "Detected 1 new drive • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 0, 2),
+            "Removed 2 drives • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 1, 2),
+            "Drive list changed: 1 added, 2 removed • updated automatically"
+        );
+        assert_eq!(
+            labeled(en, Message::DiscoverDetailArchitecture, "x86_64"),
+            "Architecture: x86_64"
+        );
+        assert_eq!(compact_list(en, &[], 4), "Not listed");
+        let many = ["a", "b", "c", "d", "e", "f"].map(String::from);
+        assert_eq!(compact_list(en, &many, 4), "a, b, c, d +2");
+    }
+
+    #[test]
+    fn status_helpers_follow_the_active_language() {
+        let de = Locale::De.strings();
+        assert_ne!(
+            device_change_message(de, 0, 0),
+            device_change_message(Locale::En.strings(), 0, 0)
+        );
+        assert_eq!(compact_list(de, &[], 4), "Nicht aufgeführt");
+    }
 
     #[test]
     fn firmware_and_scheme_choices_stay_coupled() {
