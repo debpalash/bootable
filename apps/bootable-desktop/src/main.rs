@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bootable_core::{
-    BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device,
-    DiscoverySession, DiscoverySource, DistributionBundle, DistributionDetails,
-    DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
-    ImageKind, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message, OperationState,
-    PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    Strings, WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
+    Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device, DiscoverySession,
+    DiscoverySource, DistributionBundle, DistributionDetails, DistributionSummary,
+    DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus, ImageKind, ImageReport,
+    IsoRelease, Locale, ManagedDownloadSession, Message, OperationState, PiCatalog, PiImage,
+    Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, Strings,
+    WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
     WriteCompletion, WriteOptions, catalog_search_summary, device_details_in,
     distribution_matches_query, format_bytes, help_intro, help_sections, removable_media_status_in,
     review_readiness, target_eligibility_label_in, workspace_progress,
@@ -319,8 +319,6 @@ enum WriteUpdate {
     Finished(WriteCompletion),
 }
 
-const BOOT_FIRMWARE_HINT: &str = "Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware.";
-
 /// Applies a firmware choice; BIOS + UEFI forces MBR. Returns whether the
 /// partition scheme changed. Core remains the final validator.
 fn choose_boot_firmware(options: &mut WriteOptions, firmware: WindowsBootFirmware) -> bool {
@@ -352,6 +350,11 @@ impl BootableView {
     /// top of every render function and thread it into helpers.
     fn t(&self) -> Strings {
         self.locale.strings()
+    }
+
+    /// The status line after a Windows option is toggled: its own on/off text.
+    fn toggle_status(&self, checked: bool, on: Message, off: Message) -> String {
+        self.t().text(if checked { on } else { off }).into()
     }
 
     /// The setup-options toggle caption (`compact` for the narrow header).
@@ -412,9 +415,12 @@ impl BootableView {
                     if choose_partition_scheme(&mut view.options, scheme) {
                         view.sync_firmware_select(window, cx);
                     }
-                    view.status = format!(
-                        "Windows partition scheme: {} · target firmware: {}",
-                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
+                    view.status = view.t().format(
+                        Message::StatusWindowsScheme,
+                        &[
+                            ("scheme", &view.options.windows_partition_scheme),
+                            ("firmware", &view.options.windows_boot_firmware),
+                        ],
                     );
                     cx.notify();
                 }
@@ -434,9 +440,12 @@ impl BootableView {
                     if choose_boot_firmware(&mut view.options, firmware) {
                         view.sync_partition_select(window, cx);
                     }
-                    view.status = format!(
-                        "Windows partition scheme: {} · target firmware: {} (experimental)",
-                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
+                    view.status = view.t().format(
+                        Message::StatusWindowsFirmware,
+                        &[
+                            ("scheme", &view.options.windows_partition_scheme),
+                            ("firmware", &view.options.windows_boot_firmware),
+                        ],
                     );
                     cx.notify();
                 }
@@ -1529,10 +1538,13 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         if let Some(directory) = dialog.pick_folder() {
-            self.status = format!("Image browser folder: {}", directory.display());
+            self.status = self.t().format(
+                Message::StatusImageFolder,
+                &[("path", &directory.display())],
+            );
             self.browse_directory = Some(directory);
         } else {
-            self.status = "Folder selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageFolderCancelled).into();
         }
         cx.notify();
     }
@@ -1543,7 +1555,7 @@ impl BootableView {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a removable drive to back up".into();
+            self.status = self.t().text(Message::StatusBackupChooseDrive).into();
             cx.notify();
             return;
         };
@@ -1557,12 +1569,15 @@ impl BootableView {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Drive backup cancelled".into();
+            self.status = self.t().text(Message::StatusBackupCancelled).into();
             cx.notify();
             return;
         };
         self.browse_directory = destination.parent().map(std::path::PathBuf::from);
-        self.status = format!("Backing up {} in the background…", device.display_name());
+        self.status = self.t().format(
+            Message::StatusBackupRunning,
+            &[("drive", &device.display_name())],
+        );
         cx.notify();
 
         let device_id = device.id.to_string();
@@ -1577,9 +1592,10 @@ impl BootableView {
             if let Some(view) = view.upgrade() {
                 view.update(cx, |view, cx| {
                     view.status = match result {
-                        Ok(destination) => {
-                            format!("Drive image saved to {}", destination.display())
-                        }
+                        Ok(destination) => view.t().format(
+                            Message::StatusBackupDone,
+                            &[("path", &destination.display())],
+                        ),
                         Err(error) => error.to_string(),
                     };
                     cx.notify();
@@ -1592,7 +1608,7 @@ impl BootableView {
 
     fn checksum_image(&mut self, cx: &mut Context<Self>) {
         let Some(image) = &self.image else {
-            self.status = "Choose an image before computing its checksum".into();
+            self.status = self.t().text(Message::StatusChecksumChooseImage).into();
             cx.notify();
             return;
         };
@@ -1608,7 +1624,10 @@ impl BootableView {
 
     fn cycle_checksum_algorithm(&mut self, cx: &mut Context<Self>) {
         self.checksum_algorithm = self.checksum_algorithm.next();
-        self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.status = self.t().format(
+            Message::StatusChecksumAlgorithm,
+            &[("algorithm", &self.checksum_algorithm)],
+        );
         self.preferences.checksum_algorithm = self.checksum_algorithm;
         self.save_preferences();
         cx.notify();
@@ -1617,28 +1636,25 @@ impl BootableView {
     fn toggle_advanced(&mut self, cx: &mut Context<Self>) {
         if self.image.is_none() {
             self.advanced = false;
-            self.status = "Choose or download an image before opening media options".into();
+            self.status = self.t().text(Message::StatusOptionsOpenNeedsImage).into();
             cx.notify();
             return;
         }
         self.advanced = !self.advanced;
-        self.status = if self.advanced {
-            "Advanced options expanded • every choice is included in the reviewed plan".into()
-        } else {
-            "Advanced options collapsed • configured values remain active".into()
-        };
+        self.status = self
+            .t()
+            .text(if self.advanced {
+                Message::StatusOptionsExpanded
+            } else {
+                Message::StatusOptionsCollapsed
+            })
+            .into();
         cx.notify();
     }
 
     fn cycle_bad_blocks(&mut self, cx: &mut Context<Self>) {
         self.options.bad_block_check = self.options.bad_block_check.next();
-        self.status = match self.options.bad_block_check {
-            BadBlockCheck::Disabled => "Destructive bad-block check disabled".into(),
-            mode => format!(
-                "Bad-block check: {} destructive pattern(s) before writing",
-                mode.passes()
-            ),
-        };
+        self.status = self.options.bad_block_check.status_in(self.locale);
         cx.notify();
     }
 
@@ -3791,6 +3807,7 @@ impl BootableView {
     }
 
     fn advanced_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let windows_available = self
             .image
             .as_ref()
@@ -3835,14 +3852,12 @@ impl BootableView {
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(Icon::empty().path("ui/settings.svg"))
-                                    .child("Windows installer options"),
+                                    .child(t.text(Message::OptionsWindowsTitle)),
                             )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(rgb(0x7890a8))
-                                    .child(format!("{selected_count} selected")),
-                            ),
+                            .child(div().text_sm().text_color(rgb(0x7890a8)).child(t.format(
+                                Message::OptionsSelectedCount,
+                                &[("count", &selected_count)],
+                            ))),
                     )
                     .child(
                         div()
@@ -3853,7 +3868,7 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Partition scheme"),
+                                    .child(t.text(Message::OptionsWindowsPartitionScheme)),
                             )
                             .child(Select::new(&self.windows_partition_scheme).w_full()),
                     )
@@ -3866,14 +3881,14 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Boot firmware · experimental"),
+                                    .child(t.text(Message::OptionsWindowsBootFirmwareExperimental)),
                             )
                             .child(Select::new(&self.windows_boot_firmware).w_full())
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child(BOOT_FIRMWARE_HINT),
+                                    .child(t.text(Message::OptionsWindowsBootFirmwareHint)),
                             ),
                     )
                     .child(
@@ -3884,113 +3899,172 @@ impl BootableView {
                             .child(
                                 Checkbox::new("windows-requirements")
                                     .checked(self.options.windows.bypass_hardware_requirements)
-                                    .label("Bypass TPM, Secure Boot and RAM checks")
+                                    .label(t.text(Message::OptionsWindowsBypassHardwareLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.bypass_hardware_requirements =
                                             *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsBypassHardwareOn,
+                                            Message::OptionsWindowsBypassHardwareOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-offline-account")
                                     .checked(self.options.windows.allow_offline_account)
-                                    .label("Expose local/offline account setup")
+                                    .label(t.text(Message::OptionsWindowsOfflineAccountLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.allow_offline_account = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsOfflineAccountOn,
+                                            Message::OptionsWindowsOfflineAccountOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-local-account")
                                     .checked(self.options.windows.local_account.is_some())
-                                    .label(format!(
-                                        "Create local account: {}",
-                                        self.options
-                                            .windows
-                                            .local_account
-                                            .clone()
-                                            .or_else(bootable_core::suggested_account_name)
-                                            .unwrap_or_else(|| "User".into())
-                                    ))
+                                    .label(
+                                        t.format(
+                                            Message::OptionsWindowsNamedAccountLabel,
+                                            &[(
+                                                "name",
+                                                &self
+                                                    .options
+                                                    .windows
+                                                    .local_account
+                                                    .clone()
+                                                    .or_else(bootable_core::suggested_account_name)
+                                                    .unwrap_or_else(|| "User".into()),
+                                            )],
+                                        ),
+                                    )
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.local_account = checked.then(|| {
                                             bootable_core::suggested_account_name()
                                                 .unwrap_or_else(|| "User".into())
                                         });
-                                        this.status = "Windows installer selections updated".into();
+                                        let t = this.t();
+                                        this.status = match &this.options.windows.local_account {
+                                            Some(account) => t.format(
+                                                Message::OptionsWindowsNamedAccountOn,
+                                                &[("account", account)],
+                                            ),
+                                            None => t
+                                                .text(Message::OptionsWindowsNamedAccountOff)
+                                                .into(),
+                                        };
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-regional")
                                     .checked(self.options.windows.regional.is_some())
-                                    .label("Copy this computer's locale and time zone")
+                                    .label(t.text(Message::OptionsWindowsHostRegionLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        this.options.windows.regional = checked
-                                            .then(bootable_core::host_regional_options);
-                                        this.status = "Windows installer selections updated".into();
+                                        this.options.windows.regional =
+                                            checked.then(bootable_core::host_regional_options);
+                                        let t = this.t();
+                                        this.status = match &this.options.windows.regional {
+                                            Some(regional) => t.format(
+                                                Message::OptionsWindowsHostRegionOn,
+                                                &[
+                                                    ("locale", &regional.user_locale),
+                                                    ("zone", &regional.time_zone),
+                                                ],
+                                            ),
+                                            None => {
+                                                t.text(Message::OptionsWindowsHostRegionOff).into()
+                                            }
+                                        };
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-privacy")
                                     .checked(self.options.windows.minimize_data_collection)
-                                    .label("Apply privacy-focused OOBE defaults")
+                                    .label(t.text(Message::OptionsWindowsPrivacyLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.minimize_data_collection = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsPrivacyOn,
+                                            Message::OptionsWindowsPrivacyOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-bitlocker")
                                     .checked(self.options.windows.disable_bitlocker)
-                                    .label("Disable automatic BitLocker encryption")
+                                    .label(t.text(Message::OptionsWindowsBitlockerLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.disable_bitlocker = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsBitlockerOn,
+                                            Message::OptionsWindowsBitlockerOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-qol")
                                     .checked(self.options.windows.quality_of_life)
-                                    .label("QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup")
+                                    .label(t.text(Message::OptionsWindowsQolLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.quality_of_life = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsQolOn,
+                                            Message::OptionsWindowsQolOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-ca-2023")
                                     .checked(self.options.windows.use_windows_ca_2023)
-                                    .label("Use Windows UEFI CA 2023 signed bootloaders")
+                                    .label(t.text(Message::OptionsWindowsCa2023Label))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.use_windows_ca_2023 = *checked;
-                                        this.status = "CA 2023 media requires updated Secure Boot firmware certificates".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsCa2023On,
+                                            Message::OptionsWindowsCa2023Off,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-skusi-policy")
                                     .checked(self.options.windows.apply_skusi_policy)
-                                    .label("Apply SkuSiPolicy.p7b Secure Boot revocations")
+                                    .label(t.text(Message::OptionsWindowsSkusipolicyLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.apply_skusi_policy = *checked;
-                                        this.status = "Windows installer selections updated".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsSkusipolicyOn,
+                                            Message::OptionsWindowsSkusipolicyOff,
+                                        );
                                         cx.notify();
                                     })),
                             )
                             .child(
                                 Checkbox::new("windows-s-mode")
                                     .checked(self.options.windows.force_s_mode)
-                                    .label("Force Windows S Mode (expert)")
+                                    .label(t.text(Message::OptionsWindowsSmodeLabel))
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                         this.options.windows.force_s_mode = *checked;
-                                        this.status = "S Mode may remain enforced after reinstall; review before writing".into();
+                                        this.status = this.toggle_status(
+                                            *checked,
+                                            Message::OptionsWindowsSmodeOn,
+                                            Message::OptionsWindowsSmodeOff,
+                                        );
                                         cx.notify();
                                     })),
                             ),
@@ -4006,7 +4080,7 @@ impl BootableView {
                             .text_base()
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(Icon::empty().path("ui/settings.svg"))
-                            .child("Linux / Unix boot media"),
+                            .child(t.text(Message::OptionsLinuxTitle)),
                     )
                     .child(
                         div()
@@ -4017,13 +4091,25 @@ impl BootableView {
                                 Checkbox::new("raw-image-write")
                                     .checked(true)
                                     .disabled(true)
-                                    .label("Preserve the complete bootable disk layout"),
+                                    .label(t.text(Message::OptionsLinuxLayout)),
                             )
                             .child(
                                 Checkbox::new("raw-image-verify")
                                     .checked(true)
                                     .disabled(true)
-                                    .label("Verify the written bytes with SHA-256"),
+                                    .label(t.text(Message::OptionsLinuxVerify)),
+                            )
+                            .child(
+                                Checkbox::new("raw-image-boot-records")
+                                    .checked(true)
+                                    .disabled(true)
+                                    .label(t.text(Message::OptionsLinuxBootRecordsShort)),
+                            )
+                            .child(
+                                Checkbox::new("raw-image-unmount")
+                                    .checked(true)
+                                    .disabled(true)
+                                    .label(t.text(Message::OptionsLinuxUnmountShort)),
                             ),
                     )
             })
@@ -4043,13 +4129,13 @@ impl BootableView {
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Media tools"),
+                                    .child(t.text(Message::OptionsToolsTitle)),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Verification and backup utilities"),
+                                    .child(t.text(Message::OptionsToolsSubtitle)),
                             ),
                     )
                     .child(
@@ -4060,7 +4146,7 @@ impl BootableView {
                             .child(
                                 Button::new("bad-block-check")
                                     .compact()
-                                    .label(format!("Bad blocks · {}", self.options.bad_block_check))
+                                    .label(self.options.bad_block_check.label_in(self.locale))
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.cycle_bad_blocks(cx)),
                                     ),
@@ -4078,7 +4164,7 @@ impl BootableView {
                                 Button::new("checksum-image")
                                     .compact()
                                     .icon(Icon::empty().path("ui/hash.svg"))
-                                    .label("Verify image")
+                                    .label(t.text(Message::OptionsToolsVerifyImage))
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.checksum_image(cx)),
                                     ),
@@ -4087,14 +4173,14 @@ impl BootableView {
                                 Button::new("choose-folder")
                                     .compact()
                                     .icon(Icon::empty().path("ui/folder.svg"))
-                                    .label("Image folder")
+                                    .label(t.text(Message::OptionsToolsImageFolder))
                                     .on_click(cx.listener(|this, _, _, cx| this.choose_folder(cx))),
                             )
                             .child(
                                 Button::new("backup-device")
                                     .compact()
                                     .icon(Icon::empty().path("ui/backup.svg"))
-                                    .label("Back up drive")
+                                    .label(t.text(Message::OptionsToolsBackupDrive))
                                     .on_click(cx.listener(|this, _, _, cx| this.backup_device(cx))),
                             ),
                     ),
