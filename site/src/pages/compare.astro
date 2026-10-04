@@ -1,0 +1,77 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { competitors, CHECKED_ON, CHECKED_ON_LABEL } from '../data/compare';
+import { bootableApp, breadcrumbs, webPage } from '../data/jsonld';
+
+const description = `How Bootable compares with Rufus, balenaEtcher, Ventoy, and Raspberry Pi Imager. Factual tables with sources, Bootable's gaps stated plainly. Checked ${CHECKED_ON_LABEL}.`;
+const page = {
+  title: 'Compare Bootable with Rufus, balenaEtcher, Ventoy, and Raspberry Pi Imager',
+  description,
+  ogTitle: 'Compare Bootable with other USB and SD writers',
+  ogDescription: 'Factual, sourced comparisons with Rufus, balenaEtcher, Ventoy, and Raspberry Pi Imager.',
+  ogType: 'website' as const,
+  current: 'compare' as const,
+  jsonLd: [
+    bootableApp(),
+    webPage('Compare Bootable with other USB and SD writers', '/compare', description, CHECKED_ON),
+    breadcrumbs([{ name: 'Home', path: '/' }, { name: 'Compare' }]),
+  ],
+  crumbs: [{ label: 'Home', href: '/' }, { label: 'Compare' }],
+};
+const blurbs: Record<string, string> = {
+  rufus: 'Windows-only, with legacy BIOS, persistence, formatting, and signed builds. Bootable runs on Linux and macOS too.',
+  etcher: 'A mature three-step flasher. Compare catalogs, Windows media options, interfaces, and telemetry.',
+  ventoy: 'A multiboot menu rather than a one-image writer. Different tool, different trade-offs.',
+  rpi: 'The Raspberry Pi project’s own imager, with device-aware customization.',
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+  <header class="guide-hero">
+    <p class="eyebrow">Compare · Checked on {CHECKED_ON_LABEL}</p>
+    <h1>Bootable compared</h1>
+    <p class="lede">Honest, sourced comparisons. Bootable is early-stage and each page lists what it cannot do yet.</p>
+  </header>
+
+  <section class="guide-index" aria-label="Comparisons">
+    <div class="guide-card-grid">
+      {
+        Object.entries(competitors).map(([key, c]) => (
+          <a class="guide-card" href={`/${c.slug}`}>
+            <span>Compare</span>
+            <h3>Bootable vs {c.name}</h3>
+            <p>{blurbs[key]}</p>
+          </a>
+        ))
+      }
+      <a class="guide-card" href="/rufus-alternative-linux-macos">
+        <span>Rufus · Linux · macOS</span>
+        <h3>Rufus alternative for Linux and macOS</h3>
+        <p>Rufus runs on Windows only. What Bootable offers elsewhere, and what it lacks.</p>
+      </a>
+      <a class="guide-card" href="/roadmap">
+        <span>Roadmap</span>
+        <h3>What ships and what is planned</h3>
+        <p>Shipped work and planned work, kept separate.</p>
+      </a>
+    </div>
+  </section>
+
+  <div class="guide-body">
+    <div class="guide-content">
+      <h2 id="method">How these pages are written</h2>
+      <ul>
+        <li>Competitor claims come from the tool&rsquo;s own site, repository, or documentation, linked beside the claim and dated.</li>
+        <li>If a claim could not be verified from an official page, the table says &ldquo;not checked&rdquo; or leaves it out.</li>
+        <li>Bootable&rsquo;s gaps are listed on every page: no legacy BIOS yet, no persistence or multiboot, no general formatting, unsigned builds, and early-stage software.</li>
+        <li>Planned features are labelled planned. See the <a href="/roadmap">roadmap</a>.</li>
+        <li>Bootable is not affiliated with any tool compared here. Spot an error? <a href="https://github.com/debpalash/bootable/issues/new">Open an issue</a>.</li>
+      </ul>
+      <p class="compare-note">Last checked <time datetime={CHECKED_ON}>{CHECKED_ON_LABEL}</time>.</p>
+      <div class="guide-cta"><h2>Try Bootable</h2><p>Use a drive you can erase. Releases are unsigned today.</p><a class="button primary" href="/download">Download Bootable</a></div>
+    </div>
+  </div>
+</main>
+</Layout>

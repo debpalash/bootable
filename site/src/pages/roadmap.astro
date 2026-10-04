@@ -1,0 +1,95 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { bootableApp, breadcrumbs, webPage } from '../data/jsonld';
+
+const description = 'Bootable roadmap: what is implemented today and what is only planned. Planned items are not shipped and have no committed dates.';
+const page = {
+  title: 'Bootable roadmap — implemented and planned',
+  description,
+  ogTitle: 'Bootable roadmap',
+  ogDescription: 'What is implemented and what is planned. No dates are promised.',
+  ogType: 'website' as const,
+  current: 'roadmap' as const,
+  jsonLd: [
+    bootableApp(),
+    webPage('Bootable roadmap', '/roadmap', description, '2026-10-04'),
+    breadcrumbs([{ name: 'Home', path: '/' }, { name: 'Roadmap' }]),
+  ],
+  crumbs: [{ label: 'Home', href: '/' }, { label: 'Roadmap' }],
+};
+const implemented = [
+  ['Core', 'Image classification and strategy planning; safe removable-drive discovery on Linux; raw writing with SHA-256 read-back verification; Windows GPT/FAT32 media with split-WIM support.'],
+  ['Interfaces', 'Terminal UI and desktop GUI for inspection, planning, and writing, with matching features in both.'],
+  ['Privilege model', 'Linux polkit helper with a narrow JSON protocol; macOS administrator prompt with a fixed root-owned helper; Windows UAC prompt with a fixed protected helper; cancellation at safe boundaries.'],
+  ['Native adapters', 'Windows USB-only and macOS whole-removable discovery, stable-ID revalidation, unmounting, and raw write/verify; native Windows FAT32 and macOS GPT/MBR FAT32 Windows media with boot-tree verification.'],
+  ['Images and downloads', 'Streaming XZ, gzip, Zstandard, and bzip2 images; downloads with publisher checksum sidecar/manifest verification and truthful fallback states.'],
+  ['Windows setup options', 'Hardware-requirement bypass, account, region, privacy, BitLocker, quality-of-life policies, CA 2023 bootloaders, SkuSiPolicy, and S Mode.'],
+  ['Testing', 'Loop-device write tests, an OVMF/QEMU boot assertion, and a production writer to virtual USB to QEMU end-to-end test.'],
+  ['Disk tools', 'Bad-block and fake-capacity tests on Linux; raw IMG/RAW/DD backup.'],
+];
+const planned = [
+  ['Signed releases', 'Signed release artifacts, platform code signing, and macOS notarization. Releases are unsigned today.'],
+  ['Hotplug', 'udev-driven hotplug refresh on Linux. Drive lists refresh once per second today.'],
+  ['Legacy BIOS', 'BIOS compatibility helpers when an image cannot boot via UEFI. Partition-scheme and firmware choices are partial: UEFI only.'],
+  ['Formatting', 'General FAT, NTFS, UDF, exFAT, and ext formatting. Only Windows-media FAT32 exists today.'],
+  ['Linux persistence', 'Not implemented.'],
+  ['Multiboot', 'Persistent multi-boot media as a separate, explicit strategy. Not implemented.'],
+  ['Windows To Go', 'Not implemented.'],
+  ['DOS and FreeDOS media', 'Not implemented.'],
+  ['More backup formats', 'VHD, VHDX, and FFU. Only raw IMG/RAW/DD backup exists.'],
+  ['Signature verification', 'OpenPGP and minisign verification where publishers provide signatures. Checksum verification is implemented.'],
+  ['Official downloads', 'Official ISO and UEFI Shell downloads. Not implemented.'],
+  ['Localization', 'Not implemented.'],
+];
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+  <article>
+    <header class="guide-hero">
+      <p class="eyebrow">Roadmap · v0.1.1</p>
+      <h1>Roadmap</h1>
+      <p class="lede">What is implemented and what is only planned. No release dates are promised.</p>
+    </header>
+    <div class="guide-body">
+      <div class="guide-content">
+        <div class="guide-callout"><p><strong>Planned means not shipped.</strong> The latest release is v0.1.1. Implemented items are in the repository; see the <a href="https://github.com/debpalash/bootable/releases">release notes</a> for what each build contains. Order and scope may change.</p></div>
+
+        <h2 id="implemented">Implemented</h2>
+        <ul class="roadmap-list">
+          {implemented.map(([name, text]) => <li><span class="roadmap-status shipped">Implemented</span><strong>{name}.</strong> {text}</li>)}
+        </ul>
+
+        <h2 id="planned">Planned</h2>
+        <ul class="roadmap-list">
+          {planned.map(([name, text]) => <li><span class="roadmap-status">Planned</span><strong>{name}.</strong> {text}</li>)}
+        </ul>
+
+        <h2 id="order">Intended order</h2>
+        <p>This is the current plan, not a schedule:</p>
+        <ol>
+          <li>Formatting and in-app UEFI validation.</li>
+          <li>Windows To Go.</li>
+          <li>Linux persistence, BIOS helpers, and DOS media.</li>
+          <li>VHD/VHDX/FFU backup, signature-verified downloads, and localization.</li>
+          <li>Signed platform installers.</li>
+        </ol>
+        <p>Every capability lands in the core first. The desktop and terminal interfaces ship each feature together.</p>
+
+        <h2 id="deliberate">Deliberately unavailable</h2>
+        <p>Silent unattended Windows installation is not offered. It would need a separate, high-friction target-disk safety design.</p>
+
+        <p class="compare-note">Source of truth: <a href="https://github.com/debpalash/bootable/blob/main/docs/roadmap.md">docs/roadmap.md</a> and <a href="https://github.com/debpalash/bootable/blob/main/docs/rufus-parity.md">docs/rufus-parity.md</a>. See also <a href="/compare">how Bootable compares</a> and <a href="/features">current features and limits</a>.</p>
+        <div class="guide-cta"><h2>Missing something?</h2><p>Open an issue describing the task you need.</p><a class="button primary" href="https://github.com/debpalash/bootable/issues/new">Open an issue</a></div>
+      </div>
+      <aside class="guide-aside"><strong>On this page</strong><ul>
+        <li><a href="#implemented">Implemented</a></li>
+        <li><a href="#planned">Planned</a></li>
+        <li><a href="#order">Intended order</a></li>
+        <li><a href="#deliberate">Unavailable</a></li>
+      </ul></aside>
+    </div>
+  </article>
+</main>
+</Layout>

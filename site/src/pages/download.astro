@@ -9,7 +9,7 @@ const page = {
   ogDescription: "Downloads, checksums, install steps, and release limits.",
   ogType: "website",
   current: "download",
-  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.1" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
+  footerLinks: [ { label: "Features", href: "/features" }, { label: "Guides", href: "/guides" }, { label: "FAQ", href: "/faq" }, { label: "Compare", href: "/compare" }, { label: "Roadmap", href: "/roadmap" }, { label: "Release notes", href: "https://github.com/debpalash/bootable/releases/tag/v0.1.1" }, { label: "Security", href: "https://github.com/debpalash/bootable/blob/main/SECURITY.md" }, { label: "Source", href: "https://github.com/debpalash/bootable" } ],
   crumbs: [{ label: "Home", href: "/" }, { label: "Download" }],
 };
 ---
@@ -105,6 +105,7 @@ if ($actual -ne $expected) {'{'} throw "SHA-256 mismatch" {'}'}</code></pre></di
             <li>Only the platforms listed above have release builds.</li>
             <li>Verification does not prove an operating-system installation will finish.</li>
           </ul>
+          <p>Not sure Bootable fits? See how it <a href="/compare">compares with Rufus, balenaEtcher, Ventoy, and Raspberry Pi Imager</a>, and what is <a href="/roadmap">planned</a>.</p>
 
           <div class="guide-cta">
             <h2>Report a problem</h2>

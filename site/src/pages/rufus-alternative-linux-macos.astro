@@ -1,0 +1,77 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import CompareTable from '../components/CompareTable.astro';
+import { competitors, bootableGaps, CHECKED_ON, CHECKED_ON_LABEL } from '../data/compare';
+import { bootableApp, breadcrumbs, webPage } from '../data/jsonld';
+
+const c = competitors.rufus;
+const title = 'Rufus alternative for Linux and macOS';
+const description = `Rufus runs on Windows. Bootable writes and verifies USB and SD images and creates UEFI Windows installer media on Linux and macOS. Gaps stated plainly. Checked ${CHECKED_ON_LABEL}.`;
+const page = {
+  title: `${title} — Bootable`,
+  description,
+  ogTitle: title,
+  ogDescription: 'Write and verify USB and SD images on Linux and macOS. See what Bootable does and does not do compared with Rufus.',
+  ogType: 'article' as const,
+  current: 'compare' as const,
+  jsonLd: [
+    bootableApp(),
+    webPage(title, '/rufus-alternative-linux-macos', description, CHECKED_ON),
+    breadcrumbs([{ name: 'Home', path: '/' }, { name: 'Compare', path: '/compare' }, { name: title }]),
+  ],
+  crumbs: [{ label: 'Home', href: '/' }, { label: 'Compare', href: '/compare' }, { label: 'Rufus alternative' }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+  <article>
+    <header class="guide-hero">
+      <p class="eyebrow">Rufus · Linux · macOS · Checked on {CHECKED_ON_LABEL}</p>
+      <h1>Rufus alternative for Linux and macOS</h1>
+      <p class="lede">Rufus runs on Windows only. Bootable is a different, younger tool for Linux, Windows, and macOS.</p>
+    </header>
+    <div class="guide-body">
+      <div class="guide-content">
+        <h2 id="why">Why look for an alternative</h2>
+        <p>Rufus lists Windows 8 or later as its requirement, and its FAQ says there are no plans to port it to other operating systems (<a href="https://rufus.ie/en/" rel="noopener">[1]</a>, <a href="https://github.com/pbatard/rufus/wiki/FAQ" rel="noopener">[3]</a>). On Linux or macOS you need a different tool.</p>
+
+        <h2 id="what">What Bootable does</h2>
+        <ul>
+          <li>Writes ISO, IMG, RAW, and XZ, gzip, Zstandard, or bzip2 images to USB drives and SD cards, with SHA-256 read-back verification.</li>
+          <li>Creates UEFI Windows installer media (GPT or MBR, FAT32, split WIM) on Linux, Windows, and macOS, with Windows 11 setup options.</li>
+          <li>Browses a catalog and verifies publisher checksums on downloads.</li>
+          <li>Accepts only whole removable or USB drives and re-finds the drive before writing.</li>
+          <li>Has a desktop app, terminal UI, and CLI.</li>
+        </ul>
+        <p>Try it: <a href="/write-iso-to-usb">write an ISO</a>, <a href="/windows-11-usb-on-linux">Windows 11 USB on Linux</a>, or <a href="/windows-11-usb-on-macos">Windows 11 USB on macOS</a>.</p>
+
+        <h2 id="not">What Bootable does not do</h2>
+        <div class="guide-callout"><ul>{bootableGaps.map((g) => <li>{g}</li>)}</ul></div>
+        <p>If you need any of these, Rufus on Windows, <a href="/bootable-vs-ventoy">Ventoy</a> for multiboot and legacy BIOS, or <a href="/bootable-vs-balenaetcher">balenaEtcher</a> for a simple cross-platform flasher may suit you better. Planned items are on the <a href="/roadmap">roadmap</a>.</p>
+
+        <h2 id="table">Side-by-side with Rufus</h2>
+        <p class="compare-note">Checked on <time datetime={CHECKED_ON}>{CHECKED_ON_LABEL}</time>. Bracketed numbers link to the Rufus source.</p>
+        <CompareTable competitor={c} />
+        <p>Full details, strengths, and sources: <a href="/bootable-vs-rufus">Bootable vs Rufus</a>.</p>
+
+        <section class="related-guides"><h2>More comparisons</h2><ul>
+          <li><a href="/compare">All comparisons</a></li>
+          <li><a href="/bootable-vs-balenaetcher">Bootable vs balenaEtcher</a></li>
+          <li><a href="/bootable-vs-ventoy">Bootable vs Ventoy</a></li>
+          <li><a href="/bootable-vs-raspberry-pi-imager">Bootable vs Raspberry Pi Imager</a></li>
+        </ul></section>
+        <p class="compare-note">Bootable is not affiliated with Rufus. Software changes; check the official sites before deciding.</p>
+        <div class="guide-cta"><h2>Try Bootable</h2><p>Use a drive you can erase. Releases are unsigned today.</p><a class="button primary" href="/download">Download Bootable</a></div>
+      </div>
+      <aside class="guide-aside"><strong>On this page</strong><ul>
+        <li><a href="#why">Why look elsewhere</a></li>
+        <li><a href="#what">What Bootable does</a></li>
+        <li><a href="#not">What it does not do</a></li>
+        <li><a href="#table">Side-by-side</a></li>
+      </ul></aside>
+    </div>
+  </article>
+</main>
+</Layout>

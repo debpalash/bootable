@@ -1,0 +1,39 @@
+---
+import { rows, bootable, type Competitor, type Cell } from '../data/compare';
+interface Props {
+  competitor: Competitor;
+}
+const { competitor } = Astro.props;
+const cellFor = (cell: Cell) => ({
+  text: cell.text,
+  refs: (cell.src ?? []).map((n) => ({ n, url: competitor.sources[n - 1].url })),
+});
+---
+<div class="release-table-wrap compare-table-wrap">
+  <table class="release-table compare-table">
+    <caption class="sr-only">Bootable compared with {competitor.name}</caption>
+    <thead>
+      <tr><th scope="col">Feature</th><th scope="col">Bootable</th><th scope="col">{competitor.name}</th></tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => {
+          const b = cellFor(bootable[row.key]);
+          const c = cellFor(competitor.cells[row.key]);
+          return (
+            <tr>
+              <th scope="row">{row.label}</th>
+              <td>{b.text}</td>
+              <td>
+                {c.text}
+                {c.refs.map((r) => (
+                  <sup><a href={r.url} rel="noopener" aria-label={`Source ${r.n}`}>[{r.n}]</a></sup>
+                ))}
+              </td>
+            </tr>
+          );
+        })
+      }
+    </tbody>
+  </table>
+</div>

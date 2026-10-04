@@ -12,7 +12,9 @@ interface Props {
   /** Index page: full twitter card and social-card image meta. */
   home?: boolean;
   noindex?: boolean;
-  current?: 'features' | 'guides' | 'download' | 'faq' | 'guide';
+  /** JSON-LD structured data object(s), emitted as application/ld+json. */
+  jsonLd?: object | object[];
+  current?: 'features' | 'guides' | 'download' | 'faq' | 'guide' | 'compare' | 'roadmap';
   /** Fifth footer link for guide pages; defaults to Safety. */
   doc?: FooterLink;
   /** Explicit footer links; overrides the per-page defaults. */
@@ -26,6 +28,7 @@ const {
   ogType = 'website',
   home = false,
   noindex = false,
+  jsonLd,
   current,
   doc,
   footerLinks: footerProp,
@@ -47,6 +50,8 @@ const footerLinks: FooterLink[] = footerProp ?? (home
       { label: 'Guides', href: '/guides' },
       { label: 'Download', href: '/download' },
       { label: 'FAQ', href: '/faq' },
+      { label: 'Compare', href: '/compare' },
+      { label: 'Roadmap', href: '/roadmap' },
       { label: 'Changelog', href: `${GITHUB}/blob/main/CHANGELOG.md` },
       { label: 'Source', href: GITHUB },
     ]
@@ -55,6 +60,7 @@ const footerLinks: FooterLink[] = footerProp ?? (home
         { label: 'Home', href: '/' },
         { label: 'Download', href: '/download' },
         { label: 'FAQ', href: '/faq' },
+        { label: 'Compare', href: '/compare' },
         { label: 'Safety', href: docs('safety.md') },
         { label: 'Source', href: GITHUB },
       ]
@@ -63,6 +69,7 @@ const footerLinks: FooterLink[] = footerProp ?? (home
           { label: 'Features', href: '/features' },
           { label: 'Guides', href: '/guides' },
           { label: 'Download', href: '/download' },
+          { label: 'Compare', href: '/compare' },
           { label: 'Safety', href: docs('safety.md') },
           { label: 'Source', href: GITHUB },
         ]
@@ -71,6 +78,7 @@ const footerLinks: FooterLink[] = footerProp ?? (home
           { label: 'Guides', href: '/guides' },
           { label: 'Download', href: '/download' },
           { label: 'FAQ', href: '/faq' },
+          { label: 'Compare', href: '/compare' },
           doc ?? { label: 'Safety', href: docs('safety.md') },
           { label: 'Source', href: GITHUB },
         ]);
@@ -113,6 +121,12 @@ const footerLinks: FooterLink[] = footerProp ?? (home
     <link rel="alternate" hreflang="en" href={url.href}>
     <link rel="alternate" hreflang="x-default" href={url.href}>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    {
+      jsonLd &&
+        (Array.isArray(jsonLd) ? jsonLd : [jsonLd]).map((entry) => (
+          <script type="application/ld+json" set:html={JSON.stringify(entry).replace(/</g, '\\u003c')} />
+        ))
+    }
   </head>
   <body>
     <Header home={home} current={current} />

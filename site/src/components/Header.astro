@@ -3,7 +3,7 @@ interface Props {
   /** Home page variant: brand anchors to #top, nav omits Home. */
   home?: boolean;
   /** Active nav item. */
-  current?: 'features' | 'guides' | 'download' | 'faq' | 'guide';
+  current?: 'features' | 'guides' | 'download' | 'faq' | 'guide' | 'compare' | 'roadmap';
 }
 const { home = false, current } = Astro.props;
 const homeHref = home ? '#top' : '/';
@@ -18,6 +18,7 @@ const homeHref = home ? '#top' : '/';
     {!home && <a class="nav-home" href="/">home</a>}
     <a href="/features" aria-current={current === 'features' ? 'page' : undefined}>features</a>
     <a href="/guides" aria-current={current === 'guides' || current === 'guide' ? 'page' : undefined}>guides</a>
+    <a class="nav-compare" href="/compare" aria-current={current === 'compare' ? 'page' : undefined}>compare</a>
     <a class="nav-source" href="https://github.com/debpalash/bootable">source ↗</a>
     <a class="nav-download" href="/download" aria-current={current === 'download' ? 'page' : undefined}>download ↓</a>
   </nav>

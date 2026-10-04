@@ -2,23 +2,23 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://bootable.palash.dev/</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-10-04</lastmod>
   </url>
   <url>
     <loc>https://bootable.palash.dev/guides</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-10-04</lastmod>
   </url>
   <url>
     <loc>https://bootable.palash.dev/features</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-10-04</lastmod>
   </url>
   <url>
     <loc>https://bootable.palash.dev/download</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-10-04</lastmod>
   </url>
   <url>
     <loc>https://bootable.palash.dev/faq</loc>
-    <lastmod>2026-08-27</lastmod>
+    <lastmod>2026-10-04</lastmod>
   </url>
   <url>
     <loc>https://bootable.palash.dev/windows-11-usb-on-linux</loc>
@@ -55,5 +55,33 @@
   <url>
     <loc>https://bootable.palash.dev/omarchy-plugin</loc>
     <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/compare</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/bootable-vs-rufus</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/bootable-vs-balenaetcher</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/bootable-vs-ventoy</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/bootable-vs-raspberry-pi-imager</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/rufus-alternative-linux-macos</loc>
+    <lastmod>2026-10-04</lastmod>
+  </url>
+  <url>
+    <loc>https://bootable.palash.dev/roadmap</loc>
+    <lastmod>2026-10-04</lastmod>
   </url>
 </urlset>
