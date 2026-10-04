@@ -374,9 +374,11 @@ impl BootableView {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let engine = Bootable::native();
+        let preferences = Preferences::load();
+        let locale = preferences.locale();
         let catalog_search = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Search by name, slug, or base family…")
+                .placeholder(locale.strings().text(Message::DiscoverSearchPlaceholder))
                 .clean_on_escape()
         });
         let search_subscription = cx.subscribe(&catalog_search, |view, input, event, cx| {
@@ -455,8 +457,6 @@ impl BootableView {
                 }
             },
         );
-        let preferences = Preferences::load();
-        let locale = preferences.locale();
         let language_select = cx.new(|cx| {
             SelectState::new(
                 language_choices(locale),
@@ -1582,6 +1582,13 @@ impl BootableView {
         self.status = self.review_readiness().guidance_in(self.locale).into();
         self.save_preferences();
         let locale = self.locale;
+        self.catalog_search.update(cx, |input, cx| {
+            input.set_placeholder(
+                locale.strings().text(Message::DiscoverSearchPlaceholder),
+                window,
+                cx,
+            );
+        });
         self.language_select.update(cx, |select, cx| {
             select.set_items(language_choices(locale), window, cx);
             select.set_selected_index(language_index(language), window, cx);
@@ -5746,9 +5753,101 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{BootableAssets, ViewportLayout, choose_boot_firmware, choose_partition_scheme};
-    use bootable_core::{WindowsBootFirmware, WindowsPartitionScheme, WriteOptions};
+    use super::{
+        BootableAssets, ViewportLayout, choose_boot_firmware, choose_partition_scheme,
+        compact_list, device_change_message, labeled,
+    };
+    use bootable_core::{
+        Bootable, Device, DeviceId, ImageKind, ImageReport, Locale, Message, WindowsBootFirmware,
+        WindowsPartitionScheme, WriteOptions,
+    };
     use gpui::{AssetSource, px};
+
+    fn sample_plan() -> bootable_core::WritePlan {
+        let device = Device {
+            id: DeviceId::new("serial:ABC123456"),
+            path: "/dev/sdz".into(),
+            vendor: Some("SanDisk".into()),
+            model: Some("Ultra".into()),
+            serial: Some("ABC123456".into()),
+            transport: Some("usb".into()),
+            capacity: 32 * 1024 * 1024 * 1024,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        };
+        let image = ImageReport {
+            path: "linux.iso".into(),
+            size: 1024 * 1024 * 1024,
+            kind: ImageKind::HybridIso,
+            volume_label: None,
+            warnings: Vec::new(),
+        };
+        Bootable::native()
+            .plan_with_options(image, device, WriteOptions::default())
+            .expect("a removable target gets a plan")
+    }
+
+    /// The window text around the destructive step is translated; the erase
+    /// phrase is a protocol token that is compared verbatim, so it must never
+    /// come from, or appear in, any locale's catalog.
+    #[test]
+    fn erase_confirmation_phrase_is_identical_in_every_locale() {
+        let plan = sample_plan();
+        let phrase = plan.confirmation_phrase.clone();
+        assert_eq!(phrase, "ERASE /dev/sdz BC123456");
+        for &locale in Locale::ALL {
+            assert!(plan.confirmation_matches(&phrase), "{locale}");
+            let t = locale.strings();
+            for &message in Message::ALL {
+                let text = t.text(message);
+                assert!(
+                    !text.contains(&phrase) && !text.contains("ERASE "),
+                    "{locale}: {} carries the erase phrase",
+                    message.key()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn english_status_helpers_keep_the_documented_wording() {
+        let en = Locale::En.strings();
+        assert_eq!(
+            device_change_message(en, 0, 0),
+            "Drive details changed • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 1, 0),
+            "Detected 1 new drive • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 0, 2),
+            "Removed 2 drives • list updated automatically"
+        );
+        assert_eq!(
+            device_change_message(en, 1, 2),
+            "Drive list changed: 1 added, 2 removed • updated automatically"
+        );
+        assert_eq!(
+            labeled(en, Message::DiscoverDetailArchitecture, "x86_64"),
+            "Architecture: x86_64"
+        );
+        assert_eq!(compact_list(en, &[], 4), "Not listed");
+        let many = ["a", "b", "c", "d", "e", "f"].map(String::from);
+        assert_eq!(compact_list(en, &many, 4), "a, b, c, d +2");
+    }
+
+    #[test]
+    fn status_helpers_follow_the_active_language() {
+        let de = Locale::De.strings();
+        assert_ne!(
+            device_change_message(de, 0, 0),
+            device_change_message(Locale::En.strings(), 0, 0)
+        );
+        assert_eq!(compact_list(de, &[], 4), "Nicht aufgeführt");
+    }
 
     #[test]
     fn firmware_and_scheme_choices_stay_coupled() {
