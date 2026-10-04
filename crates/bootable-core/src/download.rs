@@ -264,14 +264,28 @@ impl DownloadLedger {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn finish(&self, id: &str, result: std::result::Result<(), &Error>) -> Result<()> {
+        self.finish_with_message(id, result, None)
+    }
+
+    /// Record the terminal state. `completion` replaces the generic ready text
+    /// on success, so the row can say exactly how the image was authenticated.
+    pub(crate) fn finish_with_message(
+        &self,
+        id: &str,
+        result: std::result::Result<(), &Error>,
+        completion: Option<&str>,
+    ) -> Result<()> {
         self.update(|jobs| {
             let job = find_job_mut(jobs, id)?;
             match result {
                 Ok(()) => {
                     job.record.status = DownloadStatus::Completed;
                     job.record.completed = job.record.total.unwrap_or(job.record.completed);
-                    job.record.message = if job.payload.has_publisher_checksum() {
+                    job.record.message = if let Some(message) = completion {
+                        message.to_owned()
+                    } else if job.payload.has_publisher_checksum() {
                         "Publisher checksum verified · ready".into()
                     } else {
                         "HTTPS transfer and boot structure checked · publisher checksum unavailable"
@@ -1112,6 +1126,27 @@ mod tests {
             fs::read(first_destination).expect("completed image remains"),
             b"complete image"
         );
+    }
+
+    #[test]
+    fn completion_message_records_how_the_image_was_authenticated() {
+        let directory = tempfile::tempdir().expect("state");
+        let ledger = DownloadLedger::at(directory.path().join("state"));
+        let destination = directory.path().join("signed.iso");
+        let id = ledger
+            .enqueue(release("https://example.com/signed.iso"), &destination)
+            .expect("enqueue");
+        ledger.begin(&id).expect("begin");
+        ledger
+            .finish_with_message(
+                &id,
+                Ok(()),
+                Some("Signature verified · Ubuntu (key D94A A3F0 EFE2 1092) · ready"),
+            )
+            .expect("finish");
+        let job = ledger.list().expect("list").remove(0);
+        assert_eq!(job.status, DownloadStatus::Completed);
+        assert!(job.message.starts_with("Signature verified · Ubuntu"));
     }
 
     #[test]

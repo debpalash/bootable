@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use reqwest::blocking::{Client, Response};
 use reqwest::redirect::Policy;
@@ -13,7 +13,9 @@ use url::Url;
 use crate::checksum;
 use crate::download;
 use crate::error::{Error, Result, io_error};
+use crate::integrity::IntegrityState;
 use crate::operation::ensure_workspace;
+use crate::signature::{self, ManifestSignature, TrustAnchors};
 use crate::{ChecksumAlgorithm, OperationControl, Progress, ProgressPhase};
 
 const DISTROWATCH_BASE: &str = "https://distrowatch.com/";
@@ -76,6 +78,31 @@ pub struct IsoRelease {
     pub checksum_algorithm: Option<ChecksumAlgorithm>,
     pub checksum: Option<String>,
     pub checksum_url: Option<String>,
+}
+
+impl IsoRelease {
+    /// What the download will be checked against, for display before it starts.
+    ///
+    /// Whether a manifest signature exists is only known once the manifest is
+    /// fetched, so this promises no more than the attempt.
+    pub fn planned_integrity_label(&self) -> String {
+        let has_checksum = self.checksum.is_some() || self.checksum_url.is_some();
+        if !has_checksum {
+            return "No publisher checksum · HTTPS length and boot structure will be checked"
+                .into();
+        }
+        match (self.checksum_algorithm, self.checksum_url.is_some()) {
+            (Some(algorithm), true) => format!(
+                "Publisher {algorithm} checksum · manifest signature checked against pinned keys when published"
+            ),
+            (None, true) => {
+                "Publisher checksum · manifest signature checked against pinned keys when published"
+                    .into()
+            }
+            (Some(algorithm), false) => format!("Publisher {algorithm} checksum"),
+            (None, false) => "Publisher checksum".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,9 +298,11 @@ pub(crate) fn download_iso(
     destination: &Path,
     control: &OperationControl,
     mut progress: impl FnMut(Progress),
-) -> Result<()> {
+) -> Result<IntegrityState> {
     control.checkpoint()?;
     let source = secure_url(&release.url)?;
+    // A signature that fails verification refuses the download here, before a
+    // single image byte is transferred.
     let publisher_checksum = resolve_publisher_checksum(release)?;
     if !release.name.to_ascii_lowercase().ends_with(".iso") {
         return Err(Error::InvalidDownload(
@@ -333,12 +362,17 @@ pub(crate) fn download_iso(
         message: "Stage 3/5 · Transfer complete · partial file synced".into(),
     });
 
-    if let Some((algorithm, expected)) = publisher_checksum.as_ref() {
+    if let Some(resolved) = publisher_checksum.as_ref() {
+        let (algorithm, expected) = (&resolved.algorithm, &resolved.expected);
         progress(Progress {
             phase: ProgressPhase::Verifying,
             completed: 0,
             total,
-            message: format!("Stage 4/5 · Verifying {algorithm} checksum"),
+            message: if matches!(resolved.signature, Some(ManifestSignature::Verified(_))) {
+                format!("Stage 4/5 · Verifying {algorithm} checksum against the signed manifest")
+            } else {
+                format!("Stage 4/5 · Verifying {algorithm} checksum")
+            },
         });
         let actual = match checksum::compute_controlled(staged.path(), *algorithm, control) {
             Ok(actual) => actual,
@@ -362,27 +396,70 @@ pub(crate) fn download_iso(
         return Err(error);
     }
     staged.persist()?;
+    let integrity = integrity_state(publisher_checksum.as_ref());
     progress(Progress {
         phase: ProgressPhase::Verifying,
         completed,
         total,
-        message: match publisher_checksum {
-            Some((algorithm, _)) => format!(
-                "Stage 4/5 · Publisher {algorithm} verified · finalized at {}",
-                destination.display()
-            ),
-            None => format!(
-                "Stage 4/5 · HTTPS transfer length verified · publisher checksum unavailable · finalized at {}",
-                destination.display()
-            ),
-        },
+        message: integrity.finalized_message(destination),
     });
-    Ok(())
+    Ok(integrity)
 }
 
-fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<(ChecksumAlgorithm, String)>> {
+/// A publisher checksum together with what is known about its authenticity.
+struct ResolvedChecksum {
+    algorithm: ChecksumAlgorithm,
+    expected: String,
+    /// `None` when the digest did not come from a fetched manifest.
+    signature: Option<ManifestSignature>,
+}
+
+fn integrity_state(resolved: Option<&ResolvedChecksum>) -> IntegrityState {
+    match resolved {
+        None => IntegrityState::TransferChecked,
+        Some(resolved) => match &resolved.signature {
+            Some(ManifestSignature::Verified(signer)) => IntegrityState::SignatureVerified {
+                algorithm: resolved.algorithm,
+                signer: signer.clone(),
+            },
+            Some(ManifestSignature::Unverified(note)) => IntegrityState::ChecksumVerified {
+                algorithm: resolved.algorithm,
+                signature_note: Some(note.clone()),
+            },
+            None => IntegrityState::ChecksumVerified {
+                algorithm: resolved.algorithm,
+                signature_note: None,
+            },
+        },
+    }
+}
+
+fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<ResolvedChecksum>> {
+    resolve_publisher_checksum_with(
+        release,
+        TrustAnchors::pinned(),
+        SystemTime::now(),
+        |url| fetch_bytes(url.as_str()),
+        fetch_signature,
+    )
+}
+
+/// Resolve the publisher digest for `release`, authenticating the manifest it
+/// came from against pinned keys. The network is injected so the policy can be
+/// tested offline.
+fn resolve_publisher_checksum_with(
+    release: &IsoRelease,
+    anchors: &TrustAnchors,
+    now: SystemTime,
+    fetch_manifest: impl FnOnce(&Url) -> Result<Vec<u8>>,
+    fetch_signature: impl FnMut(&Url) -> Option<Vec<u8>>,
+) -> Result<Option<ResolvedChecksum>> {
     let embedded = match (release.checksum_algorithm, release.checksum.as_deref()) {
-        (Some(algorithm), Some(value)) => Some((algorithm, validated_checksum(algorithm, value)?)),
+        (Some(algorithm), Some(value)) => Some(ResolvedChecksum {
+            algorithm,
+            expected: validated_checksum(algorithm, value)?,
+            signature: None,
+        }),
         (Some(_), None) if release.checksum_url.is_some() => None,
         (None, None) => None,
         _ => {
@@ -396,13 +473,15 @@ fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<(ChecksumAl
         return Ok(embedded);
     };
     let checksum_url = secure_url(checksum_url)?;
-    let document = match fetch_text(checksum_url.as_str()) {
+    let document = match fetch_manifest(&checksum_url) {
         Ok(document) => document,
         Err(_error) if embedded.is_some() => return Ok(embedded),
         Err(error) => return Err(error),
     };
-    let sidecar = parse_publisher_checksum(
-        &document,
+    let manifest =
+        signature::authenticate_manifest(anchors, &checksum_url, &document, now, fetch_signature)?;
+    let (algorithm, expected) = parse_publisher_checksum(
+        &manifest.text,
         &release.name,
         checksum_algorithm_from_url(&checksum_url),
     )
@@ -412,8 +491,15 @@ fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<(ChecksumAl
             release.name
         ))
     })?;
+    let sidecar = ResolvedChecksum {
+        algorithm,
+        expected,
+        signature: Some(manifest.signature),
+    };
     Ok(match embedded {
-        Some(current) if checksum_strength(current.0) > checksum_strength(sidecar.0) => {
+        Some(current)
+            if checksum_strength(current.algorithm) > checksum_strength(sidecar.algorithm) =>
+        {
             Some(current)
         }
         _ => Some(sidecar),
@@ -932,9 +1018,13 @@ fn is_generic_checksum_name(name: &str) -> bool {
             | "sha1sums.txt"
             | "sha256sums"
             | "sha256sums.txt"
+            | "sha256sum"
+            | "sha256sum.txt"
             | "sha512sums"
             | "sha512sums.txt"
-    )
+            | "sha512sum"
+            | "sha512sum.txt"
+    ) || name.ends_with("-checksum")
 }
 
 fn checksum_algorithm_from_url(url: &Url) -> Option<ChecksumAlgorithm> {
@@ -1151,6 +1241,55 @@ fn download_client() -> Result<Client> {
         .redirect(Policy::limited(10))
         .build()
         .map_err(|error| network_error("client setup", error))
+}
+
+fn fetch_bytes(url: &str) -> Result<Vec<u8>> {
+    let response = send(&metadata_client()?, url)?;
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_CATALOG_BYTES)
+    {
+        return Err(Error::InvalidCatalog(
+            "catalog response is too large".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    response
+        .take(MAX_CATALOG_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| network_error(url, error))?;
+    if bytes.len() as u64 > MAX_CATALOG_BYTES {
+        return Err(Error::InvalidCatalog(
+            "catalog response is too large".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Fetch a sibling signature file. Absence or any failure is `None`: a missing
+/// signature degrades to checksum-only integrity rather than failing the
+/// download, and the caller reports that truthfully.
+fn fetch_signature(url: &Url) -> Option<Vec<u8>> {
+    let client = Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
+        .redirect(Policy::limited(5))
+        .build()
+        .ok()?;
+    let response = send(&client, url.as_str()).ok()?;
+    if response
+        .content_length()
+        .is_some_and(|size| size > signature::MAX_SIGNATURE_BYTES)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    response
+        .take(signature::MAX_SIGNATURE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() as u64 <= signature::MAX_SIGNATURE_BYTES).then_some(bytes)
 }
 
 fn fetch_text(url: &str) -> Result<String> {
@@ -1763,5 +1902,247 @@ mod tests {
         )
         .expect("mirrors");
         assert_eq!(releases.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod signature_policy_tests {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    const UBUNTU_MANIFEST: &[u8] = include_bytes!("../testdata/ubuntu-24.04.SHA256SUMS");
+    const UBUNTU_SIGNATURE: &[u8] = include_bytes!("../testdata/ubuntu-24.04.SHA256SUMS.gpg");
+    const DEBIAN_SIGNATURE: &[u8] = include_bytes!("../testdata/debian.SHA256SUMS.sign");
+    const FEDORA_CHECKSUM: &str = include_str!("../testdata/fedora-44-workstation.CHECKSUM");
+    const FEDORA_ISO: &str = "Fedora-Workstation-Live-44-1.7.x86_64.iso";
+    const FEDORA_SHA256: &str = "1620295f6a00c27c3208f0c00b8ece4eab1ec69b9002152d97488bf26a426ddf";
+
+    fn now() -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(1_791_072_000)
+    }
+
+    fn release(name: &str, checksum_url: &str) -> IsoRelease {
+        IsoRelease {
+            name: name.into(),
+            url: format!("https://mirror.example.test/{name}"),
+            size: None,
+            published: None,
+            checksum_algorithm: Some(ChecksumAlgorithm::Sha256),
+            checksum: None,
+            checksum_url: Some(checksum_url.into()),
+        }
+    }
+
+    fn ubuntu_name_in_fixture() -> String {
+        String::from_utf8_lossy(UBUNTU_MANIFEST)
+            .lines()
+            .find_map(|line| line.split_once(" *").map(|(_, name)| name.to_owned()))
+            .expect("fixture lists an ISO")
+    }
+
+    fn ubuntu_release() -> IsoRelease {
+        release(
+            &ubuntu_name_in_fixture(),
+            "https://releases.ubuntu.com/24.04/SHA256SUMS",
+        )
+    }
+
+    fn resolve(
+        release: &IsoRelease,
+        manifest: &[u8],
+        signature: Option<&[u8]>,
+    ) -> Result<Option<ResolvedChecksum>> {
+        resolve_publisher_checksum_with(
+            release,
+            TrustAnchors::pinned(),
+            now(),
+            |_| Ok(manifest.to_vec()),
+            |_| signature.map(<[u8]>::to_vec),
+        )
+    }
+
+    #[test]
+    fn signed_manifest_yields_signature_verified_state() {
+        let resolved = resolve(&ubuntu_release(), UBUNTU_MANIFEST, Some(UBUNTU_SIGNATURE))
+            .expect("resolve")
+            .expect("checksum");
+        let state = integrity_state(Some(&resolved));
+        assert!(state.is_signature_verified(), "{state:?}");
+        assert_eq!(state.signer().expect("signer").publisher, "Ubuntu");
+        assert_eq!(state.rank(), 2);
+        assert!(
+            state
+                .label()
+                .starts_with("Signature verified · Ubuntu (key D94A A3F0 EFE2 1092)")
+        );
+    }
+
+    #[test]
+    fn clearsigned_fedora_manifest_yields_signature_verified_state() {
+        let release = release(
+            FEDORA_ISO,
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-44-1.7-x86_64-CHECKSUM",
+        );
+        let resolved = resolve(&release, FEDORA_CHECKSUM.as_bytes(), None)
+            .expect("resolve")
+            .expect("checksum");
+        assert_eq!(resolved.expected, FEDORA_SHA256);
+        assert!(integrity_state(Some(&resolved)).is_signature_verified());
+    }
+
+    #[test]
+    fn missing_signature_is_checksum_only_and_says_so() {
+        let resolved = resolve(&ubuntu_release(), UBUNTU_MANIFEST, None)
+            .expect("resolve")
+            .expect("checksum");
+        let state = integrity_state(Some(&resolved));
+        assert_eq!(state.rank(), 1, "{state:?}");
+        assert!(!state.is_signature_verified());
+        let label = state.label();
+        assert!(label.contains("signature not verified"), "{label}");
+        assert!(!label.contains("Signature verified"), "{label}");
+    }
+
+    #[test]
+    fn a_pinned_signature_over_a_different_manifest_refuses() {
+        // Debian's genuine signature does not cover Ubuntu's manifest. Its
+        // issuer is pinned, so this is a failed verification, not a downgrade.
+        let result = resolve(&ubuntu_release(), UBUNTU_MANIFEST, Some(DEBIAN_SIGNATURE));
+        assert!(result.is_err(), "a mismatched pinned signature must refuse");
+    }
+
+    #[test]
+    fn tampered_signed_manifest_refuses_before_any_transfer() {
+        let mut tampered = UBUNTU_MANIFEST.to_vec();
+        let position = tampered
+            .iter()
+            .position(|byte| byte.is_ascii_hexdigit() && *byte != b'0')
+            .expect("a digest character");
+        tampered[position] = b'0';
+        let error = resolve(&ubuntu_release(), &tampered, Some(UBUNTU_SIGNATURE))
+            .err()
+            .expect("tampering must refuse");
+        assert!(
+            error.to_string().contains("signature verification failed"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn tampered_fedora_checksum_file_refuses() {
+        let forged = FEDORA_CHECKSUM.replace(&FEDORA_SHA256[..8], "deadbeef");
+        assert_ne!(forged, FEDORA_CHECKSUM);
+        let release = release(FEDORA_ISO, "https://example.test/Fedora-CHECKSUM");
+        assert!(resolve(&release, forged.as_bytes(), None).is_err());
+    }
+
+    #[test]
+    fn unsigned_unknown_publisher_manifest_stays_checksum_only() {
+        let manifest = format!("{} *demo.iso\n", "ab".repeat(32));
+        let release = release("demo.iso", "https://example.test/SHA256SUMS");
+        let resolved = resolve(&release, manifest.as_bytes(), None)
+            .expect("resolve")
+            .expect("checksum");
+        assert_eq!(integrity_state(Some(&resolved)).rank(), 1);
+    }
+
+    #[test]
+    fn embedded_checksum_alone_never_claims_a_signature() {
+        let mut release = release("demo.iso", "https://example.test/unused");
+        release.checksum_url = None;
+        release.checksum = Some("ab".repeat(32));
+        let resolved = resolve(&release, b"", None)
+            .expect("resolve")
+            .expect("checksum");
+        assert_eq!(
+            integrity_state(Some(&resolved)),
+            IntegrityState::ChecksumVerified {
+                algorithm: ChecksumAlgorithm::Sha256,
+                signature_note: None
+            }
+        );
+    }
+
+    #[test]
+    fn unreachable_manifest_falls_back_to_the_embedded_checksum_without_a_signature_claim() {
+        let mut release = release("demo.iso", "https://example.test/SHA256SUMS");
+        release.checksum = Some("ab".repeat(32));
+        let resolved = resolve_publisher_checksum_with(
+            &release,
+            TrustAnchors::pinned(),
+            now(),
+            |url| {
+                Err(Error::Network {
+                    url: url.to_string(),
+                    message: "offline".into(),
+                })
+            },
+            |_| None,
+        )
+        .expect("resolve")
+        .expect("checksum");
+        assert!(resolved.signature.is_none());
+    }
+
+    #[test]
+    fn no_checksum_means_transfer_checked_only() {
+        assert_eq!(integrity_state(None), IntegrityState::TransferChecked);
+        assert_eq!(integrity_state(None).rank(), 0);
+    }
+
+    #[test]
+    fn fedora_and_mint_manifest_names_are_recognized() {
+        let fedora = Url::parse(
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-44-1.7-x86_64-CHECKSUM",
+        )
+        .expect("URL");
+        assert!(is_checksum_url(&fedora));
+        let mint = Url::parse("https://mirrors.example.test/linuxmint/stable/22.3/sha256sum.txt")
+            .expect("URL");
+        assert!(is_checksum_url(&mint));
+    }
+
+    /// Live check against real publishers: `cargo test -p bootable-core -- --ignored live_`
+    #[test]
+    #[ignore = "requires network access"]
+    fn live_publisher_manifests_verify_against_pinned_keys() {
+        let cases = [
+            (
+                "linuxmint-22.3-cinnamon-64bit.iso",
+                "https://mirrors.edge.kernel.org/linuxmint/stable/22.3/sha256sum.txt",
+            ),
+            (
+                "debian-13.7.0-amd64-netinst.iso",
+                "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS",
+            ),
+            (
+                "kali-linux-2026.2-installer-amd64.iso",
+                "https://cdimage.kali.org/current/SHA256SUMS",
+            ),
+        ];
+        for (name, url) in cases {
+            let release = release(name, url);
+            match resolve_publisher_checksum(&release) {
+                Ok(Some(resolved)) => {
+                    eprintln!("{name}: {}", integrity_state(Some(&resolved)).label());
+                }
+                other => eprintln!("{name}: {:?}", other.map(|_| ())),
+            }
+        }
+    }
+
+    #[test]
+    fn planned_label_never_promises_a_signature() {
+        let with_manifest = ubuntu_release().planned_integrity_label();
+        assert!(with_manifest.contains("checked against pinned keys when published"));
+        assert!(!with_manifest.contains("Signature verified"));
+        let mut bare = ubuntu_release();
+        bare.checksum_url = None;
+        bare.checksum_algorithm = None;
+        assert!(
+            bare.planned_integrity_label()
+                .starts_with("No publisher checksum")
+        );
     }
 }
