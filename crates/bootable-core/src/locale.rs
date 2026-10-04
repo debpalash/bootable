@@ -276,9 +276,9 @@ impl Locale {
     }
 }
 
-/// `defaults read -g AppleLanguages`, parsed. Fixed argv; no shell involved.
+/// `/usr/bin/defaults read -g AppleLanguages`, parsed. Fixed argv; no shell involved.
 fn macos_apple_languages() -> Option<Vec<String>> {
-    let output = std::process::Command::new("defaults")
+    let output = std::process::Command::new("/usr/bin/defaults")
         .args(["read", "-g", "AppleLanguages"])
         .output()
         .ok()?;
