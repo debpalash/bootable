@@ -7,11 +7,12 @@ use bootable_core::{
     BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device,
     DiscoverySession, DiscoverySource, DistributionBundle, DistributionDetails,
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
-    HELP_INTRO, HELP_SECTIONS, ImageKind, ImageReport, IsoRelease, ManagedDownloadSession,
-    OperationState, PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness,
-    ReviewedWriteSession, WindowsPartitionScheme, WorkspaceStepState, WriteCompletion,
-    WriteOptions, catalog_search_summary, device_details, distribution_matches_query, format_bytes,
-    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
+    ImageKind, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message, OperationState,
+    PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession,
+    WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState, WriteCompletion, WriteOptions,
+    catalog_search_summary, device_details_in, distribution_matches_query, format_bytes,
+    help_intro, help_sections, removable_media_status_in, review_readiness,
+    target_eligibility_label_in, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -25,7 +26,7 @@ use gpui_component::{
     checkbox::Checkbox,
     input::{Input, InputEvent, InputState},
     scroll::ScrollableElement,
-    select::{Select, SelectEvent, SelectState},
+    select::{Select, SelectEvent, SelectItem, SelectState},
 };
 use gpui_http_client::{AsyncBody, HttpClient, Url, http};
 
@@ -251,10 +252,13 @@ struct BootableView {
     selected_pi_image: Option<usize>,
     catalog_search: Entity<InputState>,
     windows_partition_scheme: Entity<SelectState<Vec<&'static str>>>,
+    language_select: Entity<SelectState<Vec<LanguageChoice>>>,
+    locale: Locale,
     catalog_visible: usize,
     pi_visible: usize,
     _catalog_search_subscription: Subscription,
     _windows_partition_subscription: Subscription,
+    _language_subscription: Subscription,
     download_session: ManagedDownloadSession,
     downloads_open: bool,
     write_session: ReviewedWriteSession,
@@ -349,11 +353,27 @@ impl BootableView {
                     cx.notify();
                 }
             });
+        let preferences = Preferences::load();
+        let locale = preferences.locale();
+        let language_select = cx.new(|cx| {
+            SelectState::new(
+                language_choices(locale),
+                language_index(preferences.language),
+                window,
+                cx,
+            )
+        });
+        let language_subscription =
+            cx.subscribe_in(&language_select, window, |view, _, event, window, cx| {
+                if let SelectEvent::Confirm(Some(language)) = event {
+                    view.set_language(*language, window, cx);
+                }
+            });
         let (devices, status) = match engine.discover_devices() {
             Ok(devices) => {
                 let status = format!(
                     "{} · choose an image to begin",
-                    removable_media_status(&devices)
+                    removable_media_status_in(locale, &devices)
                 );
                 (devices, status)
             }
@@ -361,7 +381,6 @@ impl BootableView {
         };
         Self::schedule_device_scan(cx);
         Self::schedule_download_scan(cx);
-        let preferences = Preferences::load();
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle);
         let view = Self {
@@ -390,10 +409,13 @@ impl BootableView {
             selected_pi_image: None,
             catalog_search,
             windows_partition_scheme,
+            language_select,
+            locale,
             catalog_visible: 20,
             pi_visible: 20,
             _catalog_search_subscription: search_subscription,
             _windows_partition_subscription: windows_partition_subscription,
+            _language_subscription: language_subscription,
             download_session: ManagedDownloadSession::default(),
             downloads_open: false,
             write_session: ReviewedWriteSession::default(),
@@ -423,7 +445,10 @@ impl BootableView {
     fn toggle_catalog(&mut self, cx: &mut Context<Self>) {
         self.catalog_open = !self.catalog_open;
         if !self.catalog_open {
-            self.status = format!("Catalog closed • {}", self.review_readiness().guidance());
+            self.status = format!(
+                "Catalog closed • {}",
+                self.review_readiness().guidance_in(self.locale)
+            );
             cx.notify();
             return;
         }
@@ -1329,6 +1354,30 @@ impl BootableView {
         }
     }
 
+    /// Applies a language choice (`None` follows the system), persists it, and
+    /// refreshes everything that was cached from the previous language.
+    fn set_language(
+        &mut self,
+        language: Option<Locale>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.preferences.language == language {
+            return;
+        }
+        self.preferences.language = language;
+        self.locale = self.preferences.locale();
+        // Cached status text came from the previous language; replace it.
+        self.status = self.review_readiness().guidance_in(self.locale).into();
+        self.save_preferences();
+        let locale = self.locale;
+        self.language_select.update(cx, |select, cx| {
+            select.set_items(language_choices(locale), window, cx);
+            select.set_selected_index(language_index(language), window, cx);
+        });
+        cx.notify();
+    }
+
     fn toggle_help(&mut self, cx: &mut Context<Self>) {
         self.help_open = !self.help_open;
         cx.notify();
@@ -1547,7 +1596,7 @@ impl BootableView {
             cx.notify();
             return;
         }
-        self.status = self.review_readiness().guidance().into();
+        self.status = self.review_readiness().guidance_in(self.locale).into();
         cx.notify();
     }
 
@@ -1811,7 +1860,11 @@ impl BootableView {
                                     div()
                                         .text_sm()
                                         .font_weight(FontWeight::BOLD)
-                                        .child(format!("{} · {}", progress.phase, progress.message)),
+                                        .child(format!(
+                                            "{} · {}",
+                                            progress.phase.label_in(self.locale),
+                                            progress.message
+                                        )),
                                 )
                                 .child(
                                     div()
@@ -3912,7 +3965,7 @@ impl BootableView {
                 let selected = self.selected_device == Some(index);
                 let blocked = !device.is_eligible_target();
                 let border = if selected { 0x36d3b4 } else { 0x283345 };
-                let status = target_eligibility_label(device);
+                let status = target_eligibility_label_in(self.locale, device);
                 div()
                     .id(("device", index))
                     .flex()
@@ -3932,10 +3985,13 @@ impl BootableView {
                                 cx.notify();
                             }))
                     })
+                    .gap_3()
                     .child(
                         div()
                             .flex()
                             .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
                             .gap_1()
                             .child(
                                 div()
@@ -3955,6 +4011,7 @@ impl BootableView {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_shrink_0()
                             .items_end()
                             .gap_1()
                             .child(
@@ -3991,7 +4048,10 @@ impl BootableView {
 
     fn selected_device_details(&self) -> Option<impl IntoElement> {
         let device = self.devices.get(self.selected_device?)?;
-        let rows = device_details(device)
+        let locale = self.locale;
+        // Translated labels (German, Russian) run longer than the English ones.
+        let label_width = if locale.is_source() { 84. } else { 112. };
+        let rows = device_details_in(locale, device)
             .into_iter()
             .map(|row| {
                 div()
@@ -3999,7 +4059,7 @@ impl BootableView {
                     .gap_2()
                     .child(
                         div()
-                            .w(px(84.))
+                            .w(px(label_width))
                             .flex_shrink_0()
                             .text_xs()
                             .text_color(rgb(0x6f8299))
@@ -4036,7 +4096,7 @@ impl BootableView {
     }
 
     fn help_overlay(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let sections = HELP_SECTIONS
+        let sections = help_sections(self.locale)
             .iter()
             .map(|section| {
                 div()
@@ -4060,6 +4120,8 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .child(div().text_sm().child(entry.action))
                                     .child(
                                         div()
@@ -4126,7 +4188,12 @@ impl BootableView {
                                     })),
                             ),
                     )
-                    .child(div().text_sm().text_color(rgb(0xa9b8c9)).child(HELP_INTRO))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(0xa9b8c9))
+                            .child(help_intro(self.locale)),
+                    )
                     .children(sections),
             )
     }
@@ -4314,6 +4381,16 @@ impl BootableView {
             )
     }
 
+    /// The header language picker: "Language: <name>" or "Language: System
+    /// default (<name>)". Mirrors the terminal's `L` key, same order and labels.
+    fn language_control(&self) -> impl IntoElement {
+        div().flex_shrink_0().w(px(310.)).max_w_full().child(
+            Select::new(&self.language_select)
+                .menu_width(px(310.))
+                .placeholder(language_display(self.locale, self.preferences.language)),
+        )
+    }
+
     fn header_bar(&self, cx: &mut Context<Self>, compact: bool) -> impl IntoElement {
         let advanced_label = if self.advanced {
             "Hide options"
@@ -4325,6 +4402,9 @@ impl BootableView {
             .items_center()
             .justify_between()
             .gap_3()
+            // Translated labels and the language picker can exceed one row;
+            // let the actions drop below the brand instead of being clipped.
+            .when(!compact, |header| header.flex_wrap())
             .when(compact, |header| {
                 header.flex_col().items_start().justify_start().gap_2()
             })
@@ -4400,6 +4480,9 @@ impl BootableView {
                     .flex()
                     .items_center()
                     .when(compact, |actions| actions.w_full().flex_wrap())
+                    .when(!compact, |actions| {
+                        actions.flex_wrap().justify_end().ml_auto().max_w_full()
+                    })
                     .gap_2()
                     .child(
                         Button::new("downloads")
@@ -4444,6 +4527,7 @@ impl BootableView {
                             .when(self.help_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_help(cx))),
                     )
+                    .child(self.language_control())
                     .child(
                         Button::new("refresh")
                             .compact()
@@ -4460,6 +4544,7 @@ impl BootableView {
             self.selected_device
                 .and_then(|index| self.devices.get(index)),
         );
+        let titles = WorkspaceProgress::step_titles(self.locale);
         div()
             .flex()
             .items_center()
@@ -4469,11 +4554,11 @@ impl BootableView {
             .border_1()
             .border_color(rgb(0x243244))
             .bg(rgb(0x0f1925))
-            .child(workspace_step("1", "Source", progress.source))
+            .child(workspace_step("1", titles[0], progress.source))
             .child(div().flex_1().h(px(1.)).bg(rgb(0x243244)))
-            .child(workspace_step("2", "Target", progress.target))
+            .child(workspace_step("2", titles[1], progress.target))
             .child(div().flex_1().h(px(1.)).bg(rgb(0x243244)))
-            .child(workspace_step("3", "Review & write", progress.review))
+            .child(workspace_step("3", titles[2], progress.review))
     }
 
     fn setup_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -4594,7 +4679,7 @@ impl BootableView {
                             .text_xs()
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(0x5bd7c0))
-                            .child(removable_media_status(&self.devices)),
+                            .child(removable_media_status_in(self.locale, &self.devices)),
                     ),
             )
             .child(
@@ -4663,7 +4748,7 @@ impl BootableView {
                                         self.selected_device
                                             .and_then(|index| self.devices.get(index)),
                                     )
-                                    .status(),
+                                    .status_in(self.locale),
                                 ),
                             )
                             .when_some(
@@ -4732,7 +4817,7 @@ impl BootableView {
                             Button::new("preview")
                                 .primary()
                                 .icon(Icon::empty().path("ui/review.svg"))
-                                .label(readiness.action_label())
+                                .label(readiness.action_label_in(self.locale))
                                 .disabled(readiness != ReviewReadiness::Ready)
                                 .on_click(cx.listener(|this, _, _, cx| this.preview_plan(cx))),
                         )
@@ -4902,6 +4987,72 @@ impl Render for BootableView {
                 |root| root.child(self.help_overlay(cx)),
             )
     }
+}
+
+/// One entry of the language picker: `None` follows the system language.
+#[derive(Clone)]
+struct LanguageChoice {
+    language: Option<Locale>,
+    /// Label in the dropdown list.
+    title: SharedString,
+    /// Text shown on the closed control.
+    display: SharedString,
+}
+
+impl SelectItem for LanguageChoice {
+    type Value = Option<Locale>;
+
+    fn title(&self) -> SharedString {
+        self.title.clone()
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        Some(self.display.clone().into_any_element())
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.language
+    }
+}
+
+/// `Language: <native name>` or `Language: System default (<native name>)`.
+fn language_display(active: Locale, language: Option<Locale>) -> String {
+    let label = Message::LanguageLabel.text(active);
+    format!("{label}: {}", language_title(active, language))
+}
+
+fn language_title(active: Locale, language: Option<Locale>) -> String {
+    match language {
+        Some(locale) => locale.native_name().to_string(),
+        None => format!(
+            "{} ({})",
+            Message::LanguageSystemDefault.text(active),
+            active.native_name()
+        ),
+    }
+}
+
+/// System default first, then every translated locale by its own name.
+fn language_choices(active: Locale) -> Vec<LanguageChoice> {
+    std::iter::once(None)
+        .chain(Locale::available().iter().copied().map(Some))
+        .map(|language| LanguageChoice {
+            language,
+            title: language_title(active, language).into(),
+            display: language_display(active, language).into(),
+        })
+        .collect()
+}
+
+fn language_index(language: Option<Locale>) -> Option<gpui_component::IndexPath> {
+    let row = match language {
+        None => Some(0),
+        Some(locale) => Locale::available()
+            .iter()
+            .position(|candidate| *candidate == locale)
+            .map(|position| position + 1),
+    }?;
+    Some(gpui_component::IndexPath::default().row(row))
 }
 
 fn workspace_step(
