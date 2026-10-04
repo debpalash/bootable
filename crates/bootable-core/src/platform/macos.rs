@@ -197,6 +197,11 @@ fn windows_write(
     control: &OperationControl,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<()> {
+    if plan.options.windows_boot_firmware.includes_legacy_bios() {
+        return Err(Error::PlatformUnavailable(
+            "legacy BIOS boot sectors are currently written only by the Linux adapter".into(),
+        ));
+    }
     let source = attach_iso(&plan.image.path)?;
     let buffered_path = buffered_disk_path(&target.path)?;
     let mut target_prepared = false;

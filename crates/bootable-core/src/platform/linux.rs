@@ -6,6 +6,7 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use crate::bios_boot;
 use crate::error::{Error, Result, io_error};
 use crate::model::{
     Device, DeviceId, MountPoint, Progress, ProgressPhase, WindowsPartitionScheme, WindowsPayload,
@@ -415,8 +416,20 @@ fn windows_write(
         ],
     )?;
 
+    let legacy_bios = plan.options.windows_boot_firmware.includes_legacy_bios();
+    if legacy_bios && partition_scheme != WindowsPartitionScheme::Mbr {
+        return Err(Error::UnsupportedImage(
+            "legacy BIOS boot requires the MBR partition scheme".into(),
+        ));
+    }
     let result = (|| {
         control.checkpoint()?;
+        if legacy_bios {
+            // Everything that can be checked without touching the target is
+            // checked first, so an unbootable result is refused before erasure.
+            bios_boot::preflight_tree(&iso_mount)?;
+            require_512_byte_sectors(&target.path)?;
+        }
         progress(Progress {
             phase: ProgressPhase::Preparing,
             completed: 0,
@@ -496,6 +509,13 @@ fn windows_write(
             } else {
                 Ok(())
             }
+        })
+        .and_then(|()| {
+            if legacy_bios {
+                bios_boot::preflight_tree(&usb_mount)
+            } else {
+                Ok(())
+            }
         });
         let sync_result = if copy_result.is_ok() {
             run_status("sync", [OsStr::new("-f"), usb_mount.as_os_str()])
@@ -506,6 +526,18 @@ fn windows_write(
         copy_result?;
         sync_result?;
         unmount_result?;
+        if legacy_bios {
+            // After the filesystem is unmounted and flushed, so no cached
+            // write of the old boot sector can race with ours.
+            control.checkpoint()?;
+            progress(Progress {
+                phase: ProgressPhase::Verifying,
+                completed: plan.image.size,
+                total: Some(plan.image.size),
+                message: "Installing and verifying the legacy BIOS boot sectors".into(),
+            });
+            install_bios_boot_sectors(&target.path)?;
+        }
         Ok(())
     })();
 
@@ -520,12 +552,49 @@ fn windows_write(
             WindowsPartitionScheme::Gpt => {
                 format!("Windows installer ready on FAT32 (partition type {BASIC_DATA_GUID})")
             }
+            WindowsPartitionScheme::Mbr if legacy_bios => {
+                "Windows installer ready on active MBR FAT32 media for UEFI and legacy BIOS (CSM) systems".into()
+            }
             WindowsPartitionScheme::Mbr => {
                 "Windows installer ready on active MBR FAT32 media for UEFI systems".into()
             }
         },
     });
     Ok(())
+}
+
+/// Writes the BIOS boot sectors through the whole-disk node and re-reads them.
+fn install_bios_boot_sectors(disk: &Path) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(disk)
+        .map_err(|error| io_error(disk, error))?;
+    bios_boot::install(&mut file)?;
+    file.sync_all().map_err(|error| io_error(disk, error))?;
+    bios_boot::verify(&mut file)
+}
+
+/// The BIOS boot record addresses 512-byte sectors; 4Kn drives are refused
+/// before erasure rather than after formatting.
+fn require_512_byte_sectors(disk: &Path) -> Result<()> {
+    let name = disk
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| Error::DeviceNotFound(disk.display().to_string()))?;
+    let path = Path::new("/sys/block")
+        .join(name)
+        .join("queue/logical_block_size");
+    let size = fs::read_to_string(&path).map_err(|error| io_error(&path, error))?;
+    if size.trim() == "512" {
+        Ok(())
+    } else {
+        Err(Error::UnsupportedImage(format!(
+            "legacy BIOS boot requires 512-byte logical sectors but {} reports {}",
+            disk.display(),
+            size.trim()
+        )))
+    }
 }
 
 fn apply_windows_ca_2023(root: &Path, control: &OperationControl) -> Result<()> {

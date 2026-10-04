@@ -108,6 +108,11 @@ fn windows_write(
     control: &OperationControl,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<()> {
+    if plan.options.windows_boot_firmware.includes_legacy_bios() {
+        return Err(Error::PlatformUnavailable(
+            "legacy BIOS boot sectors are currently written only by the Linux adapter".into(),
+        ));
+    }
     if plan.image.size.saturating_add(WINDOWS_FREE_SPACE_ALLOWANCE) > WINDOWS_FORMAT_LIMIT {
         return Err(Error::UnsupportedImage(
             "the Windows installer is too large for Windows' native FAT32 formatter; use Bootable on Linux for this image"

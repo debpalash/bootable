@@ -330,6 +330,10 @@ impl WritePlan {
 pub struct WriteOptions {
     pub windows: WindowsExperienceOptions,
     pub windows_partition_scheme: WindowsPartitionScheme,
+    /// Which firmware the Windows installer stick must boot on. Defaults to UEFI
+    /// only, so serialized plans written before this field existed still load.
+    #[serde(default)]
+    pub windows_boot_firmware: WindowsBootFirmware,
     pub bad_block_check: BadBlockCheck,
 }
 
@@ -357,6 +361,46 @@ impl std::str::FromStr for WindowsPartitionScheme {
             "gpt" => Ok(Self::Gpt),
             "mbr" => Ok(Self::Mbr),
             _ => Err("expected gpt or mbr".into()),
+        }
+    }
+}
+
+/// Firmware targets for Windows installer media (Rufus: "Target system").
+///
+/// `BiosAndUefi` additionally installs MBR boot code and a FAT32 boot record so
+/// legacy BIOS/CSM machines can start `bootmgr`. It requires the MBR scheme.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WindowsBootFirmware {
+    #[default]
+    Uefi,
+    BiosAndUefi,
+}
+
+impl WindowsBootFirmware {
+    pub fn includes_legacy_bios(self) -> bool {
+        matches!(self, Self::BiosAndUefi)
+    }
+
+    pub const ALL: [Self; 2] = [Self::Uefi, Self::BiosAndUefi];
+}
+
+impl fmt::Display for WindowsBootFirmware {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Uefi => "UEFI",
+            Self::BiosAndUefi => "BIOS + UEFI (CSM)",
+        })
+    }
+}
+
+impl std::str::FromStr for WindowsBootFirmware {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "uefi" => Ok(Self::Uefi),
+            "bios" | "bios-uefi" | "bios+uefi" | "csm" => Ok(Self::BiosAndUefi),
+            _ => Err("expected uefi or bios-uefi".into()),
         }
     }
 }
