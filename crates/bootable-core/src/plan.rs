@@ -20,6 +20,7 @@ pub(crate) fn build_with_options(
             "Windows setup options apply only to Windows installer images".into(),
         ));
     }
+    validate_boot_firmware(&image, &target, &options)?;
     #[cfg(not(target_os = "linux"))]
     if options.bad_block_check.passes() > 0 {
         return Err(Error::PlatformUnavailable(
@@ -97,6 +98,42 @@ pub(crate) fn build_with_options(
         required_tools,
         confirmation_phrase,
     })
+}
+
+/// Legacy BIOS (CSM) preflight: decided from the plan alone, before any device
+/// access, so the UI can explain why the option is unavailable.
+fn validate_boot_firmware(
+    image: &ImageReport,
+    target: &Device,
+    options: &WriteOptions,
+) -> Result<()> {
+    if !options.windows_boot_firmware.includes_legacy_bios() {
+        return Ok(());
+    }
+    if !matches!(&image.kind, ImageKind::WindowsInstaller { .. }) {
+        return Err(Error::UnsupportedImage(
+            "BIOS + UEFI target applies only to Windows installer images".into(),
+        ));
+    }
+    if options.windows_partition_scheme != crate::model::WindowsPartitionScheme::Mbr {
+        return Err(Error::UnsupportedImage(
+            "legacy BIOS boot requires the MBR partition scheme; GPT media boots only under UEFI"
+                .into(),
+        ));
+    }
+    platform_writes_bios_boot_sectors(target)
+}
+
+#[cfg(target_os = "linux")]
+fn platform_writes_bios_boot_sectors(target: &Device) -> Result<()> {
+    crate::bios_boot::validate_capacity(target.capacity)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn platform_writes_bios_boot_sectors(_target: &Device) -> Result<()> {
+    Err(Error::PlatformUnavailable(
+        "legacy BIOS boot sectors are currently written only by the Linux adapter".into(),
+    ))
 }
 
 fn raw_required_tools() -> Vec<String> {
@@ -355,6 +392,20 @@ fn windows_steps(options: &WriteOptions) -> Vec<PlanStep> {
             },
         );
     }
+    if options.windows_boot_firmware.includes_legacy_bios() {
+        steps.insert(
+            steps.len() - 1,
+            PlanStep {
+                title: "Install the Bootable BIOS MBR boot code and FAT32 boot record that loads bootmgr (experimental: not yet validated on real hardware), keep the partition active, and verify them".into(),
+                destructive: true,
+            },
+        );
+        if let Some(last) = steps.last_mut() {
+            last.title =
+                "Verify UEFI and legacy BIOS boot files, payload chunks, and filesystem limits"
+                    .into();
+        }
+    }
     steps
 }
 
@@ -579,6 +630,118 @@ mod tests {
         let error = build(image(ImageKind::HybridIso), target).expect_err("unsafe target");
 
         assert!(matches!(error, Error::UnsafeTarget(_)));
+    }
+
+    fn windows_image() -> ImageReport {
+        image(ImageKind::WindowsInstaller {
+            payload: WindowsPayload::Esd,
+            payload_size: Some(3 * 1024 * 1024 * 1024),
+        })
+    }
+
+    fn bios_options(scheme: crate::model::WindowsPartitionScheme) -> WriteOptions {
+        WriteOptions {
+            windows_partition_scheme: scheme,
+            windows_boot_firmware: crate::model::WindowsBootFirmware::BiosAndUefi,
+            ..WriteOptions::default()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_bios_plan_adds_boot_sector_step_before_final_verification() {
+        let plan = build_with_options(
+            windows_image(),
+            device(),
+            bios_options(crate::model::WindowsPartitionScheme::Mbr),
+        )
+        .expect("BIOS + UEFI MBR plan");
+
+        let titles: Vec<_> = plan.steps.iter().map(|step| step.title.as_str()).collect();
+        let boot = titles
+            .iter()
+            .position(|title| title.contains("BIOS MBR boot code"))
+            .expect("boot sector step");
+        assert!(plan.steps[boot].destructive);
+        assert!(titles[boot].contains("experimental"));
+        assert_eq!(boot, titles.len() - 2);
+        assert!(titles[titles.len() - 1].contains("legacy BIOS boot files"));
+        // Same external tools as the UEFI-only MBR plan: the sectors are written in-process.
+        assert!(plan.required_tools.iter().any(|tool| tool == "parted"));
+    }
+
+    #[test]
+    fn legacy_bios_requires_mbr_and_a_windows_installer() {
+        let gpt = build_with_options(
+            windows_image(),
+            device(),
+            bios_options(crate::model::WindowsPartitionScheme::Gpt),
+        )
+        .expect_err("GPT cannot carry the BIOS boot chain");
+        assert!(gpt.to_string().contains("MBR"), "{gpt}");
+
+        let raw = build_with_options(
+            image(ImageKind::RawDiskImage),
+            device(),
+            bios_options(crate::model::WindowsPartitionScheme::Mbr),
+        )
+        .expect_err("raw images keep their own boot code");
+        assert!(matches!(raw, Error::UnsupportedImage(_)));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_bios_refuses_media_beyond_the_mbr_limit() {
+        let mut target = device();
+        target.capacity = 3 * 1024 * 1024 * 1024 * 1024;
+        let error = build_with_options(
+            windows_image(),
+            target,
+            bios_options(crate::model::WindowsPartitionScheme::Mbr),
+        )
+        .expect_err("larger than 2 TiB");
+        assert!(error.to_string().contains("2 TiB"), "{error}");
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn legacy_bios_is_reported_unavailable_off_linux() {
+        let error = build_with_options(
+            windows_image(),
+            device(),
+            bios_options(crate::model::WindowsPartitionScheme::Mbr),
+        )
+        .expect_err("adapter not implemented");
+        assert!(matches!(error, Error::PlatformUnavailable(_)));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn uefi_only_plans_are_unchanged_by_the_bios_option() {
+        let plan = build_with_options(
+            windows_image(),
+            device(),
+            WriteOptions {
+                windows_partition_scheme: crate::model::WindowsPartitionScheme::Mbr,
+                ..WriteOptions::default()
+            },
+        )
+        .expect("UEFI MBR plan");
+        assert!(plan.steps.iter().all(|step| !step.title.contains("BIOS")));
+    }
+
+    #[test]
+    fn write_options_without_the_firmware_field_default_to_uefi() {
+        let options: WriteOptions = serde_json::from_str(
+            r#"{"windows":{"bypass_hardware_requirements":false,"allow_offline_account":false,"local_account":null,"regional":null,"minimize_data_collection":false,"disable_bitlocker":false,"quality_of_life":false,"use_windows_ca_2023":false,"apply_skusi_policy":false,"force_s_mode":false},"windows_partition_scheme":"Mbr","bad_block_check":"Disabled"}"#,
+        )
+        .expect("older serialized options");
+        assert_eq!(
+            options.windows_boot_firmware,
+            crate::model::WindowsBootFirmware::Uefi
+        );
+        let bios: crate::model::WindowsBootFirmware = "bios-uefi".parse().expect("parse");
+        assert!(bios.includes_legacy_bios());
     }
 
     #[test]

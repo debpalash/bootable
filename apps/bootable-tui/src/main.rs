@@ -885,6 +885,7 @@ fn write_options(windows: WindowsArgs, bad_block_check: BadBlockCheck) -> WriteO
             force_s_mode: windows.force_windows_s_mode,
         },
         bad_block_check,
+        windows_boot_firmware: Default::default(),
     }
 }
 
