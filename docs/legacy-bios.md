@@ -68,9 +68,29 @@ Core pieces, all in `crates/bootable-core/src/bios_boot.rs`:
   partition, and clears the flag on the others; the disk signature (bytes 440-445) and partition
   table are preserved. `verify` re-reads and checks every one of these bytes. The Linux adapter
   runs both through the whole-disk node after the filesystem is unmounted and synced.
-- `preflight_tree` requires `bootmgr` (non-empty, at most 0x7F000 bytes), `boot/BCD`, and
-  `boot/boot.sdi`. It runs on the mounted source **before** any erasure and again on the written
-  media. ARM64 images, which have no BIOS `bootmgr`, are refused with a clear error.
+- `preflight_tree` requires `bootmgr` (non-empty, and at most 0x7F000 bytes **once rounded up to
+  whole clusters**, because the loader reads whole clusters), `boot/BCD`, and `boot/boot.sdi`. It
+  runs on the mounted source **before** any erasure using the cluster size dosfstools is expected to
+  pick for the device (`expected_cluster_bytes`), again against the exact cluster size read from the
+  new filesystem right after `mkfs.fat`, and again on the written media. ARM64 images, which have no
+  BIOS `bootmgr`, are refused with a clear error.
+- The boot sector itself refuses, **before** each cluster read, a cluster that would end past
+  2000:0000 + 0x7F000, so a corrupt, cyclic, or oversized chain can never overwrite the BIOS data
+  area (the previous code checked after the read).
+- `inspect_fat32` rejects a backup boot sector at sector 1 (FSInfo); it must be 0 or lie in 2..reserved.
+
+Writer ordering (Linux): every refusal that can be decided without touching the stick runs before
+the first destructive step. `write()` re-validates the reviewed plan itself (MBR scheme, 2 TiB limit
+against both the reviewed and the freshly discovered capacity, 512-byte logical sectors), mounts the
+source ISO read-only and checks `bootmgr`/`BCD`/`boot.sdi`, and only then unmounts the target's
+filesystems, runs the optional bad-block test, wipes, and partitions. The source mount is released on
+every exit path.
+
+Installing the boot sectors defends against automounters: both the partition and the disk node are
+unmounted and proven unmounted (a still-mounted partition aborts the install), cached blocks are
+dropped with `blockdev --flushbufs` before and after the write, the sectors are verified, udev is
+allowed to settle, and the partition is checked unmounted again before a second flush and verify.
+If something remounted it, the write fails instead of reporting success.
 
 Plan-level preflight (`plan.rs`): the option requires a Windows installer image, the MBR partition
 scheme, a target of at most 2 TiB, and the Linux adapter; otherwise planning fails with a specific
@@ -132,7 +152,14 @@ Required adapter work (parity invariant: both interfaces, same change):
   GRUB/Syslinux start it, not observed. Needed: boot a Windows 10 and a Windows 11 x64 ISO written
   by `bootable write` under QEMU/SeaBIOS and on at least two physical CSM machines, into Setup.
 - The assumed 0x7F000-byte `bootmgr` ceiling is a conservative memory bound, not measured against
-  current ISOs; real files above it are refused with a clear error.
+  current ISOs; real files above it are refused with a clear error. The new pre-read bound check in
+  the boot sector was exercised only by the 80 KiB stub at 1 and 2 sectors per cluster (boots
+  unchanged); the boundary itself (a file or cluster chain that reaches 0x9F000) was reasoned about
+  and unit-tested on the Rust side but not booted, because the stub cannot be made that large.
+- The post-install verify reads through the kernel page cache after `blockdev --flushbufs`, not
+  `O_DIRECT` (alignment needs `unsafe`, which the workspace forbids). A USB stick that acknowledges a
+  write and then returns stale data from its own cache would not be caught, and the automounter
+  defence was reasoned about but not exercised against a real desktop session.
 - The full Linux writer path (`parted` -> `mkfs.fat` -> copy -> `bios_boot::install` on a real
   block device) was not run because it needs root; only the in-process portions and the image-file
   equivalent were exercised. Extend `scripts/loop-write-smoke.sh` for a privileged run.

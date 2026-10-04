@@ -510,7 +510,13 @@ fn windows_write(
     let result = (|| {
         control.checkpoint()?;
         if legacy_bios {
-            bios_boot::preflight_tree(&iso_mount)?;
+            // The loader reads whole clusters, so the limit depends on the
+            // cluster size mkfs will choose; estimate it now (before erasure)
+            // and check the exact size once the filesystem exists.
+            bios_boot::preflight_tree(
+                &iso_mount,
+                bios_boot::expected_cluster_bytes(target.capacity),
+            )?;
         }
         prepare_target(plan, target, control, progress)?;
         progress(Progress {
@@ -575,6 +581,13 @@ fn windows_write(
             ],
         )?;
         unmount_device_if_mounted(&partition)?;
+        let cluster_bytes = if legacy_bios {
+            let cluster_bytes = partition_cluster_bytes(&partition)?;
+            bios_boot::preflight_tree(&iso_mount, cluster_bytes)?;
+            cluster_bytes
+        } else {
+            0
+        };
         run_status("mount", [partition.as_os_str(), usb_mount.as_os_str()])?;
 
         let copy_result = copy_windows_tree(
@@ -595,7 +608,7 @@ fn windows_write(
         })
         .and_then(|()| {
             if legacy_bios {
-                bios_boot::preflight_tree(&usb_mount)
+                bios_boot::preflight_tree(&usb_mount, cluster_bytes)
             } else {
                 Ok(())
             }
@@ -644,6 +657,15 @@ fn windows_write(
         },
     });
     Ok(())
+}
+
+/// The cluster size of the freshly made FAT32 filesystem, from its boot sector.
+fn partition_cluster_bytes(partition: &Path) -> Result<u64> {
+    let mut sector = [0_u8; bios_boot::SECTOR_SIZE];
+    File::open(partition)
+        .and_then(|mut file| file.read_exact(&mut sector))
+        .map_err(|error| io_error(partition, error))?;
+    bios_boot::cluster_bytes(&sector)
 }
 
 /// Writes the BIOS boot sectors through the whole-disk node and re-reads them.

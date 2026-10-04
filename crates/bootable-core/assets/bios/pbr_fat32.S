@@ -12,7 +12,9 @@
 # with BS_DrvNum (0x40) = DL and BPB_HiddSec = partition start LBA.
 #
 # Limits (validated by the installer before this code is written):
-# 512-byte sectors, <= 64 sectors/cluster, BOOTMGR <= 0x7F000 bytes.
+# 512-byte sectors, <= 64 sectors/cluster, BOOTMGR rounded up to whole clusters
+# <= 0x7F000 bytes (the loader refuses, before reading, any cluster that would
+# cross 2000:0000 + 0x7F000, so the BIOS data area is never overwritten).
 	.code16
 	.text
 	.globl _start
@@ -96,17 +98,19 @@ found:
 	popw	%es
 load:
 	movl	%eax, V_CLUS(%bp)
+	movzbw	0x0d(%bp), %ax
+	shlw	$5, %ax			# 512 bytes * sectors / 16 = paragraphs
+	movw	%es, %cx
+	addw	%ax, %cx		# segment after this cluster
+	cmpw	$0x9f00, %cx		# the read would pass 9F000: also stops a cyclic chain
+	ja	missing			# checked BEFORE the read, so memory above is never touched
+	pushw	%cx
+	movl	V_CLUS(%bp), %eax
 	call	clus2lba
 	movzbw	0x0d(%bp), %cx
 	xorw	%bx, %bx
 	call	read
-	movzbw	0x0d(%bp), %ax
-	shlw	$5, %ax			# 512 bytes * sectors / 16 = paragraphs
-	movw	%es, %cx
-	addw	%ax, %cx
-	movw	%cx, %es
-	cmpw	$0x9f00, %cx		# corrupt/cyclic chain guard
-	jae	missing
+	popw	%es
 	movl	V_CLUS(%bp), %eax
 	call	nextclus
 	cmpl	$0x0ffffff8, %eax
