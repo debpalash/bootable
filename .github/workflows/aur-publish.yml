@@ -1,0 +1,119 @@
+name: AUR publish
+
+# Keeps the AUR source packages bootable-tui and bootable-gui (one pkgbase, "bootable") in step
+# with each stable release by bumping pkgver, the source checksum, and .SRCINFO.
+#
+# Disabled until the AUR_SSH_PRIVATE_KEY repository secret exists: without it the job reports a
+# notice and succeeds without pushing anything. Use a key dedicated to this job, registered on the
+# AUR account. This is separate from package-manifests.yml, which never pushes anywhere (it renders
+# the bootable-bin manifests for manual submission).
+#
+# Triggers:
+#   workflow_run       a manually dispatched Release workflow finished successfully.
+#   workflow_dispatch  re-run for a version, for example after adding the secret.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable version to publish, for example 0.1.5 (default is the Cargo.toml version)
+        required: false
+        type: string
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Update AUR bootable package
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'workflow_dispatch')
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Check that publishing is configured
+        id: gate
+        shell: bash
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::AUR_SSH_PRIVATE_KEY is not set; skipping AUR publish."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install tools
+        if: steps.gate.outputs.enabled == 'true'
+        run: pacman -Syu --noconfirm --needed git openssh
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve the release version
+        id: version
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION#v}"
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing to publish '$version': only stable MAJOR.MINOR.PATCH releases are supported." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Update and push the AUR repository
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # makepkg refuses to run as root.
+          useradd -m builder
+          install -d -m 0700 -o builder -g builder /home/builder/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > /home/builder/.ssh/aur
+          # Pinned AUR host key (SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4).
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' > /home/builder/.ssh/known_hosts
+          chmod 600 /home/builder/.ssh/aur
+          chown -R builder:builder /home/builder/.ssh
+          su builder -c "VERSION='$VERSION' bash -s" <<'BUILDER'
+          set -euo pipefail
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes'
+          git config --global user.name debpalash
+          git config --global user.email 4178343+debpalash@users.noreply.github.com
+          git clone ssh://aur@aur.archlinux.org/bootable.git ~/aur
+          cd ~/aur
+          current="$(sed -n 's/^pkgver=//p' PKGBUILD)"
+          if [ "$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -1)" != "$VERSION" ] || [ "$current" = "$VERSION" ]; then
+            echo "::notice::AUR already at $current; nothing to do for $VERSION."
+            exit 0
+          fi
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/; s/^pkgrel=.*/pkgrel=1/; s/^sha256sums=.*/sha256sums=('SKIP')/" PKGBUILD
+          sum="$(curl -fsSL "https://github.com/debpalash/bootable/archive/refs/tags/v$VERSION.tar.gz" | sha256sum | cut -d' ' -f1)"
+          test "${#sum}" -eq 64
+          sed -i "s/^sha256sums=.*/sha256sums=('$sum')/" PKGBUILD
+          makepkg --verifysource --skippgpcheck
+          makepkg --printsrcinfo > .SRCINFO
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to $VERSION"
+          git push origin master
+          BUILDER

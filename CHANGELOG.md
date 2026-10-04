@@ -23,6 +23,15 @@ All notable changes to Bootable are documented here.
   cosign-signed checksums. Builds stay unsigned until secrets are configured (`docs/signing.md`).
 - Added comparison and roadmap pages to the website.
 
+## 0.1.4 — 2026-10-02
+
+- Added a safe progress protocol for Omarchy and other external clients, streaming catalog
+  download and write progress as JSON, plus removable-media status in both interfaces.
+- Polished shared GUI and TUI discovery, keeping their capabilities and information hierarchy in
+  step.
+- Fixed the Linux release job so the packaged GUI is smoke-tested under a software Vulkan device.
+- Published to the AUR as `bootable-tui` and `bootable-gui` (source builds from this release).
+
 ## 0.1.1 — 2026-08-27
 
 - Added native Linux AppImage, DEB, and RPM packages, each containing the desktop app, TUI, and

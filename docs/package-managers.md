@@ -163,3 +163,15 @@ Release workflow publishes itself.
 | winget `validate`/install, Scoop install, `brew audit`/install, `flatpak-builder`, `nix build` | **not run** (tools or platforms unavailable) |
 
 Treat the unrun checks as required steps before each first submission.
+
+## AUR source packages (automated)
+
+`bootable-tui` and `bootable-gui` (AUR pkgbase `bootable`, built from the release tarball) are
+updated by `.github/workflows/aur-publish.yml` after each stable Release run. It bumps `pkgver`,
+the source checksum, and `.SRCINFO`, then pushes to `ssh://aur@aur.archlinux.org/bootable.git`.
+
+- **Off by default:** the job skips with a notice until the `AUR_SSH_PRIVATE_KEY` repository secret
+  exists. Use an SSH key dedicated to this job and register its public half on the AUR account.
+- **Re-run:** dispatch the workflow with a version to publish after adding the secret.
+- **Not covered:** `bootable-bin` is rendered by `package-manifests.yml` for manual submission, and
+  the `-git` packages for `sshbox`, `zig-bypassdpi`, and the Omarchy plugin live in their own repos.
