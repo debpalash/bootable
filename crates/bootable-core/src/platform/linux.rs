@@ -62,17 +62,12 @@ impl NativePlatform {
 
         let target = refresh_target(plan)?;
         control.checkpoint()?;
-        unmount_all(&target)?;
-        progress(Progress {
-            phase: ProgressPhase::Preparing,
-            completed: 0,
-            total: None,
-            message: format!("Target identity verified: {}", target.display_name()),
-        });
-        check_bad_blocks(&target, plan.options.bad_block_check, control, progress)?;
 
         match plan.strategy {
-            WriteStrategy::RawVerified => raw_write(plan, &target, control, progress),
+            WriteStrategy::RawVerified => {
+                prepare_target(plan, &target, control, progress)?;
+                raw_write(plan, &target, control, progress)
+            }
             WriteStrategy::WindowsFat32 {
                 payload,
                 partition_scheme,
@@ -390,6 +385,78 @@ fn unmount_all(target: &Device) -> Result<()> {
     Ok(())
 }
 
+/// The first destructive step: unmount the target's filesystems, then run the
+/// optional bad-block test. Callers run every validation that can refuse the
+/// plan before calling this.
+fn prepare_target(
+    plan: &WritePlan,
+    target: &Device,
+    control: &OperationControl,
+    progress: &mut dyn FnMut(Progress),
+) -> Result<()> {
+    unmount_all(target)?;
+    progress(Progress {
+        phase: ProgressPhase::Preparing,
+        completed: 0,
+        total: None,
+        message: format!("Target identity verified: {}", target.display_name()),
+    });
+    check_bad_blocks(target, plan.options.bad_block_check, control, progress)
+}
+
+/// Read-only loop mount of the source ISO that is unmounted on every exit path.
+struct IsoMount {
+    path: PathBuf,
+    mounted: bool,
+}
+
+impl IsoMount {
+    fn mount(image: &Path, path: PathBuf) -> Result<Self> {
+        run_status(
+            "mount",
+            [
+                OsStr::new("-o"),
+                OsStr::new("loop,ro"),
+                image.as_os_str(),
+                path.as_os_str(),
+            ],
+        )?;
+        Ok(Self {
+            path,
+            mounted: true,
+        })
+    }
+
+    fn unmount(mut self) -> Result<()> {
+        self.mounted = false;
+        run_status("umount", [self.path.as_os_str()])
+    }
+}
+
+impl Drop for IsoMount {
+    fn drop(&mut self) {
+        if self.mounted {
+            let _ = run_status("umount", [self.path.as_os_str()]);
+        }
+    }
+}
+
+/// Legacy BIOS limits decided from the plan and the freshly discovered target.
+/// The writer repeats them itself: a plan delivered by a helper client was not
+/// necessarily built by this crate's planner.
+fn validate_bios_plan(
+    partition_scheme: WindowsPartitionScheme,
+    plan_capacity: u64,
+    target_capacity: u64,
+) -> Result<()> {
+    if partition_scheme != WindowsPartitionScheme::Mbr {
+        return Err(Error::UnsupportedImage(
+            "legacy BIOS boot requires the MBR partition scheme".into(),
+        ));
+    }
+    bios_boot::validate_capacity(plan_capacity.max(target_capacity))
+}
+
 fn raw_write(
     plan: &WritePlan,
     target: &Device,
@@ -424,36 +491,28 @@ fn windows_write(
         WindowsPartitionScheme::Mbr => "parted",
     })?;
 
+    // Every check that can refuse the plan runs before the first destructive
+    // step (unmount, bad-block test, wipefs, partitioning, mkfs).
+    let legacy_bios = plan.options.windows_boot_firmware.includes_legacy_bios();
+    if legacy_bios {
+        validate_bios_plan(partition_scheme, plan.target.capacity, target.capacity)?;
+        require_512_byte_sectors(&target.path)?;
+    }
+
     let workspace = tempfile::tempdir().map_err(|error| io_error("temporary directory", error))?;
-    let iso_mount = workspace.path().join("iso");
+    let iso_mount_path = workspace.path().join("iso");
     let usb_mount = workspace.path().join("usb");
-    fs::create_dir_all(&iso_mount).map_err(|error| io_error(&iso_mount, error))?;
+    fs::create_dir_all(&iso_mount_path).map_err(|error| io_error(&iso_mount_path, error))?;
     fs::create_dir_all(&usb_mount).map_err(|error| io_error(&usb_mount, error))?;
 
-    run_status(
-        "mount",
-        [
-            OsStr::new("-o"),
-            OsStr::new("loop,ro"),
-            plan.image.path.as_os_str(),
-            iso_mount.as_os_str(),
-        ],
-    )?;
-
-    let legacy_bios = plan.options.windows_boot_firmware.includes_legacy_bios();
-    if legacy_bios && partition_scheme != WindowsPartitionScheme::Mbr {
-        return Err(Error::UnsupportedImage(
-            "legacy BIOS boot requires the MBR partition scheme".into(),
-        ));
-    }
+    let iso = IsoMount::mount(&plan.image.path, iso_mount_path)?;
+    let iso_mount = iso.path.clone();
     let result = (|| {
         control.checkpoint()?;
         if legacy_bios {
-            // Everything that can be checked without touching the target is
-            // checked first, so an unbootable result is refused before erasure.
             bios_boot::preflight_tree(&iso_mount)?;
-            require_512_byte_sectors(&target.path)?;
         }
+        prepare_target(plan, target, control, progress)?;
         progress(Progress {
             phase: ProgressPhase::Preparing,
             completed: 0,
@@ -565,7 +624,7 @@ fn windows_write(
         Ok(())
     })();
 
-    let iso_unmount_result = run_status("umount", [iso_mount.as_os_str()]);
+    let iso_unmount_result = iso.unmount();
     result?;
     iso_unmount_result?;
     progress(Progress {
@@ -690,6 +749,10 @@ fn require_512_byte_sectors(disk: &Path) -> Result<()> {
         .join(name)
         .join("queue/logical_block_size");
     let size = fs::read_to_string(&path).map_err(|error| io_error(&path, error))?;
+    check_logical_block_size(disk, &size)
+}
+
+fn check_logical_block_size(disk: &Path, size: &str) -> Result<()> {
     if size.trim() == "512" {
         Ok(())
     } else {
@@ -1253,6 +1316,26 @@ mod tests {
         let after =
             still_mounted_error(Path::new("/dev/sdb1"), &["/mnt".to_owned()], true).to_string();
         assert!(after.contains("mounted again") && after.contains("old boot sector"));
+    }
+
+    #[test]
+    fn bios_plan_is_revalidated_by_the_writer_before_any_destructive_step() {
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 8 << 30, 8 << 30).expect("small MBR");
+        validate_bios_plan(WindowsPartitionScheme::Gpt, 8 << 30, 8 << 30)
+            .expect_err("GPT cannot carry a BIOS boot record");
+        // Either the reviewed or the freshly discovered capacity can exceed 2 TiB.
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 3 << 40, 8 << 30)
+            .expect_err("reviewed plan over 2 TiB");
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 8 << 30, 3 << 40)
+            .expect_err("refreshed device over 2 TiB");
+    }
+
+    #[test]
+    fn four_k_native_drives_are_refused_for_bios_boot() {
+        let disk = Path::new("/dev/sdz");
+        check_logical_block_size(disk, "512\n").expect("512");
+        check_logical_block_size(disk, "4096\n").expect_err("4Kn");
+        check_logical_block_size(disk, "").expect_err("unreadable");
     }
 
     #[test]
