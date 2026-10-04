@@ -368,7 +368,7 @@ pub(crate) fn download_iso(
             phase: ProgressPhase::Verifying,
             completed: 0,
             total,
-            message: if matches!(resolved.signature, Some(ManifestSignature::Verified(_))) {
+            message: if integrity_state(Some(resolved)).is_signature_verified() {
                 format!("Stage 4/5 · Verifying {algorithm} checksum against the signed manifest")
             } else {
                 format!("Stage 4/5 · Verifying {algorithm} checksum")
@@ -418,6 +418,19 @@ fn integrity_state(resolved: Option<&ResolvedChecksum>) -> IntegrityState {
     match resolved {
         None => IntegrityState::TransferChecked,
         Some(resolved) => match &resolved.signature {
+            // A valid signature over a manifest whose only digest for the image
+            // is MD5 or SHA-1 does not authenticate the image: those digests
+            // can be collided, so the signature adds nothing a plain checksum
+            // does not. Say that instead of "Signature verified".
+            Some(ManifestSignature::Verified(_)) if is_weak_digest(resolved.algorithm) => {
+                IntegrityState::ChecksumVerified {
+                    algorithm: resolved.algorithm,
+                    signature_note: Some(format!(
+                        "the signed manifest only lists a {} digest, which is too weak to authenticate the image",
+                        resolved.algorithm
+                    )),
+                }
+            }
             Some(ManifestSignature::Verified(signer)) => IntegrityState::SignatureVerified {
                 algorithm: resolved.algorithm,
                 signer: signer.clone(),
@@ -432,6 +445,10 @@ fn integrity_state(resolved: Option<&ResolvedChecksum>) -> IntegrityState {
             },
         },
     }
+}
+
+fn is_weak_digest(algorithm: ChecksumAlgorithm) -> bool {
+    matches!(algorithm, ChecksumAlgorithm::Md5 | ChecksumAlgorithm::Sha1)
 }
 
 fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<ResolvedChecksum>> {
@@ -2005,6 +2022,36 @@ mod signature_policy_tests {
                 .label()
                 .starts_with("Signature verified · Ubuntu (key D94A A3F0 EFE2 1092)")
         );
+    }
+
+    #[test]
+    fn a_signed_manifest_with_only_a_weak_digest_is_not_labelled_signature_verified() {
+        let signer = signature::SignerIdentity {
+            publisher: "Ubuntu".into(),
+            fingerprint: "843938DF228D22F7B3742BC0D94AA3F0EFE21092".into(),
+            protocol: signature::SignatureProtocol::OpenPgp,
+        };
+        for (algorithm, name, weak) in [
+            (ChecksumAlgorithm::Md5, "MD5", true),
+            (ChecksumAlgorithm::Sha1, "SHA-1", true),
+            (ChecksumAlgorithm::Sha256, "SHA-256", false),
+            (ChecksumAlgorithm::Sha512, "SHA-512", false),
+        ] {
+            let resolved = ResolvedChecksum {
+                algorithm,
+                expected: "00".into(),
+                signature: Some(ManifestSignature::Verified(signer.clone())),
+            };
+            let state = integrity_state(Some(&resolved));
+            assert_eq!(state.is_signature_verified(), !weak, "{name}: {state:?}");
+            let label = state.label();
+            if weak {
+                assert_eq!(state.rank(), 1, "{name}");
+                assert!(!label.contains("Signature verified"), "{label}");
+                assert!(label.contains("signature not verified"), "{label}");
+                assert!(label.contains(name), "{label}");
+            }
+        }
     }
 
     #[test]
