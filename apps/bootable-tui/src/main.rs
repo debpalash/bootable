@@ -1258,11 +1258,8 @@ impl App {
         self.preferences.language = next_language(self.preferences.language);
         self.locale = self.preferences.locale();
         // Cached status text was produced in the previous language; replace it
-        // with the confirmation instead of showing a stale mix.
-        self.status = language_hint_variants(self.preferences.language, self.locale)
-            .into_iter()
-            .next()
-            .unwrap_or_default();
+        // with the current guidance, exactly as the desktop app does.
+        self.status = self.review_readiness().guidance_in(self.locale).into();
         self.save_preferences();
     }
 
