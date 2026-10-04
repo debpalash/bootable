@@ -270,3 +270,64 @@ options.tools.bad_blocks_passes = Сбойные блоки: {passes}x
 options.tools.verify_image = Проверить образ
 options.tools.image_folder = Папка образов
 options.tools.backup_drive = Резервная копия накопителя
+
+# Review screen
+review.title = Проверка плана записи
+review.subtitle = Ничего не записывается, пока последствия не проверены и не подтверждены.
+review.subtitle_writing = Идут запись и проверка • не отключайте целевой накопитель.
+review.plan_summary = Сводка плана
+review.field.source = Источник
+review.field.target = Цель
+review.field.method = Метод
+review.field.consequence = Последствие
+review.consequence = Все данные и разделы на выбранном накопителе будут стёрты.
+review.permanent_changes = Необратимые изменения
+review.ordered_operations = Операции по порядку
+review.step.erases = Стирает данные
+review.step.safe = Безопасно
+review.step.verifies = Проверяет
+review.state.writing = Идут запись и проверка
+review.state.final_confirm = Требуется одно последнее подтверждение
+review.warning.writing = Не закрывайте приложение, не выключайте питание и не отключайте целевой накопитель.
+review.warning.idle = Перед записью проверьте точные изменения на целевом накопителе и необратимые последствия.
+review.hint.open_confirmation = Откройте подтверждение, чтобы проверить изменения, последствия и физический накопитель.
+review.action.stop_safely = Безопасно остановить
+review.action.written = Записано и проверено
+review.action.retry = Проверить и повторить
+review.action.consequences = Проверить последствия
+review.status.writing = Идут запись и проверка · не отключайте целевой накопитель
+review.status.complete = Готово · записанный носитель прошёл побайтовую проверку
+review.status.review = Перед записью проверьте физический накопитель и необратимые изменения
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Подтвердите необратимые изменения
+confirm.subtitle = Проверьте, что изменит Bootable и что может пойти не так.
+confirm.badge = Необратимо
+confirm.physical_target = Физический накопитель
+confirm.changes = Изменения на этом накопителе
+confirm.consequences = Последствия
+confirm.consequence.erase = Все существующие файлы и разделы на этом физическом накопителе будут безвозвратно стёрты.
+confirm.consequence.wrong_drive = Выбор неверного накопителя уничтожит данные на нём; проверьте ниже его модель, путь и ёмкость.
+confirm.consequence.interrupted = Потеря питания, закрытие приложения или отключение во время записи могут оставить носитель незавершённым и незагрузочным.
+confirm.consequence.recheck = Bootable повторно проверяет идентичность накопителя непосредственно перед стиранием и проверяет результат после него.
+confirm.ack = Я проверил физический накопитель и понимаю, что все данные на нём будут безвозвратно стёрты.
+confirm.submit = Подтвердить стирание и запись
+confirm.acknowledge_first = Сначала подтвердите
+
+# Write result
+result.success.title = Запись завершена
+result.success.body = Образ записан и проверен. Съёмный накопитель теперь можно безопасно извлечь.
+result.authentication_denied.title = Запись отменена до стирания
+result.authentication_denied.body = Аутентификация администратора была отменена или отклонена.
+result.stopped.title = Запись безопасно остановлена
+result.stopped.body = Носитель неполный, и перед использованием его нужно записать заново.
+result.failed.title = Ошибка записи
+
+# Review and write status lines
+status.review.open = Проверка плана записи • ничего не записано
+status.review.consequences = Перед записью проверьте изменения на накопителе и последствия
+status.review.ack_required = Подтвердите, что понимаете последствия, прежде чем подтверждать запись
+status.write.active = Идёт запись • не закрывайте приложение и не отключайте накопитель
+status.write.started = Запись начата • не отключайте накопитель
+status.write.cancelled = Запись отменена до стирания • накопитель не изменён
+status.write.stopping = Безопасная остановка • сброс завершённых записей; носитель останется неполным

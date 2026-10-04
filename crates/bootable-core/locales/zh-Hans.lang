@@ -261,3 +261,64 @@ options.tools.bad_blocks_passes = 坏块检测：{passes} 次
 options.tools.verify_image = 验证镜像
 options.tools.image_folder = 镜像文件夹
 options.tools.backup_drive = 备份驱动器
+
+# Review screen
+review.title = 检查写入计划
+review.subtitle = 在检查并确认后果之前，不会写入任何内容。
+review.subtitle_writing = 正在写入和验证 • 请勿拔出目标驱动器。
+review.plan_summary = 计划摘要
+review.field.source = 源
+review.field.target = 目标
+review.field.method = 方法
+review.field.consequence = 后果
+review.consequence = 所选目标上的所有现有数据和分区都将被擦除。
+review.permanent_changes = 永久性更改
+review.ordered_operations = 按顺序的操作
+review.step.erases = 擦除数据
+review.step.safe = 安全
+review.step.verifies = 验证
+review.state.writing = 正在写入和验证
+review.state.final_confirm = 还需要最后一次确认
+review.warning.writing = 请勿关闭应用、断电或拔出目标驱动器。
+review.warning.idle = 写入之前请检查目标上的具体更改和不可逆的后果。
+review.hint.open_confirmation = 打开确认窗口以检查更改、后果和实际的目标驱动器。
+review.action.stop_safely = 安全停止
+review.action.written = 已写入并验证
+review.action.retry = 检查并重试
+review.action.consequences = 检查后果
+review.status.writing = 正在写入和验证 · 请勿拔出目标驱动器
+review.status.complete = 完成 · 写入的介质已通过字节验证
+review.status.review = 写入之前请检查实际的目标驱动器和永久性更改
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = 确认永久性更改
+confirm.subtitle = 请查看 Bootable 将更改的内容以及可能出现的问题。
+confirm.badge = 永久
+confirm.physical_target = 实际目标
+confirm.changes = 对此驱动器的更改
+confirm.consequences = 后果
+confirm.consequence.erase = 此实际驱动器上的所有现有文件和分区都将被永久擦除。
+confirm.consequence.wrong_drive = 选错驱动器会破坏该驱动器上的数据；请在下方确认其型号、路径和容量。
+confirm.consequence.interrupted = 写入期间断电、关闭应用或拔出驱动器可能导致介质不完整且无法启动。
+confirm.consequence.recheck = Bootable 会在擦除前立即重新核对目标的身份，并在之后验证结果。
+confirm.ack = 我已检查实际的目标驱动器，并明白其上所有现有数据都将被永久擦除。
+confirm.submit = 确认擦除并写入
+confirm.acknowledge_first = 请先确认
+
+# Write result
+result.success.title = 写入完成
+result.success.body = 镜像已写入并通过验证。现在可以安全移除该可移动驱动器。
+result.authentication_denied.title = 擦除前已取消写入
+result.authentication_denied.body = 管理员身份验证已被取消或拒绝。
+result.stopped.title = 写入已安全停止
+result.stopped.body = 介质不完整，使用前必须重新写入。
+result.failed.title = 写入失败
+
+# Review and write status lines
+status.review.open = 正在检查写入计划 • 尚未写入任何内容
+status.review.consequences = 写入之前请检查对目标的更改和后果
+status.review.ack_required = 确认写入之前请先确认已了解后果
+status.write.active = 正在写入 • 请勿关闭应用或拔出目标驱动器
+status.write.started = 已开始写入 • 请勿拔出目标驱动器
+status.write.cancelled = 擦除前已取消写入 • 目标未发生更改
+status.write.stopping = 正在安全停止 • 正在刷新已完成的写入；介质将保持不完整

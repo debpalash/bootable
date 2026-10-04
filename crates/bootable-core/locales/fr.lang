@@ -265,3 +265,64 @@ options.tools.bad_blocks_passes = Secteurs défectueux : {passes}x
 options.tools.verify_image = Vérifier l'image
 options.tools.image_folder = Dossier d'images
 options.tools.backup_drive = Sauvegarder le lecteur
+
+# Review screen
+review.title = Vérifier le plan d'écriture
+review.subtitle = Rien n'est écrit tant que les conséquences n'ont pas été examinées et confirmées.
+review.subtitle_writing = L'écriture et la vérification sont en cours • ne débranchez pas la cible.
+review.plan_summary = Résumé du plan
+review.field.source = Source
+review.field.target = Cible
+review.field.method = Méthode
+review.field.consequence = Conséquence
+review.consequence = Toutes les données et partitions existantes de la cible sélectionnée seront effacées.
+review.permanent_changes = Modifications permanentes
+review.ordered_operations = Opérations ordonnées
+review.step.erases = Efface les données
+review.step.safe = Sûr
+review.step.verifies = Vérifie
+review.state.writing = L'écriture et la vérification sont en cours
+review.state.final_confirm = Une dernière confirmation est requise
+review.warning.writing = Ne fermez pas l'application, n'éteignez pas l'ordinateur et ne débranchez pas le lecteur cible.
+review.warning.idle = Examinez les modifications exactes de la cible et les conséquences irréversibles avant d'écrire.
+review.hint.open_confirmation = Ouvrez la confirmation pour examiner les modifications, les conséquences et le lecteur physique cible.
+review.action.stop_safely = Arrêter en toute sécurité
+review.action.written = Écrit et vérifié
+review.action.retry = Vérifier et réessayer
+review.action.consequences = Examiner les conséquences
+review.status.writing = L'écriture et la vérification sont en cours · ne débranchez pas la cible
+review.status.complete = Terminé · le support écrit a réussi la vérification octet par octet
+review.status.review = Vérifiez le lecteur physique cible et les modifications permanentes avant d'écrire
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirmer les modifications permanentes
+confirm.subtitle = Vérifiez ce que Bootable va modifier et ce qui peut mal tourner.
+confirm.badge = Permanent
+confirm.physical_target = Cible physique
+confirm.changes = Modifications de ce lecteur
+confirm.consequences = Conséquences
+confirm.consequence.erase = Tous les fichiers et partitions existants de ce lecteur physique seront définitivement effacés.
+confirm.consequence.wrong_drive = Choisir le mauvais lecteur détruit les données qu'il contient ; vérifiez ci-dessous son modèle, son chemin et sa capacité.
+confirm.consequence.interrupted = Une coupure de courant, la fermeture de l'application ou un débranchement pendant l'écriture peut laisser un support incomplet et non amorçable.
+confirm.consequence.recheck = Bootable revérifie l'identité de la cible juste avant l'effacement et vérifie le résultat ensuite.
+confirm.ack = J'ai vérifié le lecteur physique cible et je comprends que toutes ses données existantes seront définitivement effacées.
+confirm.submit = Confirmer l'effacement et l'écriture
+confirm.acknowledge_first = Confirmez d'abord
+
+# Write result
+result.success.title = Écriture terminée
+result.success.body = L'image a été écrite et vérifiée. Vous pouvez maintenant retirer le lecteur amovible en toute sécurité.
+result.authentication_denied.title = Écriture annulée avant l'effacement
+result.authentication_denied.body = L'authentification administrateur a été annulée ou refusée.
+result.stopped.title = Écriture arrêtée en toute sécurité
+result.stopped.body = Le support est incomplet et doit être réécrit avant d'être utilisé.
+result.failed.title = Échec de l'écriture
+
+# Review and write status lines
+status.review.open = Examen du plan d'écriture • rien n'a été écrit
+status.review.consequences = Examinez les modifications de la cible et les conséquences avant d'écrire
+status.review.ack_required = Prenez acte des conséquences avant de confirmer l'écriture
+status.write.active = L'écriture est en cours • ne fermez pas l'application et ne débranchez pas la cible
+status.write.started = Écriture démarrée • ne débranchez pas la cible
+status.write.cancelled = Écriture annulée avant l'effacement • la cible est inchangée
+status.write.stopping = Arrêt en toute sécurité • vidage des écritures terminées ; le support restera incomplet

@@ -281,3 +281,64 @@ options.tools.bad_blocks_passes = Bad blocks {passes}x
 options.tools.verify_image = Verify image
 options.tools.image_folder = Image folder
 options.tools.backup_drive = Back up drive
+
+# Review screen
+review.title = Review write plan
+review.subtitle = Nothing is written until the consequences are reviewed and acknowledged.
+review.subtitle_writing = Writing and verification are active • do not unplug the target.
+review.plan_summary = Plan summary
+review.field.source = Source
+review.field.target = Target
+review.field.method = Method
+review.field.consequence = Consequence
+review.consequence = All existing data and partitions on the selected target will be erased.
+review.permanent_changes = Permanent changes
+review.ordered_operations = Ordered operations
+review.step.erases = Erases data
+review.step.safe = Safe
+review.step.verifies = Verifies
+review.state.writing = Writing and verification are active
+review.state.final_confirm = One final confirmation is required
+review.warning.writing = Do not close the app, power off, or unplug the target drive.
+review.warning.idle = Review the exact target changes and irreversible consequences before writing.
+review.hint.open_confirmation = Open the confirmation to review changes, consequences, and the physical target.
+review.action.stop_safely = Stop safely
+review.action.written = Written & verified
+review.action.retry = Review & retry
+review.action.consequences = Review consequences
+review.status.writing = Writing and verification are active · do not unplug the target
+review.status.complete = Complete · the written media passed byte verification
+review.status.review = Review the physical target and permanent changes before writing
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirm permanent changes
+confirm.subtitle = Review what Bootable will change and what can go wrong.
+confirm.badge = Permanent
+confirm.physical_target = Physical target
+confirm.changes = Changes to this drive
+confirm.consequences = Consequences
+confirm.consequence.erase = Every existing file and partition on this physical drive will be permanently erased.
+confirm.consequence.wrong_drive = Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below.
+confirm.consequence.interrupted = Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media.
+confirm.consequence.recheck = Bootable rechecks the target identity immediately before erasure and verifies the result afterward.
+confirm.ack = I checked the physical target and understand that all of its existing data will be permanently erased.
+confirm.submit = Confirm erase & write
+confirm.acknowledge_first = Acknowledge first
+
+# Write result
+result.success.title = Write complete
+result.success.body = The image was written and verified. The removable drive can now be safely removed.
+result.authentication_denied.title = Write cancelled before erasure
+result.authentication_denied.body = Administrator authentication was cancelled or denied.
+result.stopped.title = Write stopped safely
+result.stopped.body = The media is incomplete and must be rewritten before use.
+result.failed.title = Write failed
+
+# Review and write status lines
+status.review.open = Reviewing the write plan • nothing has been written
+status.review.consequences = Review the target changes and consequences before writing
+status.review.ack_required = Acknowledge the consequences before confirming the write
+status.write.active = Writing is active • do not close the app or unplug the target
+status.write.started = Write started • do not unplug the target
+status.write.cancelled = Write cancelled before erasure • the target is unchanged
+status.write.stopping = Stopping safely • flushing completed writes; the media will remain incomplete

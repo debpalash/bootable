@@ -261,3 +261,64 @@ options.tools.bad_blocks_passes = 不良ブロック検査: {passes}回
 options.tools.verify_image = イメージを検証
 options.tools.image_folder = イメージフォルダー
 options.tools.backup_drive = ドライブをバックアップ
+
+# Review screen
+review.title = 書き込みプランを確認
+review.subtitle = 影響を確認して承認するまで、何も書き込まれません。
+review.subtitle_writing = 書き込みと検証を実行中 • ターゲットを取り外さないでください。
+review.plan_summary = プランの概要
+review.field.source = ソース
+review.field.target = ターゲット
+review.field.method = 方法
+review.field.consequence = 影響
+review.consequence = 選択したターゲット上の既存のデータとパーティションはすべて消去されます。
+review.permanent_changes = 恒久的な変更
+review.ordered_operations = 実行順の操作
+review.step.erases = データを消去
+review.step.safe = 安全
+review.step.verifies = 検証
+review.state.writing = 書き込みと検証を実行中
+review.state.final_confirm = 最後の確認が1回必要です
+review.warning.writing = アプリを閉じたり、電源を切ったり、ターゲットドライブを取り外したりしないでください。
+review.warning.idle = 書き込む前に、ターゲットへの正確な変更と取り消せない影響を確認してください。
+review.hint.open_confirmation = 確認画面を開いて、変更内容、影響、物理ターゲットを確認します。
+review.action.stop_safely = 安全に停止
+review.action.written = 書き込みと検証が完了
+review.action.retry = 確認して再試行
+review.action.consequences = 影響を確認
+review.status.writing = 書き込みと検証を実行中 · ターゲットを取り外さないでください
+review.status.complete = 完了 · 書き込んだメディアはバイト検証に合格しました
+review.status.review = 書き込む前に、物理ターゲットと恒久的な変更を確認してください
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = 恒久的な変更の確認
+confirm.subtitle = Bootableが何を変更し、何が問題になり得るかを確認してください。
+confirm.badge = 恒久
+confirm.physical_target = 物理ターゲット
+confirm.changes = このドライブへの変更
+confirm.consequences = 影響
+confirm.consequence.erase = この物理ドライブ上の既存のファイルとパーティションはすべて完全に消去されます。
+confirm.consequence.wrong_drive = 誤ったドライブを選ぶと、そのドライブのデータが失われます。下のモデル、パス、容量を確認してください。
+confirm.consequence.interrupted = 書き込み中の停電、アプリの終了、取り外しにより、不完全で起動できないメディアになる場合があります。
+confirm.consequence.recheck = Bootableは消去の直前にターゲットの識別情報を再確認し、その後に結果を検証します。
+confirm.ack = 物理ターゲットを確認しました。既存のデータがすべて完全に消去されることを理解しています。
+confirm.submit = 消去と書き込みを確定
+confirm.acknowledge_first = 先に確認してください
+
+# Write result
+result.success.title = 書き込み完了
+result.success.body = イメージの書き込みと検証が完了しました。リムーバブルドライブを安全に取り外せます。
+result.authentication_denied.title = 消去の前に書き込みをキャンセルしました
+result.authentication_denied.body = 管理者の認証がキャンセルまたは拒否されました。
+result.stopped.title = 書き込みを安全に停止しました
+result.stopped.body = メディアは不完全です。使用する前に書き直す必要があります。
+result.failed.title = 書き込みに失敗しました
+
+# Review and write status lines
+status.review.open = 書き込みプランを確認中 • まだ何も書き込まれていません
+status.review.consequences = 書き込む前に、ターゲットへの変更と影響を確認してください
+status.review.ack_required = 書き込みを確定する前に、影響を理解したことを確認してください
+status.write.active = 書き込み中 • アプリを閉じたりターゲットを取り外したりしないでください
+status.write.started = 書き込みを開始しました • ターゲットを取り外さないでください
+status.write.cancelled = 消去の前に書き込みをキャンセルしました • ターゲットは変更されていません
+status.write.stopping = 安全に停止しています • 完了した書き込みをフラッシュ中です。メディアは不完全なままになります

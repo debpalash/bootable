@@ -263,3 +263,64 @@ options.tools.bad_blocks_passes = Blocos defeituosos: {passes}x
 options.tools.verify_image = Verificar imagem
 options.tools.image_folder = Pasta de imagens
 options.tools.backup_drive = Fazer backup da unidade
+
+# Review screen
+review.title = Revisar o plano de gravação
+review.subtitle = Nada é gravado até que as consequências sejam revisadas e reconhecidas.
+review.subtitle_writing = A gravação e a verificação estão em andamento • não desconecte o destino.
+review.plan_summary = Resumo do plano
+review.field.source = Origem
+review.field.target = Destino
+review.field.method = Método
+review.field.consequence = Consequência
+review.consequence = Todos os dados e partições existentes no destino selecionado serão apagados.
+review.permanent_changes = Alterações permanentes
+review.ordered_operations = Operações em ordem
+review.step.erases = Apaga dados
+review.step.safe = Seguro
+review.step.verifies = Verifica
+review.state.writing = A gravação e a verificação estão em andamento
+review.state.final_confirm = Uma última confirmação é necessária
+review.warning.writing = Não feche o aplicativo, não desligue o computador e não desconecte a unidade de destino.
+review.warning.idle = Revise as alterações exatas no destino e as consequências irreversíveis antes de gravar.
+review.hint.open_confirmation = Abra a confirmação para revisar as alterações, as consequências e a unidade física de destino.
+review.action.stop_safely = Parar com segurança
+review.action.written = Gravado e verificado
+review.action.retry = Revisar e tentar novamente
+review.action.consequences = Revisar consequências
+review.status.writing = A gravação e a verificação estão em andamento · não desconecte o destino
+review.status.complete = Concluído · a mídia gravada passou na verificação de bytes
+review.status.review = Revise a unidade física de destino e as alterações permanentes antes de gravar
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirmar alterações permanentes
+confirm.subtitle = Revise o que o Bootable vai alterar e o que pode dar errado.
+confirm.badge = Permanente
+confirm.physical_target = Destino físico
+confirm.changes = Alterações nesta unidade
+confirm.consequences = Consequências
+confirm.consequence.erase = Todos os arquivos e partições existentes nesta unidade física serão apagados permanentemente.
+confirm.consequence.wrong_drive = Escolher a unidade errada destrói os dados dela; confirme abaixo o modelo, o caminho e a capacidade.
+confirm.consequence.interrupted = Queda de energia, fechar o aplicativo ou desconectar durante a gravação pode deixar a mídia incompleta e não inicializável.
+confirm.consequence.recheck = O Bootable verifica novamente a identidade do destino imediatamente antes do apagamento e confere o resultado depois.
+confirm.ack = Verifiquei a unidade física de destino e entendo que todos os dados existentes nela serão apagados permanentemente.
+confirm.submit = Confirmar apagamento e gravação
+confirm.acknowledge_first = Reconheça primeiro
+
+# Write result
+result.success.title = Gravação concluída
+result.success.body = A imagem foi gravada e verificada. A unidade removível já pode ser removida com segurança.
+result.authentication_denied.title = Gravação cancelada antes do apagamento
+result.authentication_denied.body = A autenticação de administrador foi cancelada ou negada.
+result.stopped.title = Gravação interrompida com segurança
+result.stopped.body = A mídia está incompleta e precisa ser regravada antes do uso.
+result.failed.title = Falha na gravação
+
+# Review and write status lines
+status.review.open = Revisando o plano de gravação • nada foi gravado
+status.review.consequences = Revise as alterações no destino e as consequências antes de gravar
+status.review.ack_required = Reconheça as consequências antes de confirmar a gravação
+status.write.active = A gravação está em andamento • não feche o aplicativo nem desconecte o destino
+status.write.started = Gravação iniciada • não desconecte o destino
+status.write.cancelled = Gravação cancelada antes do apagamento • o destino não foi alterado
+status.write.stopping = Parando com segurança • descarregando as gravações concluídas; a mídia ficará incompleta

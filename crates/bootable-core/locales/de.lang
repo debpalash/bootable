@@ -263,3 +263,64 @@ options.tools.bad_blocks_passes = Defekte Blöcke: {passes}x
 options.tools.verify_image = Abbild verifizieren
 options.tools.image_folder = Abbildordner
 options.tools.backup_drive = Laufwerk sichern
+
+# Review screen
+review.title = Schreibplan prüfen
+review.subtitle = Es wird nichts geschrieben, bis die Folgen geprüft und bestätigt wurden.
+review.subtitle_writing = Schreiben und Verifizieren laufen • trennen Sie das Ziel nicht.
+review.plan_summary = Planübersicht
+review.field.source = Quelle
+review.field.target = Ziel
+review.field.method = Methode
+review.field.consequence = Folge
+review.consequence = Alle vorhandenen Daten und Partitionen auf dem ausgewählten Ziel werden gelöscht.
+review.permanent_changes = Dauerhafte Änderungen
+review.ordered_operations = Geordnete Vorgänge
+review.step.erases = Löscht Daten
+review.step.safe = Sicher
+review.step.verifies = Verifiziert
+review.state.writing = Schreiben und Verifizieren laufen
+review.state.final_confirm = Eine letzte Bestätigung ist erforderlich
+review.warning.writing = Schließen Sie die App nicht, schalten Sie nicht aus und trennen Sie das Ziellaufwerk nicht.
+review.warning.idle = Prüfen Sie vor dem Schreiben die genauen Änderungen am Ziel und die unumkehrbaren Folgen.
+review.hint.open_confirmation = Öffnen Sie die Bestätigung, um Änderungen, Folgen und das physische Ziel zu prüfen.
+review.action.stop_safely = Sicher stoppen
+review.action.written = Geschrieben & verifiziert
+review.action.retry = Prüfen & erneut versuchen
+review.action.consequences = Folgen prüfen
+review.status.writing = Schreiben und Verifizieren laufen · trennen Sie das Ziel nicht
+review.status.complete = Abgeschlossen · das geschriebene Medium hat die Byte-Verifizierung bestanden
+review.status.review = Prüfen Sie vor dem Schreiben das physische Ziel und die dauerhaften Änderungen
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Dauerhafte Änderungen bestätigen
+confirm.subtitle = Prüfen Sie, was Bootable ändert und was schiefgehen kann.
+confirm.badge = Dauerhaft
+confirm.physical_target = Physisches Ziel
+confirm.changes = Änderungen an diesem Laufwerk
+confirm.consequences = Folgen
+confirm.consequence.erase = Alle vorhandenen Dateien und Partitionen auf diesem physischen Laufwerk werden endgültig gelöscht.
+confirm.consequence.wrong_drive = Wenn Sie das falsche Laufwerk wählen, werden dessen Daten zerstört; prüfen Sie unten Modell, Pfad und Kapazität.
+confirm.consequence.interrupted = Stromausfall, Schließen der App oder Trennen während des Schreibens kann ein unvollständiges, nicht startfähiges Medium hinterlassen.
+confirm.consequence.recheck = Bootable prüft die Identität des Ziels unmittelbar vor dem Löschen erneut und verifiziert das Ergebnis danach.
+confirm.ack = Ich habe das physische Ziel geprüft und verstehe, dass alle vorhandenen Daten darauf endgültig gelöscht werden.
+confirm.submit = Löschen & Schreiben bestätigen
+confirm.acknowledge_first = Erst bestätigen
+
+# Write result
+result.success.title = Schreiben abgeschlossen
+result.success.body = Das Abbild wurde geschrieben und verifiziert. Das Wechsellaufwerk kann jetzt sicher entfernt werden.
+result.authentication_denied.title = Schreiben vor dem Löschen abgebrochen
+result.authentication_denied.body = Die Administratorauthentifizierung wurde abgebrochen oder verweigert.
+result.stopped.title = Schreiben sicher gestoppt
+result.stopped.body = Das Medium ist unvollständig und muss vor der Verwendung neu geschrieben werden.
+result.failed.title = Schreiben fehlgeschlagen
+
+# Review and write status lines
+status.review.open = Schreibplan wird geprüft • es wurde nichts geschrieben
+status.review.consequences = Prüfen Sie vor dem Schreiben die Änderungen am Ziel und die Folgen
+status.review.ack_required = Bestätigen Sie die Folgen, bevor Sie das Schreiben bestätigen
+status.write.active = Schreiben läuft • schließen Sie die App nicht und trennen Sie das Ziel nicht
+status.write.started = Schreiben gestartet • trennen Sie das Ziel nicht
+status.write.cancelled = Schreiben vor dem Löschen abgebrochen • das Ziel ist unverändert
+status.write.stopping = Wird sicher gestoppt • abgeschlossene Schreibvorgänge werden gesichert; das Medium bleibt unvollständig

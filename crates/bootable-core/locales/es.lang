@@ -263,3 +263,64 @@ options.tools.bad_blocks_passes = Bloques defectuosos: {passes}x
 options.tools.verify_image = Verificar imagen
 options.tools.image_folder = Carpeta de imágenes
 options.tools.backup_drive = Respaldar unidad
+
+# Review screen
+review.title = Revisar el plan de escritura
+review.subtitle = No se escribe nada hasta que se revisen y reconozcan las consecuencias.
+review.subtitle_writing = La escritura y la verificación están en curso • no desconectes el destino.
+review.plan_summary = Resumen del plan
+review.field.source = Origen
+review.field.target = Destino
+review.field.method = Método
+review.field.consequence = Consecuencia
+review.consequence = Se borrarán todos los datos y particiones existentes en el destino seleccionado.
+review.permanent_changes = Cambios permanentes
+review.ordered_operations = Operaciones en orden
+review.step.erases = Borra datos
+review.step.safe = Seguro
+review.step.verifies = Verifica
+review.state.writing = La escritura y la verificación están en curso
+review.state.final_confirm = Se requiere una última confirmación
+review.warning.writing = No cierres la aplicación, no apagues el equipo ni desconectes la unidad de destino.
+review.warning.idle = Revisa los cambios exactos en el destino y las consecuencias irreversibles antes de escribir.
+review.hint.open_confirmation = Abre la confirmación para revisar los cambios, las consecuencias y la unidad física de destino.
+review.action.stop_safely = Detener de forma segura
+review.action.written = Escrito y verificado
+review.action.retry = Revisar y reintentar
+review.action.consequences = Revisar consecuencias
+review.status.writing = La escritura y la verificación están en curso · no desconectes el destino
+review.status.complete = Completado · el medio escrito superó la verificación de bytes
+review.status.review = Revisa la unidad física de destino y los cambios permanentes antes de escribir
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirmar cambios permanentes
+confirm.subtitle = Revisa qué cambiará Bootable y qué puede salir mal.
+confirm.badge = Permanente
+confirm.physical_target = Destino físico
+confirm.changes = Cambios en esta unidad
+confirm.consequences = Consecuencias
+confirm.consequence.erase = Todos los archivos y particiones existentes en esta unidad física se borrarán de forma permanente.
+confirm.consequence.wrong_drive = Elegir la unidad equivocada destruye los datos de esa unidad; confirma abajo su modelo, ruta y capacidad.
+confirm.consequence.interrupted = Un corte de energía, cerrar la aplicación o desconectar durante la escritura puede dejar un medio incompleto y que no arranca.
+confirm.consequence.recheck = Bootable vuelve a comprobar la identidad del destino justo antes del borrado y verifica el resultado después.
+confirm.ack = He comprobado la unidad física de destino y entiendo que todos sus datos existentes se borrarán de forma permanente.
+confirm.submit = Confirmar borrado y escritura
+confirm.acknowledge_first = Reconoce primero
+
+# Write result
+result.success.title = Escritura completada
+result.success.body = La imagen se escribió y verificó. Ya puedes retirar la unidad extraíble de forma segura.
+result.authentication_denied.title = Escritura cancelada antes del borrado
+result.authentication_denied.body = La autenticación de administrador se canceló o se denegó.
+result.stopped.title = Escritura detenida de forma segura
+result.stopped.body = El medio está incompleto y debe reescribirse antes de usarlo.
+result.failed.title = La escritura falló
+
+# Review and write status lines
+status.review.open = Revisando el plan de escritura • no se ha escrito nada
+status.review.consequences = Revisa los cambios en el destino y las consecuencias antes de escribir
+status.review.ack_required = Reconoce las consecuencias antes de confirmar la escritura
+status.write.active = La escritura está en curso • no cierres la aplicación ni desconectes el destino
+status.write.started = Escritura iniciada • no desconectes el destino
+status.write.cancelled = Escritura cancelada antes del borrado • el destino no ha cambiado
+status.write.stopping = Deteniendo de forma segura • vaciando las escrituras completadas; el medio quedará incompleto
