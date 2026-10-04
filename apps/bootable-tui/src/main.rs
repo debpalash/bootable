@@ -12,9 +12,9 @@ use bootable_core::{
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
     DownloadStatus, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message,
     OperationState, PiCatalog, Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness,
-    ReviewedWriteSession, WorkspaceProgress, WorkspaceStepState, WriteCompletion, WriteOptions,
-    WritePlan, catalog_search_summary, device_details_in, distribution_matches_query, format_bytes,
-    help_intro, help_sections, removable_media_status_in, review_readiness,
+    ReviewedWriteSession, Strings, WorkspaceProgress, WorkspaceStepState, WriteCompletion,
+    WriteOptions, WritePlan, catalog_search_summary, device_details_in, distribution_matches_query,
+    format_bytes, help_intro, help_sections, removable_media_status_in, review_readiness,
     target_eligibility_label, target_eligibility_label_in, workspace_progress,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
@@ -1034,6 +1034,10 @@ struct App {
     preferences: Preferences,
     locale: Locale,
     help_open: bool,
+    /// True once core's final (`Finished`) download progress message has been
+    /// shown as the status. Replaces comparing the status text, which breaks
+    /// as soon as any part of it is localized.
+    download_final_message: bool,
 }
 
 enum DownloadUpdate {
@@ -1166,15 +1170,21 @@ struct HitRegions {
 }
 
 impl App {
+    /// The active locale bound to the shared catalog. `Copy`, so it can be held
+    /// across `&mut self` calls.
+    fn t(&self) -> Strings {
+        self.locale.strings()
+    }
+
     fn load(engine: Bootable, image_path: Option<PathBuf>, artwork_picker: Picker) -> Self {
         let preferences = Preferences::load();
         let locale = preferences.locale();
         let devices_result = engine.discover_devices();
         let (devices, status) = match devices_result {
             Ok(devices) => {
-                let status = format!(
-                    "{} · choose an image to begin",
-                    removable_media_status_in(locale, &devices)
+                let status = locale.strings().format(
+                    Message::StatusStartup,
+                    &[("media", &removable_media_status_in(locale, &devices))],
                 );
                 (devices, status)
             }
@@ -1232,12 +1242,15 @@ impl App {
             preferences,
             locale,
             help_open: false,
+            download_final_message: false,
         }
     }
 
     fn save_preferences(&mut self) {
         if let Err(error) = self.preferences.save() {
-            self.status = format!("Preferences were not saved: {error}");
+            self.status = self
+                .t()
+                .format(Message::StatusPrefsSaveFailed, &[("error", &error)]);
         }
     }
 
@@ -1250,7 +1263,7 @@ impl App {
     fn use_recent_image(&mut self, index: usize) {
         match self.preferences.recent_images().get(index) {
             Some(recent) => self.inspect_image_path(recent.path.clone()),
-            None => self.status = "No recent image in that position".into(),
+            None => self.status = self.t().text(Message::StatusImageNoRecent).into(),
         }
     }
 
@@ -1278,9 +1291,9 @@ impl App {
         self.catalog_focus = CatalogFocus::Distributions;
         if !self.popular_distributions.is_empty() && mode == CacheMode::PreferCache {
             self.distributions = self.popular_distributions.clone();
-            self.status = "DistroWatch discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPopularity).into();
         } else if self.discovery_session.begin(CatalogFacet::Popular) {
-            self.status = "Loading distributions…".into();
+            self.status = self.t().text(Message::StatusCatalogLoading).into();
             let sender = self.catalog_sender.clone();
             std::thread::spawn(move || {
                 let result = Bootable::native()
@@ -1320,13 +1333,13 @@ impl App {
         self.discovery_session.show_raspberry_pi();
         self.catalog_focus = CatalogFocus::Distributions;
         if self.pi_catalog.is_some() && mode == CacheMode::PreferCache {
-            self.status = "Raspberry Pi image discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPiSelected).into();
             return;
         }
         if !self.discovery_session.begin(CatalogFacet::RaspberryPi) {
             return;
         }
-        self.status = "Loading Raspberry Pi images…".into();
+        self.status = self.t().text(Message::StatusCatalogPiLoading).into();
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
             let result = Bootable::native()
@@ -1348,7 +1361,7 @@ impl App {
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
-                self.status = "Showing DistroWatch six-month popularity".into();
+                self.status = self.t().text(Message::StatusCatalogPopularity).into();
             }
             QuickAccess::Arch | QuickAccess::Debian => {
                 let cached = if preset == QuickAccess::Arch {
@@ -1372,15 +1385,14 @@ impl App {
                     .cloned()
                 {
                     self.distributions = vec![omarchy];
-                    self.status = "Omarchy quick access · press Enter to resolve ISOs".into();
+                    self.status = self.t().text(Message::StatusCatalogOmarchy).into();
                 } else {
-                    self.status =
-                        "Omarchy is missing from the current DistroWatch directory".into();
+                    self.status = self.t().text(Message::StatusCatalogOmarchyMissing).into();
                 }
             }
             QuickAccess::Windows => {
                 self.distributions.clear();
-                self.status = "Windows media tools · press o to choose a Windows ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsTools).into();
             }
         }
         self.catalog_selected = 0;
@@ -1400,7 +1412,9 @@ impl App {
         if !self.discovery_session.begin(facet) {
             return;
         }
-        self.status = format!("Loading {base}-based distributions…");
+        self.status = self
+            .t()
+            .format(Message::StatusCatalogLoadingBase, &[("base", &base)]);
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
             let result = Bootable::native()
@@ -1414,12 +1428,31 @@ impl App {
         });
     }
 
+    /// The status after an ISO release is picked: whether the publisher's
+    /// checksum can be verified or only HTTPS length and boot structure.
+    fn iso_selected_status(&self) -> String {
+        let has_checksum = self
+            .catalog_releases
+            .get(self.release_selected)
+            .is_some_and(|release| release.checksum.is_some() || release.checksum_url.is_some());
+        self.t()
+            .text(if has_checksum {
+                Message::StatusCatalogIsoSelectedChecksum
+            } else {
+                Message::StatusCatalogIsoSelectedHttps
+            })
+            .into()
+    }
+
     fn toggle_catalog(&mut self) {
         if self.catalog_open {
             self.catalog_open = false;
-            self.status = format!(
-                "Catalog closed • {}",
-                self.review_readiness().guidance_in(self.locale)
+            self.status = self.t().format(
+                Message::StatusCatalogClosed,
+                &[(
+                    "guidance",
+                    &self.review_readiness().guidance_in(self.locale),
+                )],
             );
             return;
         }
@@ -1444,7 +1477,10 @@ impl App {
         self.catalog_releases.clear();
         self.discovery_session
             .expect_details(distribution.slug.clone());
-        self.status = format!("Loading {} releases…", distribution.name);
+        self.status = self.t().format(
+            Message::StatusCatalogLoadingReleases,
+            &[("name", &distribution.name)],
+        );
         let slug = distribution.slug;
         let request_slug = slug.clone();
         let sender = self.catalog_sender.clone();
@@ -1483,7 +1519,7 @@ impl App {
                 self.load_quick_base(self.discovery_session.quick_access(), CacheMode::Refresh);
             }
             QuickAccess::Windows => {
-                self.status = "Windows tools use the selected local ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsUsesIso).into();
             }
         }
     }
@@ -1545,16 +1581,18 @@ impl App {
     }
 
     fn poll_catalog(&mut self) {
+        let locale = self.locale;
+        let t = self.t();
         while let Ok(update) = self.catalog_receiver.try_recv() {
             match update {
                 CatalogUpdate::Popular(result) => match result {
                     Ok(fetch) => {
+                        let source = fetch.source_label_in(locale);
                         self.discovery_session.complete(
                             CatalogFacet::Popular,
                             &fetch,
                             fetch.value.is_empty(),
                         );
-                        let source = fetch.status_suffix();
                         let distributions = fetch.value;
                         let count = distributions.len();
                         self.popular_distributions = distributions.clone();
@@ -1564,7 +1602,11 @@ impl App {
                         {
                             self.distributions = distributions;
                             self.catalog_selected = 0;
-                            self.status = format!("{count} distributions · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogDistributionsLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             if count > 0 {
                                 self.select_catalog_distribution(0);
                             }
@@ -1576,7 +1618,7 @@ impl App {
                         self.status = self
                             .discovery_session
                             .state(CatalogFacet::Popular)
-                            .short_label("distributions");
+                            .short_label_in(locale, t.text(Message::CatalogSubjectDistributions));
                     }
                 },
                 CatalogUpdate::Directory(result) => match result {
@@ -1604,7 +1646,10 @@ impl App {
                             self.status = self
                                 .discovery_session
                                 .state(CatalogFacet::Directory)
-                                .short_label("search catalog");
+                                .short_label_in(
+                                    locale,
+                                    t.text(Message::CatalogSubjectSearchCatalog),
+                                );
                         }
                     }
                 },
@@ -1615,14 +1660,18 @@ impl App {
                             &fetch,
                             fetch.value.images.is_empty(),
                         );
-                        let source = fetch.status_suffix();
+                        let source = fetch.source_label_in(locale);
                         let catalog = fetch.value;
                         let count = catalog.images.len();
                         self.pi_catalog = Some(catalog);
                         self.pi_device_selected = 0;
                         self.pi_image_selected = 0;
                         if self.discovery_session.source() == DiscoverySource::RaspberryPi {
-                            self.status = format!("{count} Raspberry Pi images · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogPiImagesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                         }
                     }
                     Err(error)
@@ -1633,7 +1682,7 @@ impl App {
                         self.status = self
                             .discovery_session
                             .state(CatalogFacet::RaspberryPi)
-                            .short_label("Raspberry Pi images");
+                            .short_label_in(locale, t.text(Message::CatalogSubjectPiImages));
                     }
                     Err(error) => self
                         .discovery_session
@@ -1652,7 +1701,7 @@ impl App {
                         };
                         self.discovery_session
                             .complete(facet, &fetch, fetch.value.is_empty());
-                        let source = fetch.status_suffix();
+                        let source = fetch.source_label_in(locale);
                         let distributions = fetch.value;
                         let count = distributions.len();
                         if preset == QuickAccess::Arch {
@@ -1663,7 +1712,11 @@ impl App {
                         if self.discovery_session.quick_access() == preset {
                             self.distributions = distributions;
                             self.catalog_selected = 0;
-                            self.status = format!("{count} {base}-based distributions · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogBaseLoaded,
+                                count as u64,
+                                &[("base", &base), ("source", &source)],
+                            );
                         }
                     }
                     Err(error) => {
@@ -1674,10 +1727,13 @@ impl App {
                         };
                         self.discovery_session.fail(facet, error);
                         if self.discovery_session.quick_access() == preset {
-                            self.status = self
-                                .discovery_session
-                                .state(facet)
-                                .short_label(&format!("{base}-based distributions"));
+                            self.status = self.discovery_session.state(facet).short_label_in(
+                                locale,
+                                &t.format(
+                                    Message::CatalogSubjectBaseDistributions,
+                                    &[("base", &base)],
+                                ),
+                            );
                         }
                     }
                 },
@@ -1692,7 +1748,7 @@ impl App {
                                 &fetch,
                                 fetch.value.releases.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.source_label_in(locale);
                             let DistributionBundle {
                                 details,
                                 releases,
@@ -1703,20 +1759,36 @@ impl App {
                             self.catalog_releases = releases;
                             self.release_selected = 0;
                             self.catalog_focus = CatalogFocus::Releases;
+                            let releases_summary = t.plural(
+                                Message::StatusCatalogReleasesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             self.status = if count == 0 && !warnings.is_empty() {
-                                format!(
-                                    "Profile ready · no direct ISO found · {} source error(s)",
-                                    warnings.len()
+                                t.plural(
+                                    Message::StatusCatalogProfileReadyErrors,
+                                    warnings.len() as u64,
+                                    &[],
                                 )
                             } else if count == 0 {
-                                "Profile ready · no direct ISO found".into()
+                                t.text(Message::StatusCatalogProfileReadyNoIso).into()
                             } else if !warnings.is_empty() {
-                                format!(
-                                    "{count} ISO release(s) · {source} · {} source warning(s)",
-                                    warnings.len()
+                                t.format(
+                                    Message::StatusCatalogWithWarnings,
+                                    &[
+                                        ("summary", &releases_summary),
+                                        (
+                                            "warnings",
+                                            &t.plural(
+                                                Message::StatusCatalogSourceWarnings,
+                                                warnings.len() as u64,
+                                                &[],
+                                            ),
+                                        ),
+                                    ],
                                 )
                             } else {
-                                format!("{count} ISO release(s) · {source}")
+                                releases_summary
                             };
                         }
                         Err(error) => {
@@ -1724,7 +1796,7 @@ impl App {
                             self.status = self
                                 .discovery_session
                                 .state(CatalogFacet::Details)
-                                .short_label("ISO releases");
+                                .short_label_in(locale, t.text(Message::CatalogSubjectIsoReleases));
                         }
                     }
                 }
@@ -1740,8 +1812,10 @@ impl App {
                                 self.artwork_error = None;
                             }
                             Err(error) => {
-                                self.artwork_error =
-                                    Some(format!("Could not decode catalog artwork: {error}"));
+                                self.artwork_error = Some(t.format(
+                                    Message::StatusCatalogArtworkError,
+                                    &[("error", &error)],
+                                ));
                             }
                         },
                         Err(error) => self.artwork_error = Some(error),
@@ -1756,7 +1830,12 @@ impl App {
             Ok(jobs) => {
                 self.download_selected = self.download_selected.min(jobs.len().saturating_sub(1));
             }
-            Err(error) => self.status = format!("Download history unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadHistoryUnavailable,
+                    &[("error", &error)],
+                );
+            }
         }
     }
 
@@ -1764,9 +1843,10 @@ impl App {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs();
-            self.status = format!(
-                "{} managed download job(s)",
-                self.download_session.jobs().len()
+            self.status = self.t().plural(
+                Message::DownloadsJobsInHistory,
+                self.download_session.jobs().len() as u64,
+                &[],
             );
         }
     }
@@ -1774,7 +1854,7 @@ impl App {
     fn launch_download_job(&mut self, id: String, destination: PathBuf, retry: bool) {
         let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
         else {
-            self.status = "Download queued · it starts when the active job finishes".into();
+            self.status = self.t().text(Message::StatusDownloadQueued).into();
             self.refresh_download_jobs();
             return;
         };
@@ -1782,11 +1862,15 @@ impl App {
     }
 
     fn launch_download_worker(&mut self, launch: DownloadLaunch) {
-        self.status = if launch.retry {
-            "Retrying download · preserved bytes resume when supported".into()
-        } else {
-            "Starting managed download…".into()
-        };
+        self.download_final_message = false;
+        self.status = self
+            .t()
+            .text(if launch.retry {
+                Message::StatusDownloadRetrying
+            } else {
+                Message::StatusDownloadStarting
+            })
+            .into();
         let DownloadLaunch {
             id,
             destination,
@@ -1817,14 +1901,14 @@ impl App {
 
     fn retry_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
         match self.download_session.retry(&self.engine, &id) {
             Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch),
             Ok(DownloadRequest::Queued) => {
-                self.status = "Retry queued · it starts after the active download".into()
+                self.status = self.t().text(Message::StatusDownloadRetryQueued).into()
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -1834,13 +1918,17 @@ impl App {
         match self.download_session.next_queued(&self.engine) {
             Ok(Some(launch)) => self.launch_download_worker(launch),
             Ok(None) => {}
-            Err(error) => self.status = format!("Could not start queued download · {error}"),
+            Err(error) => {
+                self.status = self
+                    .t()
+                    .format(Message::StatusDownloadStartFailed, &[("error", &error)]);
+            }
         }
     }
 
     fn use_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
@@ -1852,21 +1940,29 @@ impl App {
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", destination.display());
+                self.status = self.t().format(
+                    Message::StatusDownloadUsingCompleted,
+                    &[("path", &destination.display())],
+                );
             }
-            Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadCompletedUnavailable,
+                    &[("error", &error)],
+                );
+            }
         }
     }
 
     fn remove_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
         match self.download_session.remove(&self.engine, &id) {
             Ok(()) => {
-                self.status = "History entry removed · completed image kept".into();
+                self.status = self.t().text(Message::StatusDownloadHistoryRemoved).into();
                 self.refresh_download_jobs();
             }
             Err(error) => self.status = error.to_string(),
@@ -1892,17 +1988,17 @@ impl App {
 
     fn download_catalog_release(&mut self) {
         let Some(release) = self.catalog_releases.get(self.release_selected).cloned() else {
-            self.status = "Choose an ISO release first".into();
+            self.status = self.t().text(Message::StatusCatalogChooseRelease).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("ISO images", &["iso"])
+            .add_filter(self.t().text(Message::SourceDialogFilterIso), &["iso"])
             .set_file_name(&release.name);
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "ISO download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadIsoCancelled).into();
             return;
         };
         match self.engine.enqueue_iso_download(&release, &destination) {
@@ -1917,11 +2013,14 @@ impl App {
             .get(self.catalog_selected)
             .map(|distribution| distribution.page_url.clone())
         else {
-            self.status = "Choose a distribution first".into();
+            self.status = self
+                .t()
+                .text(Message::StatusCatalogChooseDistribution)
+                .into();
             return;
         };
         self.status = match self.engine.open_distrowatch_page(&page_url) {
-            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Ok(()) => self.t().text(Message::StatusCatalogBrowserOpened).into(),
             Err(error) => error.to_string(),
         };
     }
@@ -1933,7 +2032,7 @@ impl App {
             .and_then(|catalog| catalog.images.get(self.pi_image_selected))
             .cloned()
         else {
-            self.status = "Choose a Raspberry Pi image first".into();
+            self.status = self.t().text(Message::StatusCatalogPiChoose).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new().set_file_name(&image.suggested_filename);
@@ -1941,13 +2040,34 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Raspberry Pi image download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadPiCancelled).into();
             return;
         };
         match self.engine.enqueue_pi_download(&image, &destination) {
             Ok(id) => self.launch_download_job(id, destination, false),
             Err(error) => self.status = error.to_string(),
         }
+    }
+
+    /// Shows core's progress message as the status. Core's last message
+    /// (phase `Finished`) names the integrity result, for example a verified
+    /// signature; remember that it is showing so the generic ready line does
+    /// not replace it. This is an explicit flag, not a comparison of the
+    /// (localizable) status text.
+    fn show_download_progress(&mut self, progress: &Progress) {
+        self.download_final_message = progress.phase == ProgressPhase::Finished;
+        self.status = progress.message.clone();
+    }
+
+    /// The download finished and its image is in use: keep core's final
+    /// message when it was shown, otherwise the shared ready line.
+    fn show_download_ready(&mut self, path: &Path) {
+        if !self.download_final_message {
+            self.status = self
+                .t()
+                .format(Message::StatusDownloadReady, &[("name", &path.display())]);
+        }
+        self.download_final_message = false;
     }
 
     fn poll_download(&mut self) {
@@ -1958,7 +2078,7 @@ impl App {
         while let Ok(update) = receiver.try_recv() {
             match update {
                 DownloadUpdate::Progress(progress) => {
-                    self.status = progress.message.clone();
+                    self.show_download_progress(&progress);
                     self.download_session.apply_progress(progress);
                 }
                 DownloadUpdate::Finished(completion) => {
@@ -1969,23 +2089,23 @@ impl App {
                             destination,
                         } => {
                             self.browse_directory = destination.parent().map(PathBuf::from);
-                            // Core's final progress message already names the integrity result
-                            // (for example a verified signature); keep it instead of a generic line.
-                            if !self.status.starts_with("Ready ·") {
-                                self.status = format!(
-                                    "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                    report.path.display()
-                                );
-                            }
+                            self.show_download_ready(&report.path);
                             self.reset_image_scoped_options();
                             self.image = Some(report.clone());
                             self.advanced = false;
                         }
                         DownloadCompletion::Cancelled => {
-                            self.status = "Download cancelled • temporary data cleaned up".into();
+                            self.download_final_message = false;
+                            self.status = self
+                                .t()
+                                .text(Message::StatusDownloadCancelledCleaned)
+                                .into();
                         }
                         DownloadCompletion::Failed(error) => {
-                            self.status = format!("Download stopped · {error}")
+                            self.download_final_message = false;
+                            self.status = self
+                                .t()
+                                .format(Message::StatusDownloadStopped, &[("error", error)]);
                         }
                     }
                     self.download_session.finish(completion);
@@ -2002,9 +2122,12 @@ impl App {
     fn toggle_download_pause(&mut self) {
         match self.download_session.toggle_pause(&self.engine) {
             Ok(Some(OperationState::Paused)) => {
-                self.status = "Download paused • press p to resume or x to cancel".into();
+                // The shared line has no key legend; the TUI appends its own.
+                self.status = format!("{} (p / x)", self.t().text(Message::StatusDownloadPaused));
             }
-            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Running)) => {
+                self.status = self.t().text(Message::StatusDownloadResumed).into();
+            }
             Ok(Some(OperationState::Cancelled) | None) => {}
             Err(error) => self.status = error.to_string(),
         }
@@ -2012,7 +2135,7 @@ impl App {
 
     fn cancel_download(&mut self) {
         if self.download_session.cancel() {
-            self.status = "Cancelling download safely • cleaning temporary data…".into();
+            self.status = self.t().text(Message::StatusDownloadCancelling).into();
         }
     }
 
@@ -2047,7 +2170,7 @@ impl App {
                 KeyCode::Esc | KeyCode::Enter => {
                     self.catalog_searching = false;
                     self.status = if self.catalog_query.is_empty() {
-                        "Search closed · showing DistroWatch six-month popularity".into()
+                        self.t().text(Message::StatusCatalogSearchClosed).into()
                     } else {
                         catalog_search_summary(
                             &self.catalog_query,
@@ -2073,7 +2196,10 @@ impl App {
         }
         if code == KeyCode::Char('/') {
             self.catalog_searching = true;
-            self.status = "Type to search · results update live · Esc leaves search".into();
+            self.status = format!(
+                "{} · Esc",
+                self.t().text(Message::DiscoverSearchPlaceholder)
+            );
             return;
         }
         if code == KeyCode::Char('r') {
@@ -2195,7 +2321,10 @@ impl App {
                 .as_ref()
                 .and_then(|catalog| catalog.devices.get(self.pi_device_selected))
             {
-                self.status = format!("Showing images compatible with {}", device.name);
+                self.status = self.t().format(
+                    Message::StatusCatalogPiCompatible,
+                    &[("board", &device.name)],
+                );
             }
         }
     }
@@ -2321,11 +2450,11 @@ impl App {
 
     fn choose_image(&mut self) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             return;
         }
         let mut dialog = rfd::FileDialog::new().add_filter(
-            "Boot images",
+            self.t().text(Message::SourceDialogTitle),
             &[
                 "iso", "img", "raw", "xz", "gz", "gzip", "zst", "zstd", "bz2", "bzip2",
             ],
@@ -2334,7 +2463,7 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         let Some(path) = dialog.pick_file() else {
-            self.status = "Image selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageCancelled).into();
             return;
         };
         self.inspect_image_path(path);
@@ -2342,11 +2471,11 @@ impl App {
 
     fn inspect_image_path(&mut self, path: PathBuf) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             return;
         }
         self.image_loading = true;
-        self.status = "Inspecting image • compressed sources are measured after expansion…".into();
+        self.status = self.t().text(Message::StatusImageInspecting).into();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             let result = match Bootable::native().inspect_image(&path) {
@@ -2365,7 +2494,9 @@ impl App {
         match receiver.try_recv() {
             Ok(Ok((image, _))) => {
                 self.image_loading = false;
-                self.status = format!("Recognized {}", image.kind);
+                self.status = self
+                    .t()
+                    .format(Message::StatusImageRecognized, &[("kind", &image.kind)]);
                 self.remember_image(&image);
                 self.reset_image_scoped_options();
                 self.image = Some(image);
@@ -2383,7 +2514,7 @@ impl App {
             Err(mpsc::TryRecvError::Empty) => self.image_receiver = Some(receiver),
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.image_loading = false;
-                self.status = "Image inspection stopped unexpectedly".into();
+                self.status = self.t().text(Message::StatusImageStopped).into();
             }
         }
     }
@@ -2394,10 +2525,13 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         if let Some(directory) = dialog.pick_folder() {
-            self.status = format!("Image browser folder: {}", directory.display());
+            self.status = self.t().format(
+                Message::StatusImageFolder,
+                &[("path", &directory.display())],
+            );
             self.browse_directory = Some(directory);
         } else {
-            self.status = "Folder selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageFolderCancelled).into();
         }
     }
 
@@ -2410,7 +2544,7 @@ impl App {
             .collect::<Vec<_>>();
         if eligible.is_empty() {
             self.selected = None;
-            self.status = "No eligible removable drive is available".into();
+            self.status = self.t().text(Message::StatusTargetNoneEligible).into();
             return;
         }
         let position = self
@@ -2423,8 +2557,7 @@ impl App {
         };
         self.selected = eligible.get(next).copied();
         self.workspace_focus = WorkspaceFocus::Target;
-        self.status =
-            "Target selected · confirm the physical drive before reviewing the erase plan".into();
+        self.status = self.t().text(Message::StatusTargetSelected).into();
     }
 
     fn move_workspace_focus(&mut self, backwards: bool) {
@@ -2433,15 +2566,17 @@ impl App {
         } else {
             self.workspace_focus.next(self.image.is_some())
         };
-        self.status = match self.workspace_focus {
-            WorkspaceFocus::Source => "Source · choose or change the image",
-            WorkspaceFocus::Target => "Target · choose an eligible removable drive",
-            WorkspaceFocus::Setup => "Setup options · configure image-specific choices",
-            WorkspaceFocus::Review => "Review & write · inspect the plan before erasure",
-            WorkspaceFocus::Discover => "Discover images · browse trusted catalogs",
-            WorkspaceFocus::Refresh => "Refresh drives · rescan removable media",
-        }
-        .into();
+        self.status = self
+            .t()
+            .text(match self.workspace_focus {
+                WorkspaceFocus::Source => Message::FocusSource,
+                WorkspaceFocus::Target => Message::FocusTarget,
+                WorkspaceFocus::Setup => Message::FocusSetup,
+                WorkspaceFocus::Review => Message::FocusReview,
+                WorkspaceFocus::Discover => Message::FocusDiscover,
+                WorkspaceFocus::Refresh => Message::FocusRefresh,
+            })
+            .into();
     }
 
     fn activate_workspace_focus(&mut self) {
@@ -2458,8 +2593,7 @@ impl App {
     fn refresh(&mut self, manual: bool) {
         if self.write_session.active() {
             if manual {
-                self.status =
-                    "Drive refresh is paused while writing • do not unplug the target".into();
+                self.status = self.t().text(Message::StatusDrivesRefreshPaused).into();
             }
             return;
         }
@@ -2467,7 +2601,7 @@ impl App {
             Ok(devices) => {
                 if devices == self.devices {
                     if manual {
-                        self.status = "Drive list is up to date • automatic detection is on".into();
+                        self.status = self.t().text(Message::StatusDrivesUpToDate).into();
                     }
                     return;
                 }
@@ -2487,7 +2621,7 @@ impl App {
                 self.selected =
                     selected_id.and_then(|id| devices.iter().position(|device| device.id == id));
                 self.devices = devices;
-                self.status = device_change_message(added, removed);
+                self.status = device_change_message(self.t(), added, removed);
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -2495,7 +2629,7 @@ impl App {
 
     fn preview(&mut self) {
         let Some(image) = self.image.clone() else {
-            self.status = "Start with --image /path/to/image.iso to create a plan".into();
+            self.status = self.t().text(Message::StatusImageChooseFirst).into();
             return;
         };
         let Some(target) = self
@@ -2503,7 +2637,7 @@ impl App {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "No target device is selected".into();
+            self.status = self.t().text(Message::StatusTargetChooseFirst).into();
             return;
         };
         match self
@@ -2512,7 +2646,7 @@ impl App {
         {
             Ok(plan) => {
                 self.catalog_open = false;
-                self.status = "Reviewing the write plan • nothing has been written".into();
+                self.status = self.t().text(Message::StatusReviewOpen).into();
                 self.write_session.open(plan);
                 self.write_receiver = None;
             }
@@ -2532,7 +2666,7 @@ impl App {
 
     fn close_review(&mut self) {
         if !self.write_session.close() {
-            self.status = "Writing is active • do not close the app or unplug the target".into();
+            self.status = self.t().text(Message::StatusWriteActive).into();
             return;
         }
         self.status = self.review_readiness().guidance_in(self.locale).into();
@@ -2540,13 +2674,13 @@ impl App {
 
     fn open_write_confirmation(&mut self) {
         if self.write_session.open_confirmation() {
-            self.status = "Review the target changes and consequences before writing".into();
+            self.status = self.t().text(Message::StatusReviewConsequences).into();
         }
     }
 
     fn close_write_confirmation(&mut self) {
         self.write_session.close_confirmation();
-        self.status = "Write cancelled before erasure • the target is unchanged".into();
+        self.status = self.t().text(Message::StatusWriteCancelled).into();
     }
 
     fn start_write(&mut self) {
@@ -2557,7 +2691,7 @@ impl App {
                 return;
             }
         };
-        self.status = "Write started • do not unplug the target".into();
+        self.status = self.t().text(Message::StatusWriteStarted).into();
 
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
@@ -2588,7 +2722,9 @@ impl App {
                 }
                 WriteUpdate::Finished(completion) => {
                     finished = true;
-                    self.status = self.write_session.finish(completion);
+                    let status = completion.status_in(self.locale);
+                    self.write_session.finish(completion);
+                    self.status = status;
                 }
             }
         }
@@ -2599,69 +2735,80 @@ impl App {
 
     fn cancel_write(&mut self) {
         if self.write_session.cancel() {
-            self.status =
-                "Stopping safely • flushing completed writes; media will remain incomplete".into();
+            self.status = self.t().text(Message::StatusWriteStopping).into();
         }
     }
 
     fn toggle_windows_requirements(&mut self) {
         let Some(image) = &self.image else {
-            self.status = "Choose a Windows image before changing Windows options".into();
+            self.status = self.t().text(Message::StatusWindowsChooseInstaller).into();
             return;
         };
         if !matches!(
             image.kind,
             bootable_core::ImageKind::WindowsInstaller { .. }
         ) {
-            self.status = "Windows setup options apply only to Windows installer images".into();
+            self.status = self.t().text(Message::StatusWindowsNotWindows).into();
             return;
         }
-        let enabled = &mut self.options.windows.bypass_hardware_requirements;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows 11 TPM, Secure Boot, and RAM checks will be bypassed".into()
-        } else {
-            "Windows 11 hardware checks use Microsoft defaults".into()
-        };
+        let enabled = !self.options.windows.bypass_hardware_requirements;
+        self.options.windows.bypass_hardware_requirements = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsBypassHardwareOn
+            } else {
+                Message::OptionsWindowsBypassHardwareOff
+            })
+            .into();
     }
 
     fn toggle_windows_offline_account(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.allow_offline_account;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows OOBE will expose the offline/local-account path".into()
-        } else {
-            "Windows OOBE will use its standard account flow".into()
-        };
+        let enabled = !self.options.windows.allow_offline_account;
+        self.options.windows.allow_offline_account = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsOfflineAccountOn
+            } else {
+                Message::OptionsWindowsOfflineAccountOff
+            })
+            .into();
     }
 
     fn toggle_windows_privacy(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.minimize_data_collection;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Windows OOBE will use privacy-focused defaults".into()
-        } else {
-            "Windows OOBE privacy questions will remain at their defaults".into()
-        };
+        let enabled = !self.options.windows.minimize_data_collection;
+        self.options.windows.minimize_data_collection = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsPrivacyOn
+            } else {
+                Message::OptionsWindowsPrivacyOff
+            })
+            .into();
     }
 
     fn toggle_windows_bitlocker(&mut self) {
         if !self.windows_options_available() {
             return;
         }
-        let enabled = &mut self.options.windows.disable_bitlocker;
-        *enabled = !*enabled;
-        self.status = if *enabled {
-            "Automatic Windows device encryption will be disabled".into()
-        } else {
-            "Windows may automatically enable device encryption".into()
-        };
+        let enabled = !self.options.windows.disable_bitlocker;
+        self.options.windows.disable_bitlocker = enabled;
+        self.status = self
+            .t()
+            .text(if enabled {
+                Message::OptionsWindowsBitlockerOn
+            } else {
+                Message::OptionsWindowsBitlockerOff
+            })
+            .into();
     }
 
     fn toggle_windows_named_account(&mut self) {
@@ -2670,12 +2817,15 @@ impl App {
         }
         if self.options.windows.local_account.is_some() {
             self.options.windows.local_account = None;
-            self.status = "Automatic local-account creation disabled".into();
+            self.status = self.t().text(Message::OptionsWindowsNamedAccountOff).into();
         } else {
             let account = bootable_core::suggested_account_name().unwrap_or_else(|| "User".into());
             self.options.windows.local_account = Some(account.clone());
             self.options.windows.allow_offline_account = true;
-            self.status = format!("Windows will create local administrator account `{account}`");
+            self.status = self.t().format(
+                Message::OptionsWindowsNamedAccountOn,
+                &[("account", &account)],
+            );
         }
     }
 
@@ -2685,12 +2835,15 @@ impl App {
         }
         if self.options.windows.regional.is_some() {
             self.options.windows.regional = None;
-            self.status = "Windows Setup will ask for regional options".into();
+            self.status = self.t().text(Message::OptionsWindowsHostRegionOff).into();
         } else {
             let regional = bootable_core::host_regional_options();
-            self.status = format!(
-                "Windows will use locale {} and time zone {}",
-                regional.user_locale, regional.time_zone
+            self.status = self.t().format(
+                Message::OptionsWindowsHostRegionOn,
+                &[
+                    ("locale", &regional.user_locale),
+                    ("zone", &regional.time_zone),
+                ],
             );
             self.options.windows.regional = Some(regional);
         }
@@ -2698,30 +2851,61 @@ impl App {
 
     fn toggle_windows_qol(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.quality_of_life = !self.options.windows.quality_of_life;
-            self.status = "Windows QoL policy selection updated".into();
+            let enabled = !self.options.windows.quality_of_life;
+            self.options.windows.quality_of_life = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsQolOn
+                } else {
+                    Message::OptionsWindowsQolOff
+                })
+                .into();
         }
     }
 
     fn toggle_windows_ca_2023(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.use_windows_ca_2023 = !self.options.windows.use_windows_ca_2023;
-            self.status = "CA 2023 boot media requires updated Secure Boot certificates".into();
+            let enabled = !self.options.windows.use_windows_ca_2023;
+            self.options.windows.use_windows_ca_2023 = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsCa2023On
+                } else {
+                    Message::OptionsWindowsCa2023Off
+                })
+                .into();
         }
     }
 
     fn toggle_windows_skusi_policy(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.apply_skusi_policy = !self.options.windows.apply_skusi_policy;
-            self.status = "SkuSiPolicy.p7b selection updated".into();
+            let enabled = !self.options.windows.apply_skusi_policy;
+            self.options.windows.apply_skusi_policy = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsSkusipolicyOn
+                } else {
+                    Message::OptionsWindowsSkusipolicyOff
+                })
+                .into();
         }
     }
 
     fn toggle_windows_s_mode(&mut self) {
         if self.windows_options_available() {
-            self.options.windows.force_s_mode = !self.options.windows.force_s_mode;
-            self.status =
-                "S Mode may remain enforced after reinstall; review the plan carefully".into();
+            let enabled = !self.options.windows.force_s_mode;
+            self.options.windows.force_s_mode = enabled;
+            self.status = self
+                .t()
+                .text(if enabled {
+                    Message::OptionsWindowsSmodeOn
+                } else {
+                    Message::OptionsWindowsSmodeOff
+                })
+                .into();
         }
     }
 
@@ -2730,9 +2914,12 @@ impl App {
             return;
         }
         cycle_partition_scheme(&mut self.options);
-        self.status = format!(
-            "Windows partition scheme: {} · boot firmware: {}",
-            self.options.windows_partition_scheme, self.options.windows_boot_firmware
+        self.status = self.t().format(
+            Message::StatusWindowsScheme,
+            &[
+                ("scheme", &self.options.windows_partition_scheme),
+                ("firmware", &self.options.windows_boot_firmware),
+            ],
         );
     }
 
@@ -2741,9 +2928,12 @@ impl App {
             return;
         }
         cycle_boot_firmware(&mut self.options);
-        self.status = format!(
-            "Boot firmware: {} (experimental) · partition scheme: {}",
-            self.options.windows_boot_firmware, self.options.windows_partition_scheme
+        self.status = self.t().format(
+            Message::StatusWindowsFirmware,
+            &[
+                ("firmware", &self.options.windows_boot_firmware),
+                ("scheme", &self.options.windows_partition_scheme),
+            ],
         );
     }
 
@@ -2761,7 +2951,7 @@ impl App {
             )
         });
         if !available {
-            self.status = "Choose a Windows installer image before changing Windows options".into();
+            self.status = self.t().text(Message::StatusWindowsChooseInstaller).into();
         }
         available
     }
@@ -2769,38 +2959,38 @@ impl App {
     fn toggle_advanced(&mut self) {
         if self.image.is_none() {
             self.advanced = false;
-            self.status = "Choose or download an image before opening media options".into();
+            self.status = self.t().text(Message::StatusOptionsOpenNeedsImage).into();
             return;
         }
         self.advanced = !self.advanced;
-        self.status = if self.advanced {
-            "Advanced options expanded • every option is included in the reviewed plan".into()
-        } else {
-            "Advanced options collapsed • configured values remain active".into()
-        };
+        self.status = self
+            .t()
+            .text(if self.advanced {
+                Message::StatusOptionsExpanded
+            } else {
+                Message::StatusOptionsCollapsed
+            })
+            .into();
     }
 
     fn cycle_checksum_algorithm(&mut self) {
         self.checksum_algorithm = self.checksum_algorithm.next();
-        self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.status = self.t().format(
+            Message::StatusChecksumAlgorithm,
+            &[("algorithm", &self.checksum_algorithm)],
+        );
         self.preferences.checksum_algorithm = self.checksum_algorithm;
         self.save_preferences();
     }
 
     fn cycle_bad_blocks(&mut self) {
         self.options.bad_block_check = self.options.bad_block_check.next();
-        self.status = match self.options.bad_block_check {
-            BadBlockCheck::Disabled => "Destructive bad-block check disabled".into(),
-            mode => format!(
-                "Bad-block check: {} destructive pattern(s) before writing",
-                mode.passes()
-            ),
-        };
+        self.status = self.options.bad_block_check.status_in(self.locale);
     }
 
     fn checksum(&mut self) {
         let Some(image) = &self.image else {
-            self.status = "Choose an image before computing its checksum".into();
+            self.status = self.t().text(Message::StatusChecksumChooseImage).into();
             return;
         };
         self.status = match self
@@ -2818,20 +3008,26 @@ impl App {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a removable drive to back up".into();
+            self.status = self.t().text(Message::StatusBackupChooseDrive).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Raw drive image", &["img", "raw", "dd"])
+            .add_filter(
+                self.t().text(Message::SourceDialogFilterBackup),
+                &["img", "raw", "dd"],
+            )
             .set_file_name("bootable-backup.img");
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Drive backup cancelled".into();
+            self.status = self.t().text(Message::StatusBackupCancelled).into();
             return;
         };
-        self.status = format!("Backing up {}…", device.display_name());
+        self.status = self.t().format(
+            Message::StatusBackupRunning,
+            &[("drive", &device.display_name())],
+        );
         let mut latest = self.status.clone();
         let result = self
             .engine
@@ -2839,8 +3035,14 @@ impl App {
                 latest = progress.message;
             });
         self.status = match result {
-            Ok(()) => format!("Drive image saved to {}", destination.display()),
-            Err(error) => format!("{error} • last step: {latest}"),
+            Ok(()) => self.t().format(
+                Message::StatusBackupDone,
+                &[("path", &destination.display())],
+            ),
+            Err(error) => self.t().format(
+                Message::StatusBackupFailed,
+                &[("error", &error), ("step", &latest)],
+            ),
         };
     }
 
@@ -2913,11 +3115,9 @@ impl App {
             {
                 self.selected = Some(index);
                 self.workspace_focus = WorkspaceFocus::Target;
-                self.status =
-                    "Target selected · confirm the physical drive before reviewing the erase plan"
-                        .into();
+                self.status = self.t().text(Message::StatusTargetSelected).into();
             } else {
-                self.status = "That drive is blocked and cannot be selected".into();
+                self.status = self.t().text(Message::StatusTargetBlocked).into();
             }
         }
         Some(false)
@@ -2958,8 +3158,7 @@ impl App {
                     }
                 } else if contains(self.hit_regions.quit, point) {
                     if self.write_session.active() {
-                        self.status =
-                            "Writing is active • do not close the app or unplug the target".into();
+                        self.status = self.t().text(Message::StatusWriteActive).into();
                     } else {
                         return true;
                     }
@@ -3069,8 +3268,10 @@ impl App {
                         && contains(self.hit_regions.catalog_search, point)
                     {
                         self.catalog_searching = true;
-                        self.status =
-                            "Type to search · results update live · Esc leaves search".into();
+                        self.status = format!(
+                            "{} · Esc",
+                            self.t().text(Message::DiscoverSearchPlaceholder)
+                        );
                     } else if contains(self.hit_regions.source_distrowatch, point) {
                         self.show_quick_access(QuickAccess::All);
                     } else if contains(self.hit_regions.source_arch, point) {
@@ -3114,8 +3315,7 @@ impl App {
                     {
                         self.pi_image_selected = *index;
                         self.catalog_focus = CatalogFocus::Releases;
-                        self.status =
-                            "Raspberry Pi image selected • download will be verified".into();
+                        self.status = self.t().text(Message::StatusCatalogPiSelectedVerify).into();
                     } else if let Some((_, index)) = self
                         .hit_regions
                         .distribution_rows
@@ -3133,7 +3333,7 @@ impl App {
                     {
                         self.catalog_focus = CatalogFocus::Releases;
                         self.release_selected = *index;
-                        self.status = "ISO selected • choose Download & use ISO".into();
+                        self.status = self.iso_selected_status();
                     }
                 }
                 _ => {}
@@ -3255,8 +3455,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                                 }
                                 KeyCode::Enter => {
                                     app.status =
-                                        "Acknowledge the consequences before confirming the write"
-                                            .into();
+                                        app.t().text(Message::StatusReviewAckRequired).into();
                                 }
                                 _ => {}
                             }
@@ -3280,7 +3479,9 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                                 app.open_write_confirmation();
                             }
                             _ if app.write_session.active() => {
-                                app.status = "Writing is active • press x to stop safely; do not unplug the target".into();
+                                // The shared line has no key legend; the TUI appends its own.
+                                app.status =
+                                    format!("{} (x)", app.t().text(Message::StatusWriteActive));
                             }
                             _ => {}
                         }
@@ -3432,10 +3633,11 @@ fn draw_help(frame: &mut ratatui::Frame<'_>, area: Rect, locale: Locale) {
         height,
     );
     frame.render_widget(Clear, modal);
+    let guide_title = format!(" {} ", locale.strings().text(Message::GuideTitle));
     frame.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
-            .block(panel_block(" Guide ").style(Style::default().bg(PANEL))),
+            .block(panel_block(&guide_title).style(Style::default().bg(PANEL))),
         modal,
     );
 }
@@ -3498,6 +3700,13 @@ fn draw_screen(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         return;
     }
 
+    if show_options && content.height < workspace_height.saturating_add(options_height + 1) {
+        // Too short for the workspace and the options together: the options
+        // the user asked for take the whole content area.
+        draw_advanced(frame, app, content);
+        return;
+    }
+
     let show_setup_toggle = setup_available && content.height >= workspace_height.saturating_add(4);
     let show_discovery_toggle = content.height
         >= workspace_height
@@ -3529,14 +3738,18 @@ fn draw_screen(frame: &mut ratatui::Frame<'_>, app: &mut App) {
 }
 
 fn draw_collapsed_setup(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let bad_blocks = match app.options.bad_block_check.passes() {
-        0 => "Bad blocks off".into(),
-        passes => format!("Bad blocks {passes}x"),
-    };
+    let t = app.t();
+    let summary = t.format(
+        Message::OptionsSummaryVerification,
+        &[(
+            "bad_blocks",
+            &app.options.bad_block_check.label_in(app.locale),
+        )],
+    );
     render_button(
         frame,
         area,
-        &format!("+  Setup options · Verification on · {bad_blocks}"),
+        &format!("+  {} · {summary}", t.text(Message::ActionSetupOptions)),
         app.workspace_focus == WorkspaceFocus::Setup,
     );
     app.hit_regions.advanced = Some(area);
@@ -3546,7 +3759,11 @@ fn draw_collapsed_discovery(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
     render_button(
         frame,
         area,
-        "+  Discover images · Browse trusted catalogs · Open →",
+        &format!(
+            "+  {} · {} →",
+            app.t().text(Message::ActionDiscover),
+            app.t().text(Message::DiscoverCollapsedHint)
+        ),
         app.workspace_focus == WorkspaceFocus::Discover,
     );
     app.hit_regions.discover = Some(area);
@@ -3575,15 +3792,16 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         format_bytes(plan.target.capacity)
     );
     let method = plan.strategy.to_string();
+    let t = app.t();
     let steps = plan
         .steps
         .iter()
         .enumerate()
         .map(|(index, step)| {
             let marker = if step.destructive {
-                "ERASES DATA"
+                t.heading(Message::ReviewStepErases)
             } else {
-                "safe"
+                t.text(Message::ReviewStepSafe).to_string()
             };
             ListItem::new(format!("{}. {}  ·  {marker}", index + 1, step.title)).style(
                 Style::default().fg(if step.destructive {
@@ -3595,6 +3813,32 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         })
         .collect::<Vec<_>>();
 
+    let panel_text_width = usize::from(area.width.saturating_sub(2));
+    let mut permanent_lines = wrapped_lines(
+        t.text(Message::ReviewConsequence),
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+        panel_text_width,
+    );
+    if app.write_session.active() {
+        permanent_lines.extend(wrapped_lines(
+            t.text(Message::ReviewWarningWriting),
+            Style::default().fg(Color::Yellow),
+            panel_text_width,
+        ));
+    } else {
+        for message in [Message::ReviewSubtitle, Message::ReviewHintOpenConfirmation] {
+            permanent_lines.extend(wrapped_lines(
+                t.text(message),
+                Style::default().fg(MUTED),
+                panel_text_width,
+            ));
+        }
+    }
+    // Longer wording (German, Russian) wraps onto more lines; give the panel
+    // the rows it needs instead of clipping a safety sentence.
+    let permanent_height = (permanent_lines.len() as u16 + 2).clamp(6, if compact { 7 } else { 9 });
     let mut constraints = vec![
         Constraint::Length(if compact { 3 } else { 4 }),
         Constraint::Length(if compact { 5 } else { 6 }),
@@ -3605,7 +3849,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         constraints.push(Constraint::Min(0));
     }
     if show_confirmation {
-        constraints.push(Constraint::Length(6));
+        constraints.push(Constraint::Length(permanent_height));
     }
     if show_progress {
         constraints.push(Constraint::Length(5));
@@ -3626,60 +3870,69 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(
         Paragraph::new(brand_lockup(
             area.width >= 60,
-            "Review write plan",
-            if app.write_session.active() {
-                "Writing and verification are active • do not unplug the target."
+            t.text(Message::ReviewTitle),
+            t.text(if app.write_session.active() {
+                Message::ReviewSubtitleWriting
             } else {
-                "Nothing is written until the consequences are reviewed and acknowledged."
-            },
+                Message::HeaderSubtitleReview
+            }),
+            t.text(Message::HeaderTagline),
+            usize::from(rows[row].width),
         ))
         .style(Style::default().bg(BG)),
         rows[row],
     );
     row += 1;
+    let summary_labels = [
+        t.heading(Message::ReviewFieldSource),
+        t.heading(Message::ReviewFieldTarget),
+        t.heading(Message::ReviewFieldMethod),
+    ];
+    let label_width = summary_labels
+        .iter()
+        .map(|label| display_width(label))
+        .max()
+        .unwrap_or(0)
+        + 2;
+    let summary_label = |index: usize| {
+        Span::styled(
+            pad_display(&summary_labels[index], label_width),
+            Style::default().fg(MUTED),
+        )
+    };
+    let plan_summary_title = format!(" {} ", t.text(Message::ReviewPlanSummary));
     frame.render_widget(
         Paragraph::new(vec![
             Line::from(vec![
-                Span::styled("SOURCE  ", Style::default().fg(MUTED)),
+                summary_label(0),
                 Span::styled(source, Style::default().fg(Color::White)),
             ]),
             Line::from(vec![
-                Span::styled("TARGET  ", Style::default().fg(MUTED)),
+                summary_label(1),
                 Span::styled(target, Style::default().fg(Color::White)),
             ]),
             Line::from(vec![
-                Span::styled("METHOD  ", Style::default().fg(MUTED)),
+                summary_label(2),
                 Span::styled(method, Style::default().fg(ACCENT)),
             ]),
         ])
         .wrap(Wrap { trim: true })
-        .block(panel_block(" Plan summary ")),
+        .block(panel_block(&plan_summary_title)),
         rows[row],
     );
     row += 1;
     if show_steps {
+        let operations_title = format!(" {} ", t.text(Message::ReviewOrderedOperations));
         frame.render_widget(
-            List::new(steps).block(panel_block(" Ordered operations ")),
+            List::new(steps).block(panel_block(&operations_title)),
             rows[row],
         );
     }
     row += 1;
     if show_confirmation {
+        let permanent_title = format!(" {} ", t.text(Message::ReviewPermanentChanges));
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "All existing data and partitions on the selected target will be erased.",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Line::styled(
-                    "Open the confirmation to review changes, consequences, and the physical target.",
-                    Style::default().fg(MUTED),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Permanent changes ")),
+            Paragraph::new(permanent_lines).block(panel_block(&permanent_title)),
             rows[row],
         );
         row += 1;
@@ -3714,30 +3967,19 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         row += 1;
     }
     if let Some(completion) = app.write_session.completion() {
-        let (title, message, color) = match completion {
-            WriteCompletion::Succeeded => (
-                " Write complete ",
-                "Image written and verified. The removable drive can now be safely removed."
-                    .to_string(),
-                ACCENT,
-            ),
-            WriteCompletion::AuthenticationDenied => (
-                " Write cancelled before erasure ",
-                "Administrator authentication was cancelled or denied.".into(),
-                Color::Yellow,
-            ),
-            WriteCompletion::Cancelled => (
-                " Write stopped safely ",
-                "The media is incomplete and must be rewritten before use.".into(),
-                Color::LightRed,
-            ),
-            WriteCompletion::Failed(error) => (" Write failed ", error.clone(), Color::LightRed),
+        let color = match completion {
+            WriteCompletion::Succeeded => ACCENT,
+            WriteCompletion::AuthenticationDenied => Color::Yellow,
+            WriteCompletion::Cancelled | WriteCompletion::Failed(_) => Color::LightRed,
         };
+        let result_title = format!(" {} ", completion.title_in(app.locale));
         frame.render_widget(
-            Paragraph::new(message)
-                .style(Style::default().fg(color))
-                .wrap(Wrap { trim: true })
-                .block(panel_block(title)),
+            Paragraph::new(wrapped_lines(
+                &completion.detail_in(app.locale),
+                Style::default().fg(color),
+                usize::from(rows[row].width.saturating_sub(2)),
+            ))
+            .block(panel_block(&result_title)),
             rows[row],
         );
         row += 1;
@@ -3749,30 +3991,32 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     ])
     .spacing(1)
     .split(rows[row]);
+    let back_label = format!("←  {}", t.text(Message::ActionBack));
     if app.write_session.active() {
-        render_disabled_button(frame, actions[0], "←  Back locked");
+        render_disabled_button(frame, actions[0], &back_label);
     } else {
-        render_button(frame, actions[0], "←  Back to selection", false);
+        render_button(frame, actions[0], &back_label, false);
     }
     let write_enabled = !write_succeeded;
     let write_label = if app.write_session.active() {
-        "■  Stop safely"
+        format!("■  {}", t.text(Message::ReviewActionStopSafely))
     } else if write_succeeded {
-        "✓  Written & verified"
+        format!("✓  {}", t.text(Message::ReviewActionWritten))
     } else if app.write_session.completion().is_some() {
-        "!  Review & retry"
+        format!("!  {}", t.text(Message::ReviewActionRetry))
     } else {
-        "!  Review consequences"
+        format!("!  {}", t.text(Message::ReviewActionConsequences))
     };
     if write_enabled {
-        render_button(frame, actions[1], write_label, true);
+        render_button(frame, actions[1], &write_label, true);
     } else {
-        render_disabled_button(frame, actions[1], write_label);
+        render_disabled_button(frame, actions[1], &write_label);
     }
+    let quit_label = format!("×  {}", t.text(Message::ActionQuit));
     if app.write_session.active() {
-        render_disabled_button(frame, actions[2], "×  Quit locked");
+        render_disabled_button(frame, actions[2], &quit_label);
     } else {
-        render_button(frame, actions[2], "×  Quit", false);
+        render_button(frame, actions[2], &quit_label, false);
     }
     app.hit_regions.review_back = (!app.write_session.active()).then_some(actions[0]);
     app.hit_regions.review_write = write_enabled.then_some(actions[1]);
@@ -3783,6 +4027,7 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     let Some(plan) = app.write_session.plan() else {
         return;
     };
@@ -3794,7 +4039,12 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         width,
         height,
     );
-    let compact = modal.height < 28;
+    let inner = modal.inner(ratatui::layout::Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    // Text columns inside a bordered panel in the modal.
+    let text_width = usize::from(inner.width.saturating_sub(2));
     let target = format!(
         "{} • {}\n{} • {}",
         plan.target.display_name(),
@@ -3808,9 +4058,9 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
         .enumerate()
         .map(|(index, step)| {
             let marker = if step.destructive {
-                "ERASES DATA"
+                t.heading(Message::ReviewStepErases)
             } else {
-                "verifies"
+                t.text(Message::ReviewStepVerifies).to_string()
             };
             ListItem::new(format!("{}. {}  ·  {marker}", index + 1, step.title)).style(
                 Style::default().fg(if step.destructive {
@@ -3821,11 +4071,52 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
             )
         })
         .collect::<Vec<_>>();
+    let bullets = [
+        (Message::ConfirmConsequenceErase, Color::LightRed),
+        (Message::ConfirmConsequenceWrongDrive, Color::Yellow),
+        (Message::ConfirmConsequenceInterrupted, Color::Yellow),
+        (Message::ConfirmConsequenceRecheck, MUTED),
+    ];
+    let bullet_lines = |count: usize| {
+        bullets
+            .iter()
+            .take(count)
+            .flat_map(|(message, color)| {
+                wrapped_lines(
+                    &format!("• {}", t.text(*message)),
+                    Style::default().fg(*color),
+                    text_width,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let bullet_height = |count: usize| bullet_lines(count).len() as u16 + 2;
+    // The acknowledgement must always be fully visible; size its row to it.
+    let acknowledged = app.write_session.acknowledged();
+    let acknowledgment = wrapped_lines(
+        &format!(
+            "{} {}",
+            if acknowledged { "■" } else { "□" },
+            t.text(Message::ConfirmAck)
+        ),
+        Style::default().fg(if acknowledged { ACCENT } else { Color::White }),
+        text_width,
+    );
+    let acknowledgment_height = acknowledgment.len() as u16 + 2;
+    // Full layout: target (4), changes (>= 5), consequences, acknowledgement,
+    // buttons (3) and four gaps.
+    let full_height = 4 + 5 + bullet_height(4) + acknowledgment_height + 3 + 4;
+    let compact = inner.height < full_height;
 
     frame.render_widget(Clear, modal);
+    let modal_title = format!(
+        " {} · {} ",
+        t.text(Message::ConfirmTitle),
+        t.heading(Message::ConfirmBadge)
+    );
     frame.render_widget(
         Block::default()
-            .title(" Confirm permanent changes · PERMANENT ")
+            .title(modal_title)
             .title_style(
                 Style::default()
                     .fg(Color::Yellow)
@@ -3837,15 +4128,11 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
             .style(Style::default().bg(PANEL)),
         modal,
     );
-    let inner = modal.inner(ratatui::layout::Margin {
-        horizontal: 1,
-        vertical: 1,
-    });
     let rows = if compact {
         Layout::vertical([
             Constraint::Length(4),
             Constraint::Min(4),
-            Constraint::Length(3),
+            Constraint::Length(acknowledgment_height),
             Constraint::Length(3),
         ])
         .spacing(1)
@@ -3853,96 +4140,68 @@ fn draw_write_confirmation_modal(frame: &mut ratatui::Frame<'_>, app: &mut App, 
     } else {
         Layout::vertical([
             Constraint::Length(4),
-            Constraint::Min(7),
-            Constraint::Length(7),
-            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(bullet_height(4)),
+            Constraint::Length(acknowledgment_height),
             Constraint::Length(3),
         ])
         .spacing(1)
         .split(inner)
     };
+    let physical_title = format!(" {} ", t.text(Message::ConfirmPhysicalTarget));
     frame.render_widget(
         Paragraph::new(target)
             .wrap(Wrap { trim: true })
-            .block(panel_block(" Physical target · check carefully ")),
+            .block(panel_block(&physical_title)),
         rows[0],
     );
+    let consequences_title = format!(" {} ", t.text(Message::ConfirmConsequences));
     if compact {
+        // Narrow terminals show the two consequences that matter most; the
+        // full list appears on a taller screen.
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "• All existing files and partitions on this drive will be permanently erased.",
-                    Style::default().fg(Color::LightRed),
-                ),
-                Line::styled(
-                    "• Choosing the wrong physical drive destroys its data.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Do not close, power off, or unplug until verification finishes.",
-                    Style::default().fg(Color::Yellow),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Changes and consequences ")),
+            Paragraph::new(bullet_lines(2)).block(panel_block(&consequences_title)),
             rows[1],
         );
     } else {
+        let changes_title = format!(" {} ", t.text(Message::ConfirmChanges));
         frame.render_widget(
-            List::new(changes).block(panel_block(" Changes to this drive ")),
+            List::new(changes).block(panel_block(&changes_title)),
             rows[1],
         );
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(
-                    "• Every existing file and partition on this physical drive becomes unrecoverable without a separate backup.",
-                    Style::default().fg(Color::LightRed),
-                ),
-                Line::styled(
-                    "• Selecting the wrong drive destroys the data on that drive.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Power loss, closing, or unplugging can leave incomplete and unbootable media.",
-                    Style::default().fg(Color::Yellow),
-                ),
-                Line::styled(
-                    "• Bootable rechecks target identity before erasure and verifies the result afterward.",
-                    Style::default().fg(MUTED),
-                ),
-            ])
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Consequences ")),
+            Paragraph::new(bullet_lines(4)).block(panel_block(&consequences_title)),
             rows[2],
         );
     }
     let acknowledgment_row = if compact { rows[2] } else { rows[3] };
     let actions_row = if compact { rows[3] } else { rows[4] };
-    let acknowledgment = if app.write_session.acknowledged() {
-        "■ I checked the physical target and understand its existing data will be permanently erased."
-    } else {
-        "□ I checked the physical target and understand its existing data will be permanently erased."
-    };
     frame.render_widget(
-        Paragraph::new(acknowledgment)
-            .style(Style::default().fg(if app.write_session.acknowledged() {
-                ACCENT
-            } else {
-                Color::White
-            }))
-            .wrap(Wrap { trim: true })
-            .block(panel_block(" Space/click to acknowledge ")),
+        Paragraph::new(acknowledgment).block(panel_block(" Space/click to acknowledge ")),
         acknowledgment_row,
     );
     let actions = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
         .spacing(1)
         .split(actions_row);
-    render_button(frame, actions[0], "←  Cancel · target unchanged", false);
+    render_button(
+        frame,
+        actions[0],
+        &format!("←  {}", t.text(Message::ActionCancel)),
+        false,
+    );
     let confirm_ready = app.write_session.can_confirm();
     if confirm_ready {
-        render_danger_button(frame, actions[1], "!  Confirm erase & write");
+        render_danger_button(
+            frame,
+            actions[1],
+            &format!("!  {}", t.text(Message::ConfirmSubmit)),
+        );
     } else {
-        render_disabled_button(frame, actions[1], "□  Acknowledge first");
+        render_disabled_button(
+            frame,
+            actions[1],
+            &format!("□  {}", t.text(Message::ConfirmAcknowledgeFirst)),
+        );
     }
     app.hit_regions.confirm_acknowledge = Some(acknowledgment_row);
     app.hit_regions.confirm_cancel = Some(actions[0]);
@@ -3972,12 +4231,53 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(area);
     let area = header_rows[0];
     let wide = area.width >= 82;
+    let t = app.t();
     let action_count = if app.image.is_some() { 4 } else { 3 };
+    // Every button must at least fit its compact caption in this language
+    // (glyph, space, text, borders and a column of padding).
+    let caption = [
+        Message::ActionDownloadsCompact,
+        Message::ActionCatalogCloseCompact,
+        Message::ActionDiscoverCompact,
+        Message::ActionSetupOptionsCompact,
+        Message::ActionHideOptionsCompact,
+        Message::ActionRefresh,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)))
+    .max()
+    .unwrap_or(0) as u16
+        + 5;
+    let needed = caption * action_count as u16 + (action_count as u16 - 1);
+    // With room to spare the buttons grow to show the full wording, as long
+    // as the brand lockup keeps its width.
+    let full_caption = [
+        Message::ActionDownloads,
+        Message::ActionCatalogClose,
+        Message::ActionDiscover,
+        Message::ActionSetupOptions,
+        Message::ActionHideOptions,
+        Message::ActionRefreshDrives,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)))
+    .max()
+    .unwrap_or(0) as u16
+        + 5;
+    // The lockup needs its title line and its subtitle line.
+    let brand_need = (display_width(t.text(Message::HeaderSubtitleCreate)) + 6).max(
+        4 + display_width(&format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION")))
+            + display_width(&format!("  ·  {}", t.text(Message::HeaderTitleCreate))),
+    ) as u16;
+    let preferred = (full_caption * action_count as u16 + (action_count as u16 - 1))
+        .min(area.width.saturating_sub(7 + brand_need));
     let action_width = if wide {
-        if action_count == 4 { 64 } else { 48 }
+        if action_count == 4 { 64 } else { 48 }.max(preferred)
     } else {
         area.width.saturating_sub(13)
-    };
+    }
+    .max(needed)
+    .min(area.width.saturating_sub(if wide { 13 + 24 } else { 13 }));
     let columns = Layout::horizontal([
         Constraint::Min(if wide { 24 } else { 12 }),
         Constraint::Length(action_width + if wide { 6 } else { 0 }),
@@ -3992,8 +4292,10 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(
         Paragraph::new(brand_lockup(
             wide,
-            "Create boot media",
-            "One deliberate path from image to removable drive.",
+            t.text(Message::HeaderTitleCreate),
+            t.text(Message::HeaderSubtitleCreate),
+            t.text(Message::HeaderTagline),
+            usize::from(columns[0].width),
         ))
         .style(Style::default().bg(BG)),
         columns[0],
@@ -4007,16 +4309,34 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[0],
-        if wide { "⇩ Downloads" } else { "⇩ Jobs" },
+        &glyph_label(
+            actions[0],
+            !wide,
+            "⇩",
+            t.text(Message::ActionDownloads),
+            t.text(Message::ActionDownloadsCompact),
+        ),
         app.downloads_open,
     );
     render_button(
         frame,
         actions[1],
-        if app.catalog_open {
-            if wide { "× Catalog" } else { "× Cat" }
+        &if app.catalog_open {
+            glyph_label(
+                actions[1],
+                !wide,
+                "×",
+                t.text(Message::ActionCatalogClose),
+                t.text(Message::ActionCatalogCloseCompact),
+            )
         } else {
-            if wide { "⌄ Discover" } else { "⌄ Find" }
+            glyph_label(
+                actions[1],
+                !wide,
+                "⌄",
+                t.text(Message::ActionDiscover),
+                t.text(Message::ActionDiscoverCompact),
+            )
         },
         app.workspace_focus == WorkspaceFocus::Discover,
     );
@@ -4024,14 +4344,22 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         render_button(
             frame,
             actions[2],
-            if app.advanced {
-                if wide { "⚙ Hide options" } else { "⚙ Hide" }
+            &if app.advanced {
+                glyph_label(
+                    actions[2],
+                    !wide,
+                    "⚙",
+                    t.text(Message::ActionHideOptions),
+                    t.text(Message::ActionHideOptionsCompact),
+                )
             } else {
-                if wide {
-                    "⚙ Setup options"
-                } else {
-                    "⚙ Setup"
-                }
+                glyph_label(
+                    actions[2],
+                    !wide,
+                    "⚙",
+                    t.text(Message::ActionSetupOptions),
+                    t.text(Message::ActionSetupOptionsCompact),
+                )
             },
             false,
         );
@@ -4043,7 +4371,13 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[refresh_index],
-        if wide { "↻ Refresh" } else { "↻ USB" },
+        &glyph_label(
+            actions[refresh_index],
+            !wide,
+            "↻",
+            t.text(Message::ActionRefreshDrives),
+            t.text(Message::ActionRefresh),
+        ),
         app.workspace_focus == WorkspaceFocus::Refresh,
     );
     app.hit_regions.downloads = Some(actions[0]);
@@ -4097,7 +4431,15 @@ fn step_span(label: String, state: WorkspaceStepState) -> Span<'static> {
     Span::styled(format!(" {marker} {label} "), style)
 }
 
-fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line<'a>> {
+/// The brand lockup. `tagline` is shown after the context only when `room`
+/// terminal columns leave space for it (the same rule the desktop header uses).
+fn brand_lockup<'a>(
+    wide: bool,
+    context: &'a str,
+    subtitle: &'a str,
+    tagline: &'a str,
+    room: usize,
+) -> Vec<Line<'a>> {
     if !wide {
         return vec![Line::from(vec![
             Span::styled(
@@ -4110,6 +4452,11 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
             Span::styled(format!("  {context}"), Style::default().fg(Color::White)),
         ])];
     }
+    let brand = format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION"));
+    let context = format!("  ·  {context}");
+    let tagline = format!("  ·  {tagline}");
+    let used = 4 + display_width(&brand) + display_width(&context);
+    let show_tagline = used + display_width(&tagline) <= room;
     vec![
         Line::from(vec![
             Span::styled(
@@ -4117,12 +4464,16 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION")),
+                brand,
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!("  ·  {context}"), Style::default().fg(Color::White)),
+            Span::styled(context, Style::default().fg(Color::White)),
+            Span::styled(
+                if show_tagline { tagline } else { String::new() },
+                Style::default().fg(MUTED),
+            ),
         ]),
         Line::from(vec![
             Span::styled("╰♨─╯", Style::default().fg(ACCENT)),
@@ -4132,21 +4483,27 @@ fn brand_lockup<'a>(wide: bool, context: &'a str, subtitle: &'a str) -> Vec<Line
 }
 
 fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     let source = app
         .image
         .as_ref()
         .map(|image| {
             format!(
-                "{}\n{} • {}  ·  ✓ Inspected",
+                "{}\n{} • {}  ·  ✓ {}",
                 image.path.display(),
                 image.kind,
-                format_bytes(image.size)
+                format_bytes(image.size),
+                t.text(Message::SourceInspected)
             )
         })
         .unwrap_or_else(|| {
-            "ISO, IMG, RAW, or compressed disk image\nInspected before writing".into()
+            format!(
+                "{}\n{}",
+                t.text(Message::SourceFormats),
+                t.text(Message::SourceHint)
+            )
         });
-    let source_title = panel_heading(app.locale, 1, " · choose an image");
+    let source_title = panel_heading(t, 1, Message::SourceTitle);
     let source_block =
         focused_panel_block(&source_title, app.workspace_focus == WorkspaceFocus::Source);
     let source_inner = source_block.inner(area);
@@ -4160,9 +4517,32 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let source_rows = Layout::vertical([Constraint::Min(3), Constraint::Length(recent_lines)])
         .split(source_inner);
     draw_recent_images(frame, app, &recents, source_rows[1]);
-    let source_columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(14)])
-        .spacing(1)
-        .split(source_rows[0]);
+    // The button column grows to fit the longest caption in this language.
+    let button_columns = [
+        Message::ActionBrowse,
+        Message::ActionChange,
+        Message::ActionInspecting,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)) + 5)
+    .max()
+    .unwrap_or(14)
+    .clamp(14, usize::from(source_rows[0].width / 2).max(14)) as u16;
+    // Narrow panels stack the button under the text instead of squeezing the
+    // text into a few columns.
+    let stacked = source_rows[0].width < 50 && source_rows[0].height >= 6;
+    let source_columns = if stacked {
+        let stack =
+            Layout::vertical([Constraint::Min(2), Constraint::Length(3)]).split(source_rows[0]);
+        let button = Layout::horizontal([Constraint::Min(0), Constraint::Length(button_columns)])
+            .split(stack[1]);
+        [stack[0], button[1]]
+    } else {
+        let columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(button_columns)])
+            .spacing(1)
+            .split(source_rows[0]);
+        [columns[0], columns[1]]
+    };
     frame.render_widget(
         Paragraph::new(source)
             .style(Style::default().fg(Color::White))
@@ -4171,17 +4551,20 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let button_area = centered_button_area(source_columns[1]);
     if app.image_loading {
-        render_disabled_button(frame, button_area, "…  Inspecting");
+        render_disabled_button(frame, button_area, t.text(Message::ActionInspecting));
         app.hit_regions.open_image = None;
     } else {
         render_button(
             frame,
             button_area,
-            if app.image.is_some() {
-                "▣  Change"
-            } else {
-                "▣  Browse"
-            },
+            &format!(
+                "▣  {}",
+                t.text(if app.image.is_some() {
+                    Message::ActionChange
+                } else {
+                    Message::ActionBrowse
+                })
+            ),
             true,
         );
         app.hit_regions.open_image = Some(button_area);
@@ -4200,14 +4583,21 @@ fn draw_recent_images(
     }
     if recents.is_empty() {
         frame.render_widget(
-            Paragraph::new("Images you use appear here for one-click reuse")
-                .style(Style::default().fg(MUTED)),
+            Paragraph::new(truncate_end(
+                app.t().text(Message::SourceRecentEmpty),
+                usize::from(area.width),
+            ))
+            .style(Style::default().fg(MUTED)),
             Rect::new(area.x, area.y, area.width, 1),
         );
         return;
     }
     frame.render_widget(
-        Paragraph::new("RECENT IMAGES · press 1-4").style(Style::default().fg(MUTED)),
+        Paragraph::new(format!(
+            "{} · 1-4",
+            app.t().heading(Message::SourceRecentTitle)
+        ))
+        .style(Style::default().fg(MUTED)),
         Rect::new(area.x, area.y, area.width, 1),
     );
     for (index, recent) in recents
@@ -4221,7 +4611,7 @@ fn draw_recent_images(
             .as_ref()
             .is_some_and(|image| image.path == recent.path);
         let size = if current {
-            "In use".to_string()
+            app.t().text(Message::SourceRecentInUse).to_string()
         } else {
             format_bytes(recent.size)
         };
@@ -4248,6 +4638,8 @@ fn draw_recent_images(
 }
 
 fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     let rows = Layout::vertical([
         Constraint::Min(5),
         Constraint::Length(4),
@@ -4256,11 +4648,16 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     .spacing(1)
     .split(area);
     let items = if app.download_session.jobs().is_empty() {
-        vec![
-            ListItem::new("No managed downloads yet · choose an image from Discover to begin")
-                .style(Style::default().fg(MUTED)),
-        ]
+        vec![ListItem::new(t.text(Message::DownloadsEmpty)).style(Style::default().fg(MUTED))]
     } else {
+        let status_width = app
+            .download_session
+            .jobs()
+            .iter()
+            .map(|job| display_width(job.status.label_in(locale)))
+            .max()
+            .unwrap_or(0)
+            .max(11);
         app.download_session
             .jobs()
             .iter()
@@ -4270,8 +4667,8 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
                     .map(|ratio| format!(" · {:>5.1}%", ratio * 100.))
                     .unwrap_or_default();
                 ListItem::new(format!(
-                    "{:<11} {} {}{}",
-                    job.status,
+                    "{} {} {}{}",
+                    pad_display(job.status.label_in(locale), status_width),
                     pad_display(&truncate_middle(&job.label, 28), 28),
                     job.destination.display(),
                     progress
@@ -4287,11 +4684,17 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     };
     let mut state = ListState::default()
         .with_selected((!app.download_session.jobs().is_empty()).then_some(app.download_selected));
+    let downloads_title = format!(
+        " {} · {} ",
+        t.text(Message::ActionDownloads),
+        t.text(Message::DownloadsSubtitle)
+    );
     frame.render_stateful_widget(
         List::new(items)
-            .block(panel_block(
-                " Downloads · persistent history · ↑/↓ select · m closes ",
-            ))
+            .block(
+                panel_block(&downloads_title)
+                    .title_bottom(Line::from(" ↑/↓ select · m closes ").right_aligned()),
+            )
             .highlight_symbol("› ")
             .highlight_style(
                 Style::default()
@@ -4307,21 +4710,22 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
         .jobs()
         .get(app.download_selected)
         .map_or_else(
-        || "Interrupted transfers retain only owned partial files; explicit cancellation removes them.".into(),
-        |job| {
-            format!(
-                "{} · {}\n{}",
-                job.kind,
-                job.error.as_deref().unwrap_or(&job.message),
-                job.destination.display()
-            )
-        },
-    );
+            || t.text(Message::DownloadsInterruptedNote).to_string(),
+            |job| {
+                format!(
+                    "{} · {}\n{}",
+                    job.kind.label_in(locale),
+                    job.error.as_deref().unwrap_or(&job.message),
+                    job.destination.display()
+                )
+            },
+        );
+    let selected_download_title = format!(" {} ", t.text(Message::DownloadsSelected));
     frame.render_widget(
         Paragraph::new(details)
             .style(Style::default().fg(MUTED))
             .wrap(Wrap { trim: true })
-            .block(panel_block(" Selected download ")),
+            .block(panel_block(&selected_download_title)),
         rows[1],
     );
     let actions = Layout::horizontal([
@@ -4336,20 +4740,23 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     let can_use = selected.is_some_and(|job| job.status == DownloadStatus::Completed);
     let can_remove = selected
         .is_some_and(|job| !matches!(job.status, DownloadStatus::Running | DownloadStatus::Paused));
+    let retry_label = format!("↻  {}", t.text(Message::DownloadsActionRetryResume));
+    let use_label = format!("✓  {}", t.text(Message::DownloadsActionUseImage));
+    let remove_label = format!("×  {}", t.text(Message::DownloadsActionRemove));
     if can_retry {
-        render_button(frame, actions[0], "↻  Retry / resume", true);
+        render_button(frame, actions[0], &retry_label, true);
     } else {
-        render_disabled_button(frame, actions[0], "↻  Retry / resume");
+        render_disabled_button(frame, actions[0], &retry_label);
     }
     if can_use {
-        render_button(frame, actions[1], "✓  Use image", true);
+        render_button(frame, actions[1], &use_label, true);
     } else {
-        render_disabled_button(frame, actions[1], "✓  Use image");
+        render_disabled_button(frame, actions[1], &use_label);
     }
     if can_remove {
-        render_button(frame, actions[2], "×  Remove entry", false);
+        render_button(frame, actions[2], &remove_label, false);
     } else {
-        render_disabled_button(frame, actions[2], "×  Remove entry");
+        render_disabled_button(frame, actions[2], &remove_label);
     }
     app.hit_regions.download_rows = catalog_row_regions(rows[0], app.download_session.jobs().len());
     app.hit_regions.download_retry = can_retry.then_some(actions[0]);
@@ -4361,6 +4768,42 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
 /// `chars().count()` is wrong for them.
 fn display_width(value: &str) -> usize {
     UnicodeWidthStr::width(value)
+}
+
+/// The first of `variants` (longest first) that fits in `columns` terminal
+/// columns, else the last one.
+fn fit_variant(columns: usize, variants: &[String]) -> String {
+    variants
+        .iter()
+        .find(|variant| display_width(variant) <= columns)
+        .or(variants.last())
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// A button caption: `glyph` (drawn by the adapter, never part of the
+/// translated text) plus the long wording, or the compact wording when the
+/// layout is narrow or the long form would not fit inside `area`.
+fn glyph_label(area: Rect, narrow: bool, glyph: &str, long: &str, compact: &str) -> String {
+    let compact = format!("{glyph} {compact}");
+    if narrow {
+        return compact;
+    }
+    fit_variant(
+        usize::from(area.width.saturating_sub(2)),
+        &[format!("{glyph} {long}"), compact],
+    )
+}
+
+/// `text` wrapped to `width` terminal columns, ready to render without
+/// `Wrap`. The widget wrapper only breaks at spaces, which strands a whole
+/// Japanese sentence on its own row and makes the row count unpredictable;
+/// this one measures columns and may break between wide characters.
+fn wrapped_lines(text: &str, style: Style, width: usize) -> Vec<Line<'static>> {
+    wrap_styled(&[(text, style)], width)
+        .into_iter()
+        .map(Line::from)
+        .collect()
 }
 
 /// Pads `value` with spaces to `width` terminal columns (never truncates).
@@ -4382,6 +4825,36 @@ fn take_columns(value: impl Iterator<Item = char>, columns: usize) -> String {
         taken.push(character);
     }
     taken
+}
+
+/// One list row: `prefix`, then `name` padded or ellipsized to whatever the
+/// row has left, then `suffix`. The suffix (the action) is never clipped.
+fn fit_row(room: usize, prefix: &str, name: &str, suffix: &str) -> String {
+    let name_room = room
+        .saturating_sub(display_width(prefix) + display_width(suffix))
+        .max(6);
+    format!(
+        "{prefix}{}{suffix}",
+        pad_display(&truncate_end(name, name_room), name_room)
+    )
+}
+
+/// `value` with its first character upper-cased (a no-op for scripts without
+/// case).
+fn capitalize_first(value: &str) -> String {
+    let mut characters = value.chars();
+    characters
+        .next()
+        .map(|first| first.to_uppercase().chain(characters).collect())
+        .unwrap_or_default()
+}
+
+/// `value` cut to `limit` terminal columns with a trailing ellipsis.
+fn truncate_end(value: &str, limit: usize) -> String {
+    if display_width(value) <= limit {
+        return value.into();
+    }
+    format!("{}…", take_columns(value.chars(), limit.saturating_sub(1)))
 }
 
 fn truncate_middle(value: &str, limit: usize) -> String {
@@ -4525,20 +4998,24 @@ fn draw_language_hint(
     width + 1
 }
 
-/// Heading of a numbered workspace panel. The English-only qualifier is
-/// dropped in other languages rather than leaving a mixed-language title.
-fn panel_heading(locale: Locale, step: usize, english_qualifier: &str) -> String {
-    let title = WorkspaceProgress::step_titles(locale)[step - 1];
-    if locale.is_source() {
-        format!(" {step}  {title}{english_qualifier} ")
-    } else {
-        format!(" {step}  {title} ")
-    }
+/// Heading of a numbered workspace panel: the step title, then the panel's
+/// own call to action (`source.title` / `target.title`) when it has one.
+fn panel_heading(t: Strings, step: usize, qualifier: Message) -> String {
+    let title = WorkspaceProgress::step_titles(t.locale())[step - 1];
+    format!(" {step}  {title} · {} ", t.text(qualifier))
+}
+
+/// Heading of the review panel, which has no qualifier.
+fn plain_panel_heading(t: Strings, step: usize) -> String {
+    let title = WorkspaceProgress::step_titles(t.locale())[step - 1];
+    format!(" {step}  {title} ")
 }
 
 fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     frame.render_widget(Clear, area);
-    let block = panel_block(" Discover bootable images ");
+    let discover_title = format!(" {} ", t.text(Message::DiscoverTitle));
+    let block = panel_block(&discover_title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let compact_tabs = inner.width < 86;
@@ -4583,7 +5060,7 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         sources[0],
-        "1  All",
+        &format!("1  {}", t.text(Message::DiscoverQuickAll)),
         app.discovery_session.quick_access() == QuickAccess::All
             && app.discovery_session.source() == DiscoverySource::DistroWatch,
     );
@@ -4629,10 +5106,14 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     } else {
         Style::default().fg(MUTED)
     };
+    let search_room = usize::from(search_area.width.saturating_sub(2));
     let search_value = if app.discovery_session.quick_access() == QuickAccess::Windows {
-        "Windows installer workflow · select an ISO to unlock every setup checkbox".into()
+        truncate_end(t.text(Message::DiscoverWindowsHint), search_room)
     } else if app.catalog_query.is_empty() {
-        "Search by name, slug, or base family…  / to type".into()
+        truncate_end(
+            &format!("/ {}", t.text(Message::DiscoverSearchPlaceholder)),
+            search_room,
+        )
     } else {
         format!(
             "{}{}",
@@ -4640,10 +5121,11 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             if app.catalog_searching { "▏" } else { "" }
         )
     };
+    let search_title = format!(" {} ", t.text(Message::DiscoverSearchTitle));
     frame.render_widget(
         Paragraph::new(search_value)
             .style(search_style)
-            .block(panel_block(" Search ")),
+            .block(panel_block(&search_title)),
         search_area,
     );
     app.hit_regions.catalog_search = Some(search_area);
@@ -4671,17 +5153,22 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             _ => app.discovery_session.state(CatalogFacet::Popular),
         },
     };
-    let refresh_label = if active_state.is_failed()
-        || app
-            .discovery_session
-            .state(CatalogFacet::Details)
-            .is_failed()
-    {
-        "↻  Retry"
-    } else {
-        "↻  Refresh"
-    };
-    render_button(frame, actions[0], refresh_label, false);
+    let refresh_label = format!(
+        "↻  {}",
+        t.text(
+            if active_state.is_failed()
+                || app
+                    .discovery_session
+                    .state(CatalogFacet::Details)
+                    .is_failed()
+            {
+                Message::ActionRetry
+            } else {
+                Message::ActionRefresh
+            }
+        )
+    );
+    render_button(frame, actions[0], &refresh_label, false);
     let open_page_fallback = app.discovery_session.source() == DiscoverySource::DistroWatch
         && app.discovery_session.quick_access() != QuickAccess::Windows
         && app.catalog_releases.is_empty()
@@ -4701,14 +5188,27 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[1],
-        if app.discovery_session.quick_access() == QuickAccess::Windows {
-            "▣  Choose Windows ISO"
+        &if app.discovery_session.quick_access() == QuickAccess::Windows {
+            let windows_ready = app.image.as_ref().is_some_and(|image| {
+                matches!(
+                    image.kind,
+                    bootable_core::ImageKind::WindowsInstaller { .. }
+                )
+            });
+            format!(
+                "▣  {}",
+                t.text(if windows_ready {
+                    Message::OptionsWindowsReplaceIso
+                } else {
+                    Message::OptionsWindowsChooseIso
+                })
+            )
         } else if app.discovery_session.source() == DiscoverySource::RaspberryPi {
-            "⇩  Download, verify & use"
+            format!("⇩  {}", t.text(Message::PiDownloadUse))
         } else if open_page_fallback {
-            "↗  Open DistroWatch download page  [b]"
+            format!("↗  {}  [b]", t.text(Message::DiscoverDetailOpenPage))
         } else {
-            "⇩  Download & use ISO"
+            format!("⇩  {}", t.text(Message::DiscoverDetailDownloadUse))
         },
         can_download || open_page_fallback,
     );
@@ -4722,6 +5222,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
     app.hit_regions.release_rows.clear();
     app.hit_regions.pi_device_rows.clear();
     app.hit_regions.pi_image_rows.clear();
+    let t = app.t();
     let windows_image = app.image.as_ref().is_some_and(|image| {
         matches!(
             image.kind,
@@ -4781,11 +5282,11 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
                     .add_modifier(Modifier::BOLD),
             ),
             Line::styled(
-                if windows_image {
-                    "Windows ISO ready · setup choices unlocked"
+                t.text(if windows_image {
+                    Message::OptionsWindowsInstallerReady
                 } else {
-                    "Choose a Windows ISO to unlock setup choices"
-                },
+                    Message::OptionsWindowsInstallerLocked
+                }),
                 Style::default().fg(if windows_image { ACCENT } else { MUTED }),
             ),
             Line::styled(
@@ -4801,77 +5302,89 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         rows[0],
     );
     let options = grid_areas(rows[1], columns, 12);
-    render_checkbox(
-        frame,
-        options[0],
-        "Hardware bypass",
-        app.options.windows.bypass_hardware_requirements,
-    );
-    render_checkbox(
-        frame,
-        options[1],
-        "Offline account",
-        app.options.windows.allow_offline_account,
-    );
-    render_checkbox(
-        frame,
-        options[2],
-        "Privacy defaults",
-        app.options.windows.minimize_data_collection,
-    );
-    render_checkbox(
-        frame,
-        options[3],
-        "Disable BitLocker",
-        app.options.windows.disable_bitlocker,
-    );
-    render_checkbox(
-        frame,
-        options[4],
-        "Named account",
-        app.options.windows.local_account.is_some(),
-    );
-    render_checkbox(
-        frame,
-        options[5],
-        "Host region",
-        app.options.windows.regional.is_some(),
-    );
-    render_checkbox(
-        frame,
-        options[6],
-        "QoL policies",
-        app.options.windows.quality_of_life,
-    );
-    render_checkbox(
-        frame,
-        options[7],
-        "CA 2023",
-        app.options.windows.use_windows_ca_2023,
-    );
-    render_checkbox(
-        frame,
-        options[8],
-        "SkuSiPolicy",
-        app.options.windows.apply_skusi_policy,
-    );
-    render_checkbox(
-        frame,
-        options[9],
-        "Force S Mode",
-        app.options.windows.force_s_mode,
-    );
+    let named_account = app
+        .options
+        .windows
+        .local_account
+        .clone()
+        .or_else(bootable_core::suggested_account_name)
+        .unwrap_or_else(|| "User".into());
+    let option_cells = [
+        (
+            Message::OptionsWindowsBypassHardwareLabel,
+            Message::OptionsWindowsBypassHardwareShort,
+            app.options.windows.bypass_hardware_requirements,
+        ),
+        (
+            Message::OptionsWindowsOfflineAccountLabel,
+            Message::OptionsWindowsOfflineAccountShort,
+            app.options.windows.allow_offline_account,
+        ),
+        (
+            Message::OptionsWindowsPrivacyLabel,
+            Message::OptionsWindowsPrivacyShort,
+            app.options.windows.minimize_data_collection,
+        ),
+        (
+            Message::OptionsWindowsBitlockerLabel,
+            Message::OptionsWindowsBitlockerShort,
+            app.options.windows.disable_bitlocker,
+        ),
+        (
+            Message::OptionsWindowsNamedAccountLabel,
+            Message::OptionsWindowsNamedAccountShort,
+            app.options.windows.local_account.is_some(),
+        ),
+        (
+            Message::OptionsWindowsHostRegionLabel,
+            Message::OptionsWindowsHostRegionShort,
+            app.options.windows.regional.is_some(),
+        ),
+        (
+            Message::OptionsWindowsQolLabel,
+            Message::OptionsWindowsQolShort,
+            app.options.windows.quality_of_life,
+        ),
+        (
+            Message::OptionsWindowsCa2023Label,
+            Message::OptionsWindowsCa2023Short,
+            app.options.windows.use_windows_ca_2023,
+        ),
+        (
+            Message::OptionsWindowsSkusipolicyLabel,
+            Message::OptionsWindowsSkusipolicyShort,
+            app.options.windows.apply_skusi_policy,
+        ),
+        (
+            Message::OptionsWindowsSmodeLabel,
+            Message::OptionsWindowsSmodeShort,
+            app.options.windows.force_s_mode,
+        ),
+    ];
+    for (cell, (label, short, selected)) in option_cells.into_iter().enumerate() {
+        // The named-account label carries a `{name}` placeholder; when narrow
+        // the placeholder-free short caption is used instead.
+        let label = if label == Message::OptionsWindowsNamedAccountLabel {
+            t.format(label, &[("name", &named_account)])
+        } else {
+            t.text(label).to_string()
+        };
+        render_option_checkbox(frame, options[cell], &label, t.text(short), selected);
+    }
     render_button(
         frame,
         options[10],
-        &format!("Scheme: {}", app.options.windows_partition_scheme),
+        &t.format(
+            Message::OptionsWindowsSchemeValue,
+            &[("scheme", &app.options.windows_partition_scheme)],
+        ),
         true,
     );
     if windows_image {
         render_button(
             frame,
             options[11],
-            &boot_firmware_label(app.options.windows_boot_firmware, options[11].width),
+            &boot_firmware_label(t, app.options.windows_boot_firmware, options[11].width),
             true,
         );
     }
@@ -4914,7 +5427,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
     ];
     if windows_image {
         coverage.push(Line::styled(
-            "Boot firmware (f): UEFI or BIOS + UEFI (CSM) · BIOS option is experimental and needs MBR",
+            format!("f · {}", t.text(Message::OptionsWindowsBootFirmwareHint)),
             Style::default().fg(Color::Yellow),
         ));
     }
@@ -4923,7 +5436,7 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
         Style::default().fg(Color::Yellow),
     ));
     coverage.push(Line::styled(
-        "Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.",
+        t.text(Message::OptionsWindowsUnavailableNote),
         Style::default().fg(MUTED),
     ));
     frame.render_widget(
@@ -4935,6 +5448,8 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
 }
 
 fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     app.hit_regions.pi_device_rows.clear();
     app.hit_regions.pi_image_rows.clear();
     let columns = if area.width >= 72 {
@@ -4961,9 +5476,10 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         } else if !app.catalog_query.is_empty() {
             app.discovery_session
                 .state(CatalogFacet::Directory)
-                .short_label("search catalog")
+                .short_label_in(locale, t.text(Message::CatalogSubjectSearchCatalog))
         } else {
-            current_distribution_state(app).short_label("distributions")
+            current_distribution_state(app)
+                .short_label_in(locale, t.text(Message::CatalogSubjectDistributions))
         };
         vec![ListItem::new(message).style(Style::default().fg(MUTED))]
     } else {
@@ -4976,28 +5492,43 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
             })
             .map(|(index, distribution)| {
                 let action = if app.catalog_selected == index {
-                    "Selected"
+                    t.text(Message::ActionSelected).to_string()
                 } else {
-                    "Select →"
+                    format!("{} →", t.text(Message::ActionSelect))
                 };
+                // The name gives way so the action always stays visible.
+                let room = usize::from(columns[0].width.saturating_sub(4));
                 ListItem::new(if !app.catalog_query.is_empty() {
                     let rank = if distribution.rank == 0 {
                         "·".into()
                     } else {
                         distribution.rank.to_string()
                     };
-                    format!(
-                        "{:>2}  {:<18} {:<12} {action}",
-                        rank,
-                        distribution.name,
-                        distribution.based_on.as_deref().unwrap_or("Independent")
+                    let based = distribution
+                        .based_on
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverItemIndependent));
+                    fit_row(
+                        room,
+                        &format!("{rank:>2}  "),
+                        &distribution.name,
+                        &format!(" {} {action}", pad_display(&truncate_end(based, 12), 12)),
                     )
                 } else if distribution.rank == 0 {
-                    format!(" ·  {:<22} {action}", distribution.name)
+                    fit_row(room, " ·  ", &distribution.name, &format!(" {action}"))
                 } else {
-                    format!(
-                        "{:>2}  {:<16} {:>5}/day  {action}",
-                        distribution.rank, distribution.name, distribution.hits_per_day
+                    let hits = t.format(
+                        Message::DiscoverItemHitsPerDay,
+                        &[("hits", &distribution.hits_per_day)],
+                    );
+                    fit_row(
+                        room,
+                        &format!("{:>2}  ", distribution.rank),
+                        &distribution.name,
+                        &format!(
+                            " {}{hits}  {action}",
+                            " ".repeat(9usize.saturating_sub(display_width(&hits)))
+                        ),
                     )
                 })
             })
@@ -5008,7 +5539,7 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
             ListItem::new(
                 app.discovery_session
                     .state(CatalogFacet::Details)
-                    .short_label("ISO releases"),
+                    .short_label_in(locale, t.text(Message::CatalogSubjectIsoReleases)),
             )
             .style(Style::default().fg(MUTED)),
         ]
@@ -5020,7 +5551,7 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
                     .checksum_algorithm
                     .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
                     .map(|algorithm| format!("✓ {algorithm}"))
-                    .unwrap_or_else(|| "HTTPS only".into());
+                    .unwrap_or_else(|| t.text(Message::DiscoverItemHttpsOnly).to_string());
                 ListItem::new(format!(
                     "{}  {}  {}",
                     release.name,
@@ -5038,19 +5569,22 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         .with_selected((!matching_indices.is_empty()).then_some(selected_position));
     let mut release_state = ListState::default()
         .with_selected((!app.catalog_releases.is_empty()).then_some(app.release_selected));
-    let distribution_title = if !app.catalog_query.is_empty() {
-        " Search results "
-    } else {
-        match app.discovery_session.quick_access() {
-            QuickAccess::Arch => " Arch-based ",
-            QuickAccess::Debian => " Debian-based ",
-            QuickAccess::Omarchy => " Omarchy ",
-            _ => " Popular · six months ",
+    let distribution_title = format!(
+        " {} ",
+        if !app.catalog_query.is_empty() {
+            t.text(Message::DiscoverSectionSearch)
+        } else {
+            match app.discovery_session.quick_access() {
+                QuickAccess::Arch => t.text(Message::DiscoverSectionArch),
+                QuickAccess::Debian => t.text(Message::DiscoverSectionDebian),
+                QuickAccess::Omarchy => "Omarchy",
+                _ => t.text(Message::DiscoverSectionPopular),
+            }
         }
-    };
+    );
     frame.render_stateful_widget(
         List::new(distributions)
-            .block(panel_block(distribution_title))
+            .block(panel_block(&distribution_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5070,37 +5604,76 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         ) {
         app.discovery_session
             .state(CatalogFacet::Details)
-            .short_label("distribution profile")
+            .short_label_in(locale, t.text(Message::CatalogSubjectDistributionProfile))
     } else {
         app.selected_details.as_ref().map_or_else(
-            || "Choose a distribution to load its profile and ISO files".into(),
+            || t.text(Message::DiscoverDetailEmpty).to_string(),
             |details| {
-            format!(
-                "{}  ·  {}  ·  {}\nBased on: {}  ·  Origin: {}\nArchitecture: {}\nDesktop: {}\n{}\nLogo: {}\nScreenshot: {}",
-                details.name,
-                details.os_type.as_deref().unwrap_or("Unknown OS"),
-                details.status.as_deref().unwrap_or("Unknown status"),
-                details.based_on.as_deref().unwrap_or("Independent"),
-                details.origin.as_deref().unwrap_or("Unknown"),
-                compact_text_list(&details.architectures, 4),
-                compact_text_list(&details.desktops, 4),
-                details.description.as_deref().unwrap_or("No description"),
-                details.logo_url.as_deref().unwrap_or("Not listed"),
-                details.screenshot_url.as_deref().unwrap_or("Not listed")
-            )
+                let labeled = |label: Message, value: &dyn std::fmt::Display| {
+                    t.format(
+                        Message::CommonLabeled,
+                        &[("label", &t.text(label)), ("value", value)],
+                    )
+                };
+                let not_listed = t.text(Message::DiscoverDetailNotListed);
+                format!(
+                    "{}  ·  {}  ·  {}\n{}  ·  {}\n{}\n{}\n{}\n{}\n{}",
+                    details.name,
+                    details
+                        .os_type
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailUnknownOs)),
+                    details
+                        .status
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailUnknownStatus)),
+                    labeled(
+                        Message::DiscoverDetailBasedOn,
+                        &details
+                            .based_on
+                            .as_deref()
+                            .unwrap_or(t.text(Message::DiscoverItemIndependent))
+                    ),
+                    labeled(
+                        Message::DiscoverDetailOrigin,
+                        &details
+                            .origin
+                            .as_deref()
+                            .unwrap_or(t.text(Message::DiscoverDetailUnknownOrigin))
+                    ),
+                    labeled(
+                        Message::DiscoverDetailArchitecture,
+                        &compact_text_list(t, &details.architectures, 4)
+                    ),
+                    labeled(
+                        Message::DiscoverDetailDesktop,
+                        &compact_text_list(t, &details.desktops, 4)
+                    ),
+                    details
+                        .description
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailNoDescription)),
+                    labeled(
+                        Message::DiscoverDetailLogo,
+                        &details.logo_url.as_deref().unwrap_or(not_listed)
+                    ),
+                    labeled(
+                        Message::DiscoverDetailScreenshot,
+                        &details.screenshot_url.as_deref().unwrap_or(not_listed)
+                    ),
+                )
             },
         )
     };
-    draw_catalog_artwork_panel(
-        frame,
-        app,
-        right[0],
-        " Distribution profile · artwork ",
-        profile,
+    let profile_title = format!(
+        " {} ",
+        capitalize_first(t.text(Message::CatalogSubjectDistributionProfile))
     );
+    draw_catalog_artwork_panel(frame, app, right[0], &profile_title, profile);
+    let releases_title = format!(" {} ", t.text(Message::DiscoverDetailDirectIsos));
     frame.render_stateful_widget(
         List::new(releases)
-            .block(panel_block(" Direct ISO files "))
+            .block(panel_block(&releases_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5115,6 +5688,8 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
 }
 
 fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     app.hit_regions.distribution_rows.clear();
     app.hit_regions.release_rows.clear();
     let columns = if area.width >= 72 {
@@ -5132,7 +5707,7 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                 ListItem::new(
                     app.discovery_session
                         .state(CatalogFacet::RaspberryPi)
-                        .short_label("Raspberry Pi boards"),
+                        .short_label_in(locale, t.text(Message::CatalogSubjectPiBoards)),
                 )
                 .style(Style::default().fg(MUTED)),
             ]
@@ -5168,16 +5743,16 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .unwrap_or_default();
     let image_items = if visible_images.is_empty() {
         let message = if app.pi_catalog.is_some() && !app.catalog_query.is_empty() {
-            format!(
-                "No Raspberry Pi images match “{}”",
-                app.catalog_query.trim()
+            t.format(
+                Message::PiEmptyQuery,
+                &[("query", &app.catalog_query.trim())],
             )
         } else if app.pi_catalog.is_some() {
-            "No compatible Raspberry Pi images found".into()
+            t.text(Message::PiEmpty).to_string()
         } else {
             app.discovery_session
                 .state(CatalogFacet::RaspberryPi)
-                .short_label("Raspberry Pi images")
+                .short_label_in(locale, t.text(Message::CatalogSubjectPiImages))
         };
         vec![ListItem::new(message).style(Style::default().fg(MUTED))]
     } else {
@@ -5198,9 +5773,10 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .is_some_and(|catalog| !catalog.devices.is_empty());
     let mut device_state =
         ListState::default().with_selected(has_devices.then_some(app.pi_device_selected));
+    let board_title = format!(" {} ", t.text(Message::PiBoardFilter));
     frame.render_stateful_widget(
         List::new(devices)
-            .block(panel_block(" Raspberry Pi board "))
+            .block(panel_block(&board_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5218,33 +5794,68 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .as_ref()
         .and_then(|catalog| catalog.images.get(app.pi_image_selected));
     let details = selected.map_or_else(
-        || "Choose a board and image. Official checksums are verified before the image is used.".into(),
+        || t.text(Message::PiHint).to_string(),
         |image| {
+            let sha = t.format(
+                Message::CommonLabeled,
+                &[
+                    ("label", &"SHA-256"),
+                    (
+                        "value",
+                        &if image.extracted_sha256.is_some() {
+                            "✓"
+                        } else {
+                            t.text(Message::DiscoverDetailNotListed)
+                        },
+                    ),
+                ],
+            );
             format!(
-                "{}\n{}\nReleased {}  ·  Download {}  ·  Expanded {}\nCategory: {}\nArchive: {}  ·  SHA-256: {}",
+                "{}\n{}\n{}  ·  {}  ·  {sha}",
                 image.name,
-                image.description.as_deref().unwrap_or("No description"),
-                image.release_date.as_deref().unwrap_or("unknown"),
-                image.download_size.map(format_bytes).unwrap_or_default(),
-                image.extracted_size.map(format_bytes).unwrap_or_default(),
-                image.category.as_deref().unwrap_or("Raspberry Pi image"),
+                t.format(
+                    Message::PiDetails,
+                    &[
+                        (
+                            "download",
+                            &image.download_size.map(format_bytes).unwrap_or_default()
+                        ),
+                        (
+                            "expanded",
+                            &image.extracted_size.map(format_bytes).unwrap_or_default()
+                        ),
+                        (
+                            "date",
+                            &image
+                                .release_date
+                                .as_deref()
+                                .unwrap_or(t.text(Message::PiDateUnknown))
+                        ),
+                        (
+                            "description",
+                            &image
+                                .description
+                                .as_deref()
+                                .unwrap_or(t.text(Message::DiscoverDetailNoDescription))
+                        ),
+                    ],
+                ),
+                image
+                    .category
+                    .as_deref()
+                    .unwrap_or(t.text(Message::PiDefaultCategory)),
                 image.archive_name,
-                if image.extracted_sha256.is_some() { "available" } else { "not listed" }
             )
         },
     );
-    draw_catalog_artwork_panel(
-        frame,
-        app,
-        right[0],
-        " Image details · official Imager feed ",
-        details,
-    );
+    let image_details_title = format!(" {} ", t.text(Message::PiTitle));
+    draw_catalog_artwork_panel(frame, app, right[0], &image_details_title, details);
     let mut image_state =
         ListState::default().with_selected((!visible_images.is_empty()).then_some(image_position));
+    let images_title = format!(" {} ", t.text(Message::PiCompatibleImages));
     frame.render_stateful_widget(
         List::new(image_items)
-            .block(panel_block(" Compatible boot images "))
+            .block(panel_block(&images_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5267,9 +5878,10 @@ fn draw_catalog_artwork_panel(
     frame: &mut ratatui::Frame<'_>,
     app: &mut App,
     area: Rect,
-    title: &'static str,
+    title: &str,
     text: String,
 ) {
+    let t = app.t();
     let block = panel_block(title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -5297,13 +5909,13 @@ fn draw_catalog_artwork_panel(
     } else {
         let artwork_status = app.artwork_error.as_deref().map_or_else(
             || {
-                if app.artwork_key.is_some() {
-                    "Loading artwork…"
+                t.text(if app.artwork_key.is_some() {
+                    Message::DiscoverArtworkLoading
                 } else {
-                    "No artwork"
-                }
+                    Message::DiscoverArtworkNone
+                })
             },
-            |_| "Artwork unavailable",
+            |_| t.text(Message::DiscoverArtworkUnavailable),
         );
         frame.render_widget(
             Paragraph::new(artwork_status)
@@ -5321,9 +5933,9 @@ fn draw_catalog_artwork_panel(
     );
 }
 
-fn compact_text_list(values: &[String], limit: usize) -> String {
+fn compact_text_list(t: Strings, values: &[String], limit: usize) -> String {
     if values.is_empty() {
-        return "Not listed".into();
+        return t.text(Message::DiscoverDetailNotListed).into();
     }
     let mut value = values
         .iter()
@@ -5398,10 +6010,9 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     app.hit_regions.windows_s_mode = None;
     app.hit_regions.windows_partition_scheme = None;
     app.hit_regions.windows_boot_firmware = None;
-    let block = focused_panel_block(
-        " Setup options ",
-        app.workspace_focus == WorkspaceFocus::Setup,
-    );
+    let t = app.t();
+    let setup_title = format!(" {} ", t.text(Message::ActionSetupOptions));
+    let block = focused_panel_block(&setup_title, app.workspace_focus == WorkspaceFocus::Setup);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let compact = area.width < 78;
@@ -5434,39 +6045,52 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     });
     frame.render_widget(
         Paragraph::new(if windows_image {
-            format!("Windows installer options  ·  checkboxes  ·  {selected} selected")
+            format!(
+                "{}  ·  {}",
+                t.text(Message::OptionsWindowsTitle),
+                t.format(Message::OptionsSelectedCount, &[("count", &selected)])
+            )
         } else {
-            "Linux / Unix boot media  ·  active features".into()
+            t.text(Message::OptionsLinuxTitle).to_string()
         })
         .style(Style::default().fg(MUTED)),
         rows[0],
     );
     let windows = grid_areas(rows[1], if compact { 2 } else { 4 }, 4);
     let tools = grid_areas(rows[2], if compact { 3 } else { 5 }, 5);
+    if windows.len() < 4 || tools.len() < 5 {
+        // Not enough room for the controls (a very short terminal): leave
+        // the framed panel empty rather than index past the grid.
+        return;
+    }
 
     if windows_image {
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[0],
-            "Hardware bypass",
+            t.text(Message::OptionsWindowsBypassHardwareLabel),
+            t.text(Message::OptionsWindowsBypassHardwareShort),
             app.options.windows.bypass_hardware_requirements,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[1],
-            "Local account",
+            t.text(Message::OptionsWindowsOfflineAccountLabel),
+            t.text(Message::OptionsWindowsOfflineAccountShort),
             app.options.windows.allow_offline_account,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[2],
-            "Privacy defaults",
+            t.text(Message::OptionsWindowsPrivacyLabel),
+            t.text(Message::OptionsWindowsPrivacyShort),
             app.options.windows.minimize_data_collection,
         );
-        render_checkbox(
+        render_option_checkbox(
             frame,
             windows[3],
-            "Disable BitLocker",
+            t.text(Message::OptionsWindowsBitlockerLabel),
+            t.text(Message::OptionsWindowsBitlockerShort),
             app.options.windows.disable_bitlocker,
         );
         app.hit_regions.windows_options = Some(windows[0]);
@@ -5474,20 +6098,41 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         app.hit_regions.windows_privacy = Some(windows[2]);
         app.hit_regions.windows_bitlocker = Some(windows[3]);
     } else {
-        render_checkbox(frame, windows[0], "Full disk layout", true);
-        render_checkbox(frame, windows[1], "Boot records", true);
-        render_checkbox(frame, windows[2], "Byte verification", true);
-        render_checkbox(frame, windows[3], "Safe unmount", true);
+        render_option_checkbox(
+            frame,
+            windows[0],
+            t.text(Message::OptionsLinuxLayout),
+            t.text(Message::OptionsLinuxLayoutShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[1],
+            t.text(Message::OptionsLinuxBootRecordsShort),
+            t.text(Message::OptionsLinuxBootRecordsShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[2],
+            t.text(Message::OptionsLinuxVerify),
+            t.text(Message::OptionsLinuxVerifyShort),
+            true,
+        );
+        render_option_checkbox(
+            frame,
+            windows[3],
+            t.text(Message::OptionsLinuxUnmountShort),
+            t.text(Message::OptionsLinuxUnmountShort),
+            true,
+        );
         app.hit_regions.windows_options = None;
         app.hit_regions.windows_offline = None;
         app.hit_regions.windows_privacy = None;
         app.hit_regions.windows_bitlocker = None;
     }
 
-    let bad_blocks = match app.options.bad_block_check.passes() {
-        0 => "Bad blocks: off".into(),
-        passes => format!("Bad blocks: {passes}x"),
-    };
+    let bad_blocks = app.options.bad_block_check.label_in(app.locale);
     render_button(frame, tools[0], &format!("◌  {bad_blocks}"), false);
     render_button(
         frame,
@@ -5495,9 +6140,24 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         &format!("#  {}", app.checksum_algorithm),
         false,
     );
-    render_button(frame, tools[2], "✓  Verify image", false);
-    render_button(frame, tools[3], "▢  Image folder", false);
-    render_button(frame, tools[4], "⇩  Back up drive", false);
+    render_button(
+        frame,
+        tools[2],
+        &format!("✓  {}", t.text(Message::OptionsToolsVerifyImage)),
+        false,
+    );
+    render_button(
+        frame,
+        tools[3],
+        &format!("▢  {}", t.text(Message::OptionsToolsImageFolder)),
+        false,
+    );
+    render_button(
+        frame,
+        tools[4],
+        &format!("⇩  {}", t.text(Message::OptionsToolsBackupDrive)),
+        false,
+    );
 
     app.hit_regions.bad_blocks = Some(tools[0]);
     app.hit_regions.checksum_algorithm = Some(tools[1]);
@@ -5508,43 +6168,62 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let locale = app.locale;
+    let t = app.t();
+    // Columns available to a device row: the panel interior minus the
+    // highlight symbol.
+    let row_room = usize::from(area.width.saturating_sub(2)).saturating_sub(2);
     let items = if app.devices.is_empty() {
-        vec![
-            ListItem::new("Connect a removable USB or SD drive, then refresh")
-                .style(Style::default().fg(MUTED)),
-        ]
+        vec![ListItem::new(ratatui::text::Text::from(wrapped_lines(
+            t.text(Message::TargetEmpty),
+            Style::default().fg(MUTED),
+            row_room,
+        )))]
     } else {
         app.devices
             .iter()
             .enumerate()
             .map(|(index, device)| {
                 let action = if !device.is_eligible_target() {
-                    "Blocked"
+                    t.text(Message::ActionBlocked).to_string()
                 } else if app.selected == Some(index) {
-                    "Selected"
+                    t.text(Message::ActionSelected).to_string()
                 } else {
-                    "Select →"
+                    format!("{} →", t.text(Message::ActionSelect))
                 };
+                // Path and capacity stay whole, the action stays visible; the
+                // name and eligibility text gives way when the row is tight.
+                let path = format!("{:<12}", device.path.display());
+                let capacity = format!(" {:>9}  ", format_bytes(device.capacity));
+                let action = format!("  ·  {action}");
+                let middle_room = row_room
+                    .saturating_sub(display_width(&path))
+                    .saturating_sub(display_width(&capacity))
+                    .saturating_sub(display_width(&action));
+                let middle = format!(
+                    "{}  ·  {}",
+                    device.display_name(),
+                    target_eligibility_label_in(app.locale, device)
+                );
                 ListItem::new(Line::from(vec![
                     Span::styled(
-                        format!("{:<12}", device.path.display()),
+                        path,
                         Style::default().fg(if device.is_eligible_target() {
                             ACCENT
                         } else {
                             Color::LightRed
                         }),
                     ),
-                    Span::raw(format!(
-                        " {:>9}  {}  ·  {}  ·  {action}",
-                        format_bytes(device.capacity),
-                        device.display_name(),
-                        target_eligibility_label_in(app.locale, device)
+                    Span::raw(capacity),
+                    Span::raw(pad_display(
+                        &truncate_end(&middle, middle_room),
+                        middle_room,
                     )),
+                    Span::raw(action),
                 ]))
             })
             .collect::<Vec<_>>()
     };
-    let target_title = panel_heading(app.locale, 2, " · removable media");
+    let target_title = panel_heading(app.t(), 2, Message::TargetTitle);
     let target_block =
         focused_panel_block(&target_title, app.workspace_focus == WorkspaceFocus::Target);
     let target_inner = target_block.inner(area);
@@ -5570,11 +6249,17 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                 join(&[Message::DetailMounted.text(locale)]),
             ]
         });
+    let reminder = wrapped_lines(
+        t.text(Message::TargetConfirmPhysical),
+        Style::default().fg(MUTED),
+        usize::from(target_inner.width),
+    );
+    let reminder_height = reminder.len().min(2) as u16;
     let target_rows = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
         Constraint::Length(if detail_rows.is_some() { 2 } else { 0 }),
-        Constraint::Length(1),
+        Constraint::Length(reminder_height),
     ])
     .split(target_inner);
     if let Some(details) = detail_rows {
@@ -5604,11 +6289,7 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         target_rows[1],
         &mut state,
     );
-    frame.render_widget(
-        Paragraph::new("Confirm the physical drive · erasure starts only after review")
-            .style(Style::default().fg(MUTED)),
-        target_rows[3],
-    );
+    frame.render_widget(Paragraph::new(reminder), target_rows[3]);
     app.hit_regions.device_rows = (0..app.devices.len())
         .filter_map(|index| {
             let y = target_rows[1].y.saturating_add(index as u16);
@@ -5621,7 +6302,8 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let review_title = panel_heading(app.locale, 3, "");
+    let t = app.t();
+    let review_title = plain_panel_heading(app.t(), 3);
     let status_block =
         focused_panel_block(&review_title, app.workspace_focus == WorkspaceFocus::Review);
     let status_inner = status_block.inner(area);
@@ -5639,9 +6321,11 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             Layout::vertical([Constraint::Min(1), Constraint::Length(0)]).split(status_rows[0])
         };
     frame.render_widget(
-        Paragraph::new(app.status.as_str())
-            .style(Style::default().fg(MUTED))
-            .wrap(Wrap { trim: true }),
+        Paragraph::new(wrapped_lines(
+            &app.status,
+            Style::default().fg(MUTED),
+            usize::from(progress_rows[0].width),
+        )),
         progress_rows[0],
     );
     if let Some(progress) = app.download_session.active_progress() {
@@ -5684,20 +6368,20 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         render_button(
             frame,
             actions[0],
-            if state == OperationState::Paused {
-                "▶  Resume"
+            &if state == OperationState::Paused {
+                format!("▶  {}", t.text(Message::ActionResume))
             } else {
-                "Ⅱ  Pause"
+                format!("Ⅱ  {}", t.text(Message::ActionPause))
             },
             state != OperationState::Cancelled,
         );
         render_button(
             frame,
             actions[1],
-            if state == OperationState::Cancelled {
-                "Cancelling…"
+            &if state == OperationState::Cancelled {
+                t.text(Message::ActionCancelling).to_string()
             } else {
-                "×  Cancel download"
+                format!("×  {}", t.text(Message::DownloadsActionCancel))
             },
             false,
         );
@@ -5713,8 +6397,8 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(status_rows[2]);
     let readiness = app.review_readiness();
     let review_label = if readiness == ReviewReadiness::Ready {
-        if compact && app.locale.is_source() {
-            "✓ Review".to_string()
+        if compact {
+            format!("✓ {}", t.text(Message::ActionReview))
         } else {
             format!("✓  {}", readiness.action_label_in(app.locale))
         }
@@ -5730,14 +6414,30 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[1],
-        if compact { "× Quit" } else { "×  Quit" },
+        &format!(
+            "×{}{}",
+            if compact { " " } else { "  " },
+            t.text(Message::ActionQuit)
+        ),
         false,
     );
     app.hit_regions.preview = (readiness == ReviewReadiness::Ready).then_some(actions[0]);
     app.hit_regions.quit = Some(actions[1]);
 }
 
+/// `label` made to fit the inside of a bordered button `width` columns wide:
+/// first by collapsing the gap after the glyph, then with an ellipsis. A
+/// caption is never silently cut mid-word.
+fn fit_button_label(label: &str, width: u16) -> String {
+    let room = usize::from(width.saturating_sub(2));
+    if display_width(label) <= room {
+        return label.into();
+    }
+    truncate_end(&label.replacen("  ", " ", 1), room)
+}
+
 fn render_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, primary: bool) {
+    let label = fit_button_label(label, area.width);
     let style = if primary {
         Style::default().fg(Color::Black).bg(ACCENT)
     } else {
@@ -5759,7 +6459,7 @@ fn render_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, primar
 
 fn render_disabled_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str) {
     frame.render_widget(
-        Paragraph::new(label)
+        Paragraph::new(fit_button_label(label, area.width))
             .alignment(Alignment::Center)
             .style(Style::default().fg(MUTED).bg(PANEL_SOFT))
             .block(
@@ -5774,7 +6474,7 @@ fn render_disabled_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &st
 
 fn render_danger_button(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str) {
     frame.render_widget(
-        Paragraph::new(label)
+        Paragraph::new(fit_button_label(label, area.width))
             .alignment(Alignment::Center)
             .style(
                 Style::default()
@@ -5814,6 +6514,21 @@ fn render_checkbox(frame: &mut ratatui::Frame<'_>, area: Rect, label: &str, sele
             ),
         area,
     );
+}
+
+/// A checkbox that shows the full option wording when the cell has room and
+/// the compact caption otherwise (the same concept, never different words).
+fn render_option_checkbox(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    label: &str,
+    short: &str,
+    selected: bool,
+) {
+    // Borders (2), padding (2), marker and its two spaces (3).
+    let room = usize::from(area.width).saturating_sub(7);
+    let caption = fit_variant(room, &[label.to_string(), short.to_string()]);
+    render_checkbox(frame, area, &truncate_end(&caption, room), selected);
 }
 
 fn panel_block<'a>(title: &'a str) -> Block<'a> {
@@ -5901,18 +6616,21 @@ fn cycle_boot_firmware(options: &mut WriteOptions) {
 
 /// Widest label that fits the cell, so the experimental marker survives
 /// wherever the layout leaves room for it.
-fn boot_firmware_label(firmware: bootable_core::WindowsBootFirmware, width: u16) -> String {
+fn boot_firmware_label(
+    t: Strings,
+    firmware: bootable_core::WindowsBootFirmware,
+    width: u16,
+) -> String {
     let room = usize::from(width.saturating_sub(2));
-    let candidates = [
-        format!("Boot firmware: {firmware} · experimental"),
-        format!("Boot firmware: {firmware}"),
-        format!("Firmware: {firmware}"),
-    ];
-    candidates
-        .iter()
-        .find(|label| display_width(label) <= room)
-        .unwrap_or(&candidates[2])
-        .clone()
+    let args: [bootable_core::Arg<'_>; 1] = [("value", &firmware)];
+    fit_variant(
+        room,
+        &[
+            t.format(Message::OptionsWindowsBootFirmwareValueExperimental, &args),
+            t.format(Message::OptionsWindowsBootFirmwareValue, &args),
+            t.format(Message::OptionsWindowsBootFirmwareValueCompact, &args),
+        ],
+    )
 }
 
 fn windows_option_columns(width: u16) -> usize {
@@ -5981,14 +6699,15 @@ fn device_flags(device: &Device) -> String {
     }
 }
 
-fn device_change_message(added: usize, removed: usize) -> String {
+fn device_change_message(t: Strings, added: usize, removed: usize) -> String {
     match (added, removed) {
-        (0, 0) => "Drive details changed • list updated automatically".into(),
-        (added, 0) => format!("Detected {added} new drive(s) • list updated automatically"),
-        (0, removed) => format!("Removed {removed} drive(s) • list updated automatically"),
-        (added, removed) => {
-            format!("Drive list changed: {added} added, {removed} removed • updated automatically")
-        }
+        (0, 0) => t.text(Message::StatusDrivesChanged).into(),
+        (added, 0) => t.plural(Message::StatusDrivesAdded, added as u64, &[]),
+        (0, removed) => t.plural(Message::StatusDrivesRemoved, removed as u64, &[]),
+        (added, removed) => t.format(
+            Message::StatusDrivesAddedRemoved,
+            &[("added", &added), ("removed", &removed)],
+        ),
     }
 }
 
@@ -6077,7 +6796,13 @@ mod layout_tests {
 
     #[test]
     fn terminal_brand_matches_the_download_to_drive_logo() {
-        let lines = brand_lockup(true, "Create boot media", "Deliberate writing");
+        let lines = brand_lockup(
+            true,
+            "Create boot media",
+            "Deliberate writing",
+            "Tagline",
+            200,
+        );
         assert_eq!(lines.len(), 2);
         assert!(
             lines[0]
@@ -6396,12 +7121,463 @@ mod workspace_render_tests {
         let mut app = app_with_drive();
         let screen = render(&mut app, 130, 40);
         for heading in [
-            " 1  Source \u{b7} choose an image ",
-            " 2  Target \u{b7} removable media ",
+            " 1  Source \u{b7} Choose an image ",
+            " 2  Target \u{b7} Choose a drive ",
             " 3  Review & write ",
             "Language: System default (English)",
         ] {
             assert!(screen.contains(heading), "{heading}\n{screen}");
+        }
+    }
+
+    const LOCALIZED: [Locale; 3] = [Locale::De, Locale::Ru, Locale::Ja];
+
+    /// Leading characters of a catalog message. Long sentences wrap, so only
+    /// a prefix that always sits on one row is searched for.
+    fn lead(text: &str) -> String {
+        text.chars().take(6).collect()
+    }
+
+    fn assert_shows(screen: &str, locale: Locale, messages: &[Message]) {
+        for message in messages {
+            let text = message.text(locale);
+            assert!(
+                screen.contains(&lead(text)),
+                "{locale}: {} = {text:?} is missing\n{screen}",
+                message.key()
+            );
+        }
+    }
+
+    fn assert_hides(screen: &str, locale: Locale, english: &[&str]) {
+        for phrase in english {
+            assert!(
+                !screen.contains(phrase),
+                "{locale}: untranslated {phrase:?} is still shown\n{screen}"
+            );
+        }
+    }
+
+    fn reviewing_app(locale: Locale) -> App {
+        let mut app = localized_app(locale);
+        app.image = Some(image_report(bootable_core::ImageKind::HybridIso));
+        let device = app.devices[0].clone();
+        let plan = bootable_core::WritePlan {
+            image: app.image.clone().expect("image"),
+            target: device,
+            strategy: bootable_core::WriteStrategy::RawVerified,
+            options: WriteOptions::default(),
+            steps: vec![
+                bootable_core::PlanStep {
+                    title: "Unmount".into(),
+                    destructive: false,
+                },
+                bootable_core::PlanStep {
+                    title: "Write image".into(),
+                    destructive: true,
+                },
+            ],
+            required_tools: Vec::new(),
+            confirmation_phrase: ERASE_PHRASE.into(),
+        };
+        app.write_session.open(plan);
+        app
+    }
+
+    const ERASE_PHRASE: &str = "ERASE /dev/sdz ABCDEF123456";
+
+    #[test]
+    fn main_workspace_is_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::HeaderTitleCreate,
+                    Message::SourceTitle,
+                    Message::TargetTitle,
+                    Message::SourceHint,
+                    Message::ActionBrowse,
+                    Message::SourceRecentEmpty,
+                    Message::TargetConfirmPhysical,
+                    Message::ActionSelected,
+                    Message::DiscoverCollapsedHint,
+                ],
+            );
+            // Buttons use the long wording when it fits and the compact one
+            // otherwise; either is the same concept in the same language.
+            for (long, compact) in [
+                (Message::ActionDownloads, Message::ActionDownloadsCompact),
+                (Message::ActionDiscover, Message::ActionDiscoverCompact),
+                (Message::ActionRefreshDrives, Message::ActionRefresh),
+            ] {
+                assert!(
+                    screen.contains(long.text(locale)) || screen.contains(compact.text(locale)),
+                    "{locale}: {}\n{screen}",
+                    long.key()
+                );
+            }
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Choose an image",
+                    "Choose a drive",
+                    "Browse",
+                    "Images you use appear here",
+                    "Confirm the physical drive",
+                    "Selected",
+                    "Browse trusted catalogs",
+                    "Inspected before writing",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn main_workspace_fits_in_80x30_in_every_language() {
+        for locale in Locale::available() {
+            let mut app = localized_app(locale);
+            let screen = render_text(&mut app, 80, 30);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::SourceTitle,
+                    Message::TargetTitle,
+                    Message::ActionBrowse,
+                ],
+            );
+            // Nothing is drawn outside the terminal.
+            assert!(screen.lines().all(|line| display_width(line) <= 80));
+        }
+    }
+
+    #[test]
+    fn windows_setup_options_are_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            app.image = Some(image_report(windows_kind()));
+            app.advanced = true;
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::OptionsWindowsTitle,
+                    Message::OptionsToolsVerifyImage,
+                    Message::OptionsToolsImageFolder,
+                    Message::OptionsToolsBackupDrive,
+                ],
+            );
+            // Checkboxes show the full wording or the short caption of the
+            // same option, never English.
+            for (label, short) in [
+                (
+                    Message::OptionsWindowsBypassHardwareLabel,
+                    Message::OptionsWindowsBypassHardwareShort,
+                ),
+                (
+                    Message::OptionsWindowsOfflineAccountLabel,
+                    Message::OptionsWindowsOfflineAccountShort,
+                ),
+                (
+                    Message::OptionsWindowsPrivacyLabel,
+                    Message::OptionsWindowsPrivacyShort,
+                ),
+                (
+                    Message::OptionsWindowsBitlockerLabel,
+                    Message::OptionsWindowsBitlockerShort,
+                ),
+            ] {
+                assert!(
+                    screen.contains(label.text(locale)) || screen.contains(short.text(locale)),
+                    "{locale}: {}\n{screen}",
+                    label.key()
+                );
+            }
+            assert!(
+                screen.contains(&lead(&BadBlockCheck::Disabled.label_in(locale))),
+                "{locale}\n{screen}"
+            );
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Hardware bypass",
+                    "Offline account",
+                    "Privacy defaults",
+                    "Disable BitLocker",
+                    "Verify image",
+                    "Image folder",
+                    "Back up drive",
+                    "Bad blocks",
+                    "Windows installer options",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn windows_option_toggles_report_their_own_localized_status() {
+        for locale in LOCALIZED {
+            let mut app = localized_app(locale);
+            app.image = Some(image_report(windows_kind()));
+            app.toggle_windows_requirements();
+            assert_eq!(
+                app.status,
+                Message::OptionsWindowsBypassHardwareOn.text(locale)
+            );
+            app.toggle_windows_requirements();
+            assert_eq!(
+                app.status,
+                Message::OptionsWindowsBypassHardwareOff.text(locale)
+            );
+            app.toggle_windows_s_mode();
+            assert_eq!(app.status, Message::OptionsWindowsSmodeOn.text(locale));
+            app.toggle_windows_qol();
+            assert_eq!(app.status, Message::OptionsWindowsQolOn.text(locale));
+            app.cycle_windows_partition_scheme();
+            assert!(app.status.contains("MBR"), "{}", app.status);
+            assert!(
+                app.status
+                    .starts_with(&lead(Message::StatusWindowsScheme.text(locale))),
+                "{locale}: {}",
+                app.status
+            );
+        }
+    }
+
+    #[test]
+    fn review_screen_is_localized_at_130x40() {
+        for locale in LOCALIZED {
+            let mut app = reviewing_app(locale);
+            let screen = render_text(&mut app, 130, 40);
+            assert_shows(
+                &screen,
+                locale,
+                &[
+                    Message::ReviewTitle,
+                    Message::HeaderSubtitleReview,
+                    Message::ReviewPlanSummary,
+                    Message::ReviewOrderedOperations,
+                    Message::ReviewPermanentChanges,
+                    Message::ReviewConsequence,
+                    Message::ReviewSubtitle,
+                    Message::ActionBack,
+                    Message::ReviewActionConsequences,
+                    Message::ActionQuit,
+                ],
+            );
+            for heading in [
+                Message::ReviewFieldSource,
+                Message::ReviewFieldTarget,
+                Message::ReviewFieldMethod,
+            ] {
+                assert!(
+                    screen.contains(&locale.strings().heading(heading)),
+                    "{locale}: {}\n{screen}",
+                    heading.key()
+                );
+            }
+            assert!(
+                screen.contains(&locale.strings().heading(Message::ReviewStepErases)),
+                "{locale}\n{screen}"
+            );
+            assert_hides(
+                &screen,
+                locale,
+                &[
+                    "Review write plan",
+                    "Plan summary",
+                    "Ordered operations",
+                    "Permanent changes",
+                    "Back to selection",
+                    "Review consequences",
+                    "Nothing is written",
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn confirmation_dialog_is_localized_and_never_cut_off() {
+        for locale in LOCALIZED {
+            for (width, height) in [(130, 40), (80, 30)] {
+                let mut app = reviewing_app(locale);
+                assert!(app.write_session.open_confirmation());
+                let screen = render_text(&mut app, width, height);
+                assert_shows(
+                    &screen,
+                    locale,
+                    &[
+                        Message::ConfirmTitle,
+                        Message::ConfirmPhysicalTarget,
+                        Message::ConfirmConsequences,
+                        Message::ConfirmConsequenceErase,
+                        Message::ConfirmAck,
+                        Message::ActionCancel,
+                        Message::ConfirmAcknowledgeFirst,
+                    ],
+                );
+                assert!(
+                    screen.contains(&locale.strings().heading(Message::ConfirmBadge)),
+                    "{locale}\n{screen}"
+                );
+                // The acknowledgement is the safety-critical sentence: its
+                // last words must be on screen, not clipped.
+                let ack = Message::ConfirmAck.text(locale);
+                let tail = ack
+                    .chars()
+                    .rev()
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<String>();
+                assert!(
+                    screen.contains(&tail),
+                    "{locale} {width}x{height}: ack tail {tail:?} cut off\n{screen}"
+                );
+                app.write_session.toggle_acknowledged();
+                let screen = render_text(&mut app, width, height);
+                assert_shows(&screen, locale, &[Message::ConfirmSubmit]);
+            }
+        }
+    }
+
+    #[test]
+    fn erase_confirmation_phrase_is_identical_in_every_locale() {
+        for locale in Locale::ALL.iter().copied() {
+            let mut app = reviewing_app(locale);
+            assert!(app.write_session.open_confirmation());
+            let review = render_text(&mut app, 130, 40);
+            app.write_session.toggle_acknowledged();
+            let confirm = render_text(&mut app, 130, 40);
+            // The phrase is never part of any screen text, so a translation
+            // can neither change nor leak it.
+            for screen in [&review, &confirm] {
+                assert!(!screen.contains(ERASE_PHRASE), "{locale}\n{screen}");
+                assert!(!screen.contains("ERASE /dev"), "{locale}\n{screen}");
+            }
+            for message in Message::ALL {
+                assert!(
+                    !message.text(locale).contains("ERASE "),
+                    "{locale}: {}",
+                    message.key()
+                );
+            }
+            let launch = app.write_session.begin().expect("acknowledged write");
+            assert_eq!(launch.confirmation, ERASE_PHRASE, "{locale}");
+            assert_eq!(launch.plan.confirmation_phrase, ERASE_PHRASE, "{locale}");
+        }
+    }
+
+    #[test]
+    fn wording_changes_with_the_language_without_rebuilding_the_app() {
+        let mut app = localized_app(Locale::En);
+        let english = render_text(&mut app, 130, 40);
+        assert!(english.contains("Choose an image"), "{english}");
+        app.locale = Locale::De;
+        let german = render_text(&mut app, 130, 40);
+        assert!(german.contains(&lead(Message::SourceTitle.text(Locale::De))));
+        assert!(!german.contains("Choose an image"), "{german}");
+    }
+
+    #[test]
+    fn download_ready_status_survives_localization() {
+        for locale in [Locale::En, Locale::De, Locale::Ru, Locale::Ja] {
+            let mut app = localized_app(locale);
+            let path = PathBuf::from("/tmp/image.iso");
+
+            // Core's final message (it names the integrity result) is kept.
+            app.show_download_progress(&Progress {
+                phase: ProgressPhase::Finished,
+                completed: 1,
+                total: Some(1),
+                message: "Ready · signature verified · /tmp/image.iso".into(),
+            });
+            app.show_download_ready(&path);
+            assert_eq!(
+                app.status, "Ready · signature verified · /tmp/image.iso",
+                "{locale}"
+            );
+
+            // Without it, the shared (localized) ready line is shown.
+            app.show_download_progress(&Progress {
+                phase: ProgressPhase::Downloading,
+                completed: 1,
+                total: Some(2),
+                message: "halfway".into(),
+            });
+            app.show_download_ready(&path);
+            assert_eq!(
+                app.status,
+                locale
+                    .strings()
+                    .format(Message::StatusDownloadReady, &[("name", &path.display())]),
+                "{locale}"
+            );
+            // The flag is consumed: a later download starts clean.
+            assert!(!app.download_final_message);
+        }
+    }
+
+    #[test]
+    fn device_change_statuses_use_the_locale_plural_rules() {
+        for locale in [Locale::En, Locale::De, Locale::Ru, Locale::Ja] {
+            let t = locale.strings();
+            assert_eq!(
+                device_change_message(t, 1, 0),
+                t.plural(Message::StatusDrivesAdded, 1, &[])
+            );
+            assert_eq!(
+                device_change_message(t, 0, 5),
+                t.plural(Message::StatusDrivesRemoved, 5, &[])
+            );
+            assert_eq!(
+                device_change_message(t, 0, 0),
+                t.text(Message::StatusDrivesChanged)
+            );
+        }
+        assert_eq!(
+            device_change_message(Locale::En.strings(), 2, 1),
+            "Drive list changed: 2 added, 1 removed • updated automatically"
+        );
+    }
+
+    #[test]
+    fn setup_options_survive_a_short_terminal_in_every_language() {
+        for locale in Locale::available() {
+            for kind in [windows_kind(), bootable_core::ImageKind::HybridIso] {
+                let mut app = localized_app(locale);
+                app.image = Some(image_report(kind));
+                app.advanced = true;
+                // 80x30 has room for the options panel but not for it and
+                // the workspace together; it must not panic or overflow.
+                let screen = render_text(&mut app, 80, 30);
+                assert_shows(&screen, locale, &[Message::ActionSetupOptions]);
+                assert!(screen.lines().all(|line| display_width(line) <= 80));
+            }
+        }
+    }
+
+    #[test]
+    fn english_wording_follows_the_unified_catalog() {
+        let mut app = app_with_drive();
+        let screen = render(&mut app, 130, 40);
+        for text in [
+            "Create boot media",
+            "One deliberate path from image to removable drive.",
+            "ISO, IMG, RAW, or compressed disk image",
+            "The image is inspected",
+            "Images you use appear here for one-click reuse",
+            "Confirm the physical drive before continuing",
+            "Discover images \u{b7} Browse trusted catalogs \u{b7} Open",
+        ] {
+            assert!(screen.contains(text), "{text}\n{screen}");
         }
     }
 
@@ -6436,13 +7612,13 @@ mod workspace_render_tests {
         let screen = render(&mut app, 130, 70);
         assert!(screen.contains("Boot firmware: UEFI"), "{screen}");
         assert!(screen.contains("Scheme: GPT"), "{screen}");
-        assert!(screen.contains("experimental"), "{screen}");
+        assert!(screen.to_lowercase().contains("experimental"), "{screen}");
         assert!(app.hit_regions.windows_boot_firmware.is_some());
 
         let mut app = windows_catalog_app(bootable_core::ImageKind::HybridIso);
         let screen = render(&mut app, 130, 70);
         assert!(!screen.contains("Boot firmware"), "{screen}");
-        assert!(!screen.contains("experimental"), "{screen}");
+        assert!(!screen.to_lowercase().contains("experimental"), "{screen}");
         assert!(app.hit_regions.windows_boot_firmware.is_none());
     }
 
@@ -6551,11 +7727,17 @@ mod workspace_render_tests {
     fn boot_firmware_label_degrades_to_fit_narrow_cells() {
         let uefi = bootable_core::WindowsBootFirmware::Uefi;
         assert_eq!(
-            boot_firmware_label(uefi, 60),
+            boot_firmware_label(Locale::En.strings(), uefi, 60),
             "Boot firmware: UEFI · experimental"
         );
-        assert_eq!(boot_firmware_label(uefi, 24), "Boot firmware: UEFI");
-        assert_eq!(boot_firmware_label(uefi, 10), "Firmware: UEFI");
+        assert_eq!(
+            boot_firmware_label(Locale::En.strings(), uefi, 24),
+            "Boot firmware: UEFI"
+        );
+        assert_eq!(
+            boot_firmware_label(Locale::En.strings(), uefi, 10),
+            "Firmware: UEFI"
+        );
     }
 }
 
