@@ -81,6 +81,17 @@ pub struct IsoRelease {
 }
 
 impl IsoRelease {
+    /// True when the checksum manifest comes from a publisher that signs its
+    /// manifests with a pinned key, so a download that ends up without a
+    /// verified signature is a downgrade worth refusing (`require_signature`).
+    pub fn signature_expected(&self) -> bool {
+        self.checksum_url
+            .as_deref()
+            .and_then(|url| Url::parse(url).ok())
+            .and_then(|url| signature::pinned::signing_publisher_for(&url))
+            .is_some()
+    }
+
     /// What the download will be checked against, for display before it starts.
     ///
     /// Whether a manifest signature exists is only known once the manifest is
@@ -296,6 +307,7 @@ pub(crate) fn iso_releases(source_url: &str) -> Result<Vec<IsoRelease>> {
 pub(crate) fn download_iso(
     release: &IsoRelease,
     destination: &Path,
+    require_signature: bool,
     control: &OperationControl,
     mut progress: impl FnMut(Progress),
 ) -> Result<IntegrityState> {
@@ -304,6 +316,7 @@ pub(crate) fn download_iso(
     // A signature that fails verification refuses the download here, before a
     // single image byte is transferred.
     let publisher_checksum = resolve_publisher_checksum(release)?;
+    require_signature_policy(require_signature, publisher_checksum.as_ref())?;
     if !release.name.to_ascii_lowercase().ends_with(".iso") {
         return Err(Error::InvalidDownload(
             "the selected catalog entry is not an ISO image".into(),
@@ -368,7 +381,7 @@ pub(crate) fn download_iso(
             phase: ProgressPhase::Verifying,
             completed: 0,
             total,
-            message: if matches!(resolved.signature, Some(ManifestSignature::Verified(_))) {
+            message: if integrity_state(Some(resolved)).is_signature_verified() {
                 format!("Stage 4/5 · Verifying {algorithm} checksum against the signed manifest")
             } else {
                 format!("Stage 4/5 · Verifying {algorithm} checksum")
@@ -412,12 +425,29 @@ struct ResolvedChecksum {
     expected: String,
     /// `None` when the digest did not come from a fetched manifest.
     signature: Option<ManifestSignature>,
+    /// The manifest comes from a publisher known to sign its manifests, so an
+    /// unverified result is a possible downgrade (see `IntegrityState`).
+    signature_expected: bool,
 }
 
 fn integrity_state(resolved: Option<&ResolvedChecksum>) -> IntegrityState {
     match resolved {
         None => IntegrityState::TransferChecked,
         Some(resolved) => match &resolved.signature {
+            // A valid signature over a manifest whose only digest for the image
+            // is MD5 or SHA-1 does not authenticate the image: those digests
+            // can be collided, so the signature adds nothing a plain checksum
+            // does not. Say that instead of "Signature verified".
+            Some(ManifestSignature::Verified(_)) if is_weak_digest(resolved.algorithm) => {
+                IntegrityState::ChecksumVerified {
+                    algorithm: resolved.algorithm,
+                    signature_note: Some(format!(
+                        "the signed manifest only lists a {} digest, which is too weak to authenticate the image",
+                        resolved.algorithm
+                    )),
+                    signature_expected: resolved.signature_expected,
+                }
+            }
             Some(ManifestSignature::Verified(signer)) => IntegrityState::SignatureVerified {
                 algorithm: resolved.algorithm,
                 signer: signer.clone(),
@@ -425,13 +455,38 @@ fn integrity_state(resolved: Option<&ResolvedChecksum>) -> IntegrityState {
             Some(ManifestSignature::Unverified(note)) => IntegrityState::ChecksumVerified {
                 algorithm: resolved.algorithm,
                 signature_note: Some(note.clone()),
+                signature_expected: resolved.signature_expected,
             },
             None => IntegrityState::ChecksumVerified {
                 algorithm: resolved.algorithm,
                 signature_note: None,
+                signature_expected: false,
             },
         },
     }
+}
+
+/// `require_signature` turns "no verified signature" into a refusal that
+/// happens before any image byte is transferred.
+fn require_signature_policy(
+    require_signature: bool,
+    resolved: Option<&ResolvedChecksum>,
+) -> Result<()> {
+    if !require_signature {
+        return Ok(());
+    }
+    let state = integrity_state(resolved);
+    if state.is_signature_verified() {
+        return Ok(());
+    }
+    Err(Error::InvalidDownload(format!(
+        "download refused: a verified publisher signature is required but this image has only: {}",
+        state.label()
+    )))
+}
+
+fn is_weak_digest(algorithm: ChecksumAlgorithm) -> bool {
+    matches!(algorithm, ChecksumAlgorithm::Md5 | ChecksumAlgorithm::Sha1)
 }
 
 fn resolve_publisher_checksum(release: &IsoRelease) -> Result<Option<ResolvedChecksum>> {
@@ -459,6 +514,7 @@ fn resolve_publisher_checksum_with(
             algorithm,
             expected: validated_checksum(algorithm, value)?,
             signature: None,
+            signature_expected: false,
         }),
         (Some(_), None) if release.checksum_url.is_some() => None,
         (None, None) => None,
@@ -473,13 +529,37 @@ fn resolve_publisher_checksum_with(
         return Ok(embedded);
     };
     let checksum_url = secure_url(checksum_url)?;
+    let signing_publisher = signature::pinned::signing_publisher_for(&checksum_url);
     let document = match fetch_manifest(&checksum_url) {
         Ok(document) => document,
-        Err(_error) if embedded.is_some() => return Ok(embedded),
+        Err(_error) if embedded.is_some() => {
+            // The signed manifest could not be reached at all. A publisher that
+            // signs its manifests makes that a visible downgrade.
+            return Ok(embedded.map(|mut current| {
+                if let Some(publisher) = signing_publisher {
+                    current.signature = Some(ManifestSignature::Unverified(
+                        signature::expected_signature_note(
+                            publisher,
+                            signature::NO_SIGNATURE_PUBLISHED,
+                        ),
+                    ));
+                    current.signature_expected = true;
+                }
+                current
+            }));
+        }
         Err(error) => return Err(error),
     };
-    let manifest =
+    let mut manifest =
         signature::authenticate_manifest(anchors, &checksum_url, &document, now, fetch_signature)?;
+    let mut signature_expected = false;
+    if let (Some(publisher), ManifestSignature::Unverified(reason)) =
+        (signing_publisher, &manifest.signature)
+    {
+        signature_expected = true;
+        manifest.signature =
+            ManifestSignature::Unverified(signature::expected_signature_note(publisher, reason));
+    }
     let (algorithm, expected) = parse_publisher_checksum(
         &manifest.text,
         &release.name,
@@ -495,11 +575,18 @@ fn resolve_publisher_checksum_with(
         algorithm,
         expected,
         signature: Some(manifest.signature),
+        signature_expected,
     };
     Ok(match embedded {
-        Some(current)
+        Some(mut current)
             if checksum_strength(current.algorithm) > checksum_strength(sidecar.algorithm) =>
         {
+            // The stronger embedded digest is what the image is checked
+            // against. A downgrade of the manifest it displaced still shows.
+            if sidecar.signature_expected {
+                current.signature = sidecar.signature;
+                current.signature_expected = true;
+            }
             Some(current)
         }
         _ => Some(sidecar),
@@ -1042,6 +1129,10 @@ fn checksum_algorithm_from_url(url: &Url) -> Option<ChecksumAlgorithm> {
     }
 }
 
+/// A hostile or broken mirror must not be able to stall catalog parsing with a
+/// gigantic manifest; real checksum files list a few hundred artifacts at most.
+const MAX_CHECKSUM_MANIFEST_LINES: usize = 100_000;
+
 fn parse_publisher_checksum(
     document: &str,
     release_name: &str,
@@ -1049,10 +1140,19 @@ fn parse_publisher_checksum(
 ) -> Option<(ChecksumAlgorithm, String)> {
     let release_name = release_name.trim_start_matches("./");
     let mut candidates = Vec::new();
+    // A bare digest is only trusted when it is the document's single line. The
+    // count is taken once, and only needs to tell one line from several.
+    let single_line_document = document
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(2)
+        .count()
+        == 1;
     for line in document
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
+        .take(MAX_CHECKSUM_MANIFEST_LINES)
     {
         if let Some((left, value)) = line.split_once(" = ")
             && let Some((_, file_name)) = left.split_once('(')
@@ -1069,13 +1169,7 @@ fn parse_publisher_checksum(
             {
                 push_checksum_candidate(&mut candidates, value, algorithm_hint);
             }
-            None if algorithm_hint.is_some()
-                && document
-                    .lines()
-                    .filter(|line| !line.trim().is_empty())
-                    .count()
-                    == 1 =>
-            {
+            None if algorithm_hint.is_some() && single_line_document => {
                 push_checksum_candidate(&mut candidates, value, algorithm_hint);
             }
             _ => {}
@@ -1851,6 +1945,28 @@ mod tests {
     }
 
     #[test]
+    fn huge_one_token_manifests_parse_in_linear_time() {
+        let digest = "a".repeat(64);
+        let document = format!("{digest}\n").repeat(200_000);
+        let started = std::time::Instant::now();
+        // Many lines: a bare digest is ambiguous, so nothing is trusted.
+        assert!(
+            parse_publisher_checksum(&document, "image.iso", Some(ChecksumAlgorithm::Sha256))
+                .is_none()
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "manifest parsing must not be quadratic"
+        );
+        // Matching lines beyond the line cap are never reached.
+        let padded = format!(
+            "{}{digest}  image.iso\n",
+            "x y\n".repeat(MAX_CHECKSUM_MANIFEST_LINES)
+        );
+        assert!(parse_publisher_checksum(&padded, "image.iso", None).is_none());
+    }
+
+    #[test]
     fn direct_sidecars_are_bound_to_only_their_iso() {
         let base = Url::parse("https://downloads.example.com/releases/").expect("base URL");
         let (releases, _, _) = parse_download_page(
@@ -1979,6 +2095,37 @@ mod signature_policy_tests {
     }
 
     #[test]
+    fn a_signed_manifest_with_only_a_weak_digest_is_not_labelled_signature_verified() {
+        let signer = signature::SignerIdentity {
+            publisher: "Ubuntu".into(),
+            fingerprint: "843938DF228D22F7B3742BC0D94AA3F0EFE21092".into(),
+            protocol: signature::SignatureProtocol::OpenPgp,
+        };
+        for (algorithm, name, weak) in [
+            (ChecksumAlgorithm::Md5, "MD5", true),
+            (ChecksumAlgorithm::Sha1, "SHA-1", true),
+            (ChecksumAlgorithm::Sha256, "SHA-256", false),
+            (ChecksumAlgorithm::Sha512, "SHA-512", false),
+        ] {
+            let resolved = ResolvedChecksum {
+                algorithm,
+                expected: "00".into(),
+                signature: Some(ManifestSignature::Verified(signer.clone())),
+                signature_expected: false,
+            };
+            let state = integrity_state(Some(&resolved));
+            assert_eq!(state.is_signature_verified(), !weak, "{name}: {state:?}");
+            let label = state.label();
+            if weak {
+                assert_eq!(state.rank(), 1, "{name}");
+                assert!(!label.contains("Signature verified"), "{label}");
+                assert!(label.contains("signature not verified"), "{label}");
+                assert!(label.contains(name), "{label}");
+            }
+        }
+    }
+
+    #[test]
     fn clearsigned_fedora_manifest_yields_signature_verified_state() {
         let release = release(
             FEDORA_ISO,
@@ -2002,6 +2149,100 @@ mod signature_policy_tests {
         let label = state.label();
         assert!(label.contains("signature not verified"), "{label}");
         assert!(!label.contains("Signature verified"), "{label}");
+    }
+
+    #[test]
+    fn missing_signature_from_a_signing_publisher_is_a_distinct_downgrade_state() {
+        let resolved = resolve(&ubuntu_release(), UBUNTU_MANIFEST, None)
+            .expect("resolve")
+            .expect("checksum");
+        let state = integrity_state(Some(&resolved));
+        assert!(state.signature_expected_but_unverified(), "{state:?}");
+        assert!(!state.is_signature_verified());
+        assert_eq!(state.rank(), 1);
+        let label = state.label();
+        assert!(
+            label.contains("signature expected but unavailable"),
+            "{label}"
+        );
+        assert!(!label.contains("Signature verified"), "{label}");
+
+        // A publisher that never signs is merely unsigned, not a downgrade.
+        let manifest = format!("{} *demo.iso\n", "ab".repeat(32));
+        let other = release("demo.iso", "https://example.test/SHA256SUMS");
+        let resolved = resolve(&other, manifest.as_bytes(), None)
+            .expect("resolve")
+            .expect("checksum");
+        let state = integrity_state(Some(&resolved));
+        assert!(!state.signature_expected_but_unverified(), "{state:?}");
+        assert!(state.label().contains("does not publish a signature"));
+
+        // A verified signature is never a downgrade.
+        let resolved = resolve(&ubuntu_release(), UBUNTU_MANIFEST, Some(UBUNTU_SIGNATURE))
+            .expect("resolve")
+            .expect("checksum");
+        assert!(!integrity_state(Some(&resolved)).signature_expected_but_unverified());
+    }
+
+    #[test]
+    fn an_unreachable_signing_publisher_manifest_with_an_embedded_digest_is_a_downgrade() {
+        let mut release = ubuntu_release();
+        release.checksum = Some("ab".repeat(32));
+        let resolved = resolve_publisher_checksum_with(
+            &release,
+            TrustAnchors::pinned(),
+            now(),
+            |url| {
+                Err(Error::Network {
+                    url: url.to_string(),
+                    message: "offline".into(),
+                })
+            },
+            |_| None,
+        )
+        .expect("resolve")
+        .expect("checksum");
+        assert!(integrity_state(Some(&resolved)).signature_expected_but_unverified());
+    }
+
+    #[test]
+    fn require_signature_refuses_everything_short_of_a_verified_signature() {
+        let signed =
+            resolve(&ubuntu_release(), UBUNTU_MANIFEST, Some(UBUNTU_SIGNATURE)).expect("resolve");
+        let unsigned = resolve(&ubuntu_release(), UBUNTU_MANIFEST, None).expect("resolve");
+        require_signature_policy(true, signed.as_ref()).expect("signed passes");
+        for resolved in [unsigned.as_ref(), None] {
+            let error = require_signature_policy(true, resolved).expect_err("must refuse");
+            assert!(
+                error.to_string().contains("signature is required"),
+                "{error}"
+            );
+            // The default policy keeps working.
+            require_signature_policy(false, resolved).expect("not required");
+        }
+    }
+
+    #[test]
+    fn signing_publishers_are_recognized_by_domain_not_by_lookalike() {
+        let expected = |value: &str| {
+            signature::pinned::signing_publisher_for(&Url::parse(value).expect("URL"))
+        };
+        assert_eq!(
+            expected("https://releases.ubuntu.com/24.04/SHA256SUMS"),
+            Some("Ubuntu")
+        );
+        assert_eq!(
+            expected("https://cdimage.debian.org/debian-cd/current/SHA256SUMS"),
+            Some("Debian")
+        );
+        assert_eq!(
+            expected("https://mirrors.edge.kernel.org/linuxmint/stable/22.3/sha256sum.txt"),
+            Some("Linux Mint")
+        );
+        assert_eq!(expected("https://notubuntu.com/SHA256SUMS"), None);
+        assert_eq!(expected("https://ubuntu.com.evil.test/SHA256SUMS"), None);
+        assert!(ubuntu_release().signature_expected());
+        assert!(!release("demo.iso", "https://example.test/SHA256SUMS").signature_expected());
     }
 
     #[test]
@@ -2059,7 +2300,8 @@ mod signature_policy_tests {
             integrity_state(Some(&resolved)),
             IntegrityState::ChecksumVerified {
                 algorithm: ChecksumAlgorithm::Sha256,
-                signature_note: None
+                signature_note: None,
+                signature_expected: false,
             }
         );
     }

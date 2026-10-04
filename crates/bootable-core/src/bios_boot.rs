@@ -25,6 +25,9 @@ pub(crate) const MBR_CODE_LEN: usize = 440;
 /// MBR sectors are 32-bit LBAs, so addressable media ends at 2 TiB.
 pub(crate) const MAX_MBR_BYTES: u64 = (u32::MAX as u64 + 1) * SECTOR_SIZE as u64;
 /// The PBR loads bootmgr below the BIOS data area (0x20000 + 0x7F000 < 0x9FC00).
+/// The loader reads whole clusters and refuses, before the read, a cluster that
+/// would end past this bound, so the limit applies to `bootmgr`'s size rounded
+/// up to the volume's cluster size (see [`bootmgr_footprint`]).
 pub(crate) const MAX_BOOTMGR_BYTES: u64 = 0x7_F000;
 /// The PBR issues one INT 13h read per cluster; keep it within 32 KiB.
 pub(crate) const MAX_SECTORS_PER_CLUSTER: u8 = 64;
@@ -208,9 +211,11 @@ pub(crate) fn inspect_fat32(pbr: &Sector, partition_sectors: u32) -> Result<Fat3
         ));
     }
     let backup = le16(pbr, 0x32);
-    if backup != 0 && backup >= reserved {
+    // Sector 0 is the boot sector itself and sector 1 is FSInfo, which the
+    // installer must never overwrite with a copy of the boot record.
+    if backup != 0 && (backup < 2 || backup >= reserved) {
         return Err(invalid(
-            "the backup boot sector lies outside the reserved area",
+            "the backup boot sector lies outside the reserved area or on the FSInfo sector",
         ));
     }
     Ok(Fat32Geometry {
@@ -305,9 +310,46 @@ pub(crate) fn verify<D: Read + Seek>(disk: &mut D) -> Result<()> {
     Ok(())
 }
 
-/// Checks that a mounted Windows tree can be started by `bootmgr` under BIOS.
-/// Used on the source before any erasure and on the written media afterwards.
-pub(crate) fn preflight_tree(root: &Path) -> Result<()> {
+/// Bytes of memory the boot sector fills when it loads a file of `len` bytes
+/// from a volume with `cluster_bytes` clusters: whole clusters are read.
+pub(crate) fn bootmgr_footprint(len: u64, cluster_bytes: u64) -> u64 {
+    let cluster = cluster_bytes.max(SECTOR_SIZE as u64);
+    len.div_ceil(cluster) * cluster
+}
+
+/// Cluster size in bytes recorded in a FAT32 boot sector the loader accepts.
+pub(crate) fn cluster_bytes(pbr: &Sector) -> Result<u64> {
+    let spc = pbr[0x0D];
+    if le16(pbr, 0x0B) != SECTOR_SIZE as u16
+        || spc == 0
+        || !spc.is_power_of_two()
+        || spc > MAX_SECTORS_PER_CLUSTER
+    {
+        return Err(invalid(
+            "the FAT32 boot sector has a sector or cluster size the BIOS loader cannot use",
+        ));
+    }
+    Ok(u64::from(spc) * SECTOR_SIZE as u64)
+}
+
+/// The cluster size `mkfs.fat -F 32` is expected to pick for a partition on a
+/// `capacity`-byte device (dosfstools' size table). Only used to refuse an
+/// unbootable result before erasure; the exact size is re-read from the new
+/// filesystem and checked again before any boot sector is installed.
+pub(crate) fn expected_cluster_bytes(capacity: u64) -> u64 {
+    const GIB: u64 = 1 << 30;
+    match capacity {
+        c if c > 32 * GIB => 32 * 1024,
+        c if c > 16 * GIB => 16 * 1024,
+        c if c > 8 * GIB => 8 * 1024,
+        _ => 4 * 1024,
+    }
+}
+
+/// Checks that a mounted Windows tree can be started by `bootmgr` under BIOS
+/// when copied to a volume with `cluster_bytes` clusters. Used on the source
+/// before any erasure and on the written media afterwards.
+pub(crate) fn preflight_tree(root: &Path, cluster_bytes: u64) -> Result<()> {
     let bootmgr = find_case_insensitive_child(root, "bootmgr").map_err(|_| {
         invalid(
             "the installer has no `bootmgr` file; ARM64 and UEFI-only images cannot boot under BIOS",
@@ -319,9 +361,10 @@ pub(crate) fn preflight_tree(root: &Path) -> Result<()> {
     if !metadata.is_file() || metadata.len() == 0 {
         return Err(invalid("`bootmgr` is not a non-empty regular file"));
     }
-    if metadata.len() > MAX_BOOTMGR_BYTES {
+    let footprint = bootmgr_footprint(metadata.len(), cluster_bytes);
+    if footprint > MAX_BOOTMGR_BYTES {
         return Err(invalid(format!(
-            "`bootmgr` is {} bytes; the real-mode loader accepts at most {MAX_BOOTMGR_BYTES}",
+            "`bootmgr` is {} bytes ({footprint} once rounded up to whole {cluster_bytes}-byte clusters); the real-mode loader accepts at most {MAX_BOOTMGR_BYTES}",
             metadata.len()
         )));
     }
@@ -653,23 +696,85 @@ mod tests {
     #[test]
     fn tree_preflight_requires_bootmgr_bcd_and_boot_sdi_within_limits() {
         let root = tempfile::tempdir().expect("fixture");
-        assert!(preflight_tree(root.path()).is_err(), "empty tree");
+        assert!(preflight_tree(root.path(), 512).is_err(), "empty tree");
         fs::create_dir_all(root.path().join("Boot")).expect("boot dir");
         fs::write(root.path().join("BOOTMGR"), vec![1_u8; 4096]).expect("bootmgr");
-        assert!(preflight_tree(root.path()).is_err(), "no BCD");
+        assert!(preflight_tree(root.path(), 512).is_err(), "no BCD");
         fs::write(root.path().join("Boot/BCD"), b"bcd").expect("bcd");
-        assert!(preflight_tree(root.path()).is_err(), "no boot.sdi");
+        assert!(preflight_tree(root.path(), 512).is_err(), "no boot.sdi");
         fs::write(root.path().join("Boot/boot.sdi"), b"sdi").expect("sdi");
-        preflight_tree(root.path()).expect("complete BIOS tree");
+        preflight_tree(root.path(), 512).expect("complete BIOS tree");
 
         fs::write(
             root.path().join("BOOTMGR"),
             vec![1_u8; MAX_BOOTMGR_BYTES as usize + 1],
         )
         .expect("oversized bootmgr");
-        assert!(preflight_tree(root.path()).is_err(), "bootmgr too large");
+        assert!(
+            preflight_tree(root.path(), 512).is_err(),
+            "bootmgr too large"
+        );
         fs::write(root.path().join("BOOTMGR"), b"").expect("empty bootmgr");
-        assert!(preflight_tree(root.path()).is_err(), "empty bootmgr");
+        assert!(preflight_tree(root.path(), 512).is_err(), "empty bootmgr");
+    }
+
+    #[test]
+    fn bootmgr_limit_applies_to_the_cluster_rounded_size_the_loader_reads() {
+        assert_eq!(bootmgr_footprint(1, 512), 512);
+        assert_eq!(bootmgr_footprint(512, 512), 512);
+        assert_eq!(bootmgr_footprint(513, 4096), 4096);
+        assert_eq!(bootmgr_footprint(0x7_E001, 32 * 1024), 0x8_0000);
+
+        let root = tempfile::tempdir().expect("fixture");
+        fs::create_dir_all(root.path().join("boot")).expect("boot dir");
+        fs::write(root.path().join("boot/bcd"), b"bcd").expect("bcd");
+        fs::write(root.path().join("boot/boot.sdi"), b"sdi").expect("sdi");
+        // Fits the byte limit but not once rounded up to 32 KiB clusters.
+        let size = MAX_BOOTMGR_BYTES as usize - 100;
+        fs::write(root.path().join("bootmgr"), vec![1_u8; size]).expect("bootmgr");
+        preflight_tree(root.path(), 512).expect("512-byte clusters round to the limit");
+        let error = preflight_tree(root.path(), 32 * 1024).expect_err("32 KiB clusters overflow");
+        assert!(error.to_string().contains("once rounded up"), "{error}");
+        // Exactly the limit is allowed; one byte more rounds past it.
+        fs::write(
+            root.path().join("bootmgr"),
+            vec![1_u8; MAX_BOOTMGR_BYTES as usize],
+        )
+        .expect("bootmgr at the limit");
+        preflight_tree(root.path(), 4096).expect("at the limit");
+        fs::write(
+            root.path().join("bootmgr"),
+            vec![1_u8; MAX_BOOTMGR_BYTES as usize + 1],
+        )
+        .expect("bootmgr over the limit");
+        preflight_tree(root.path(), 512).expect_err("one byte over");
+    }
+
+    #[test]
+    fn cluster_size_is_read_from_the_boot_sector_and_unusable_ones_are_refused() {
+        let pbr = mkfs_fat_boot_sector(4_300_000, 64);
+        assert_eq!(cluster_bytes(&pbr).expect("32 KiB"), 32 * 1024);
+        let mut bad = pbr;
+        bad[0x0D] = 128;
+        cluster_bytes(&bad).expect_err("64 KiB clusters");
+        bad[0x0D] = 0;
+        cluster_bytes(&bad).expect_err("zero");
+        assert!(expected_cluster_bytes(2 << 30) <= expected_cluster_bytes(64 << 30));
+        assert_eq!(expected_cluster_bytes(64 << 30), 32 * 1024);
+    }
+
+    #[test]
+    fn backup_boot_sector_must_not_sit_on_the_fsinfo_sector() {
+        let partition = 131_072_u32;
+        let mut sector = mkfs_fat_boot_sector(partition, 1);
+        for backup in [1_u16, 32, 40] {
+            sector[0x32..0x34].copy_from_slice(&backup.to_le_bytes());
+            inspect_fat32(&sector, partition).expect_err("backup sector 1 / outside reserved");
+        }
+        for backup in [0_u16, 2, 6, 31] {
+            sector[0x32..0x34].copy_from_slice(&backup.to_le_bytes());
+            inspect_fat32(&sector, partition).expect("valid backup position");
+        }
     }
 
     /// Applies the installer to a disk image file; used by

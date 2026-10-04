@@ -151,3 +151,72 @@ pub(crate) const OPENPGP_KEYS: &[PinnedOpenPgpKey] = &[
 /// authoritative page is pinned yet. The verification path is implemented and
 /// tested with generated keys; see `docs/signatures.md` for how to add one.
 pub(crate) const MINISIGN_KEYS: &[PinnedMinisignKey] = &[];
+
+/// Where a pinned publisher is known to sign its checksum manifests. A
+/// manifest fetched from a matching URL is *expected* to carry a verifiable
+/// signature, so a missing or unusable one is reported as a downgrade rather
+/// than as an ordinary unsigned publisher. Matching is by host suffix (the
+/// publisher's own domains) or by a path segment that official mirrors keep
+/// (`/linuxmint/`). Arbitrary third-party mirrors are not listed: for those the
+/// absence of a signature stays an ordinary checksum-only result. Expecting a
+/// signature can only make a result more cautious, so a spoofed match is harmless.
+pub(crate) struct SignedManifestSource {
+    pub publisher: &'static str,
+    /// Host equals the entry or ends with `.` + the entry.
+    pub host_suffixes: &'static [&'static str],
+    /// URL path contains the entry (for well-known mirror layouts).
+    pub path_contains: &'static [&'static str],
+}
+
+pub(crate) const SIGNED_MANIFEST_SOURCES: &[SignedManifestSource] = &[
+    SignedManifestSource {
+        publisher: "Ubuntu",
+        host_suffixes: &["ubuntu.com"],
+        path_contains: &[],
+    },
+    SignedManifestSource {
+        publisher: "Debian",
+        host_suffixes: &["debian.org"],
+        path_contains: &[],
+    },
+    SignedManifestSource {
+        publisher: "Linux Mint",
+        host_suffixes: &["linuxmint.com"],
+        path_contains: &["/linuxmint/"],
+    },
+    SignedManifestSource {
+        publisher: "Kali Linux",
+        host_suffixes: &["kali.org"],
+        path_contains: &[],
+    },
+    SignedManifestSource {
+        publisher: "Fedora",
+        host_suffixes: &["fedoraproject.org"],
+        path_contains: &[],
+    },
+    SignedManifestSource {
+        publisher: "AlmaLinux",
+        host_suffixes: &["almalinux.org"],
+        path_contains: &[],
+    },
+];
+
+/// The publisher that is known to sign manifests served from `url`, if any.
+pub(crate) fn signing_publisher_for(url: &url::Url) -> Option<&'static str> {
+    let host = url.host_str()?.to_ascii_lowercase();
+    let path = url.path().to_ascii_lowercase();
+    SIGNED_MANIFEST_SOURCES
+        .iter()
+        .find(|source| {
+            source.host_suffixes.iter().any(|suffix| {
+                host == *suffix
+                    || host
+                        .strip_suffix(suffix)
+                        .is_some_and(|rest| rest.ends_with('.'))
+            }) || source
+                .path_contains
+                .iter()
+                .any(|fragment| path.contains(fragment))
+        })
+        .map(|source| source.publisher)
+}

@@ -36,6 +36,7 @@ Strongest first:
 | --- | --- | --- |
 | 2 | Signature verified | `Signature verified · Ubuntu (key D94A A3F0 EFE2 1092) · SHA-256 matches signed manifest` |
 | 1 | Checksum only | `Publisher checksum verified` or `Publisher checksum verified · signature not verified (<reason>)` |
+| 1 | Checksum only, signature expected | `Publisher checksum verified · signature not verified (signature expected but unavailable: Ubuntu signs its checksum files)` |
 | 0 | Transfer only | `HTTPS transfer and boot structure checked · publisher checksum unavailable` |
 
 Outcomes of the signature step:
@@ -52,6 +53,26 @@ Outcomes of the signature step:
   not verify. This is what a tampered manifest, or a manifest swapped for another publisher's
   signature, looks like. The error text starts with `download refused: signature verification failed
   for <manifest url>`.
+
+A signed manifest whose only digest for the image is MD5 or SHA-1 is also reported as checksum
+only (`signature not verified (the signed manifest only lists a SHA-1 digest, which is too weak to
+authenticate the image)`): those digests can be collided, so the signature adds nothing.
+
+### Signature expected
+
+Some publishers are known to sign their manifests (the table in
+`signature/pinned.rs::SIGNED_MANIFEST_SOURCES`: the publishers' own domains plus the
+`/linuxmint/` mirror layout). When the manifest comes from such a source and no signature is
+verified (file missing or unfetchable, unknown key, weak hash, expired key, or the manifest could not
+be fetched at all) the result is still checksum only, but it is marked as a possible downgrade:
+`IntegrityState::signature_expected_but_unverified()` is true and the note starts with
+`signature expected`. `IsoRelease::signature_expected()` tells adapters before the download whether
+a signature should exist. The default behaviour is unchanged apart from this label.
+
+Adapters can turn the downgrade into a refusal with `Bootable::require_signature(true)`: the download
+(and queued retries run by that engine) is then refused before any image byte is transferred unless
+the signature verified. `Bootable::download_iso_with_integrity` returns the `IntegrityState` next to
+the `ImageReport`.
 
 A checksum taken from catalog metadata (for example a SourceForge MD5) or from a stronger embedded
 digest is never labelled as signed; only a digest read from an authenticated manifest is.
@@ -76,15 +97,19 @@ will be looked for.
   signature. Expiry is judged against the current time: a signature made while the key was valid but
   checked after expiry degrades to checksum-only rather than verifying. Update the pinned key when a
   publisher rotates.
-* Weak hashes (MD5, SHA-1, RIPEMD-160) are rejected by the OpenPGP implementation.
+* Only OpenPGP signatures made over SHA-224, SHA-256, SHA-384, SHA-512, SHA3-256 or SHA3-512 can
+  verify. Bootable enforces this itself before checking a signature: a signature over MD5, SHA-1 or
+  RIPEMD-160 is treated as unverified (checksum-only, with the reason in the label), never as
+  verified. Covered by the unit test `only_strong_hash_algorithms_verify`.
 * The signature file is looked up on the same host as the manifest, so mirrors work: a valid
   signature from a pinned key authenticates the manifest regardless of which mirror served it.
 
 ### Known limits
 
-* A **missing** signature degrades rather than fails. An attacker who can block a request can
-  therefore force checksum-only integrity, which is exactly the state that existed before this
-  feature, and is labelled as such.
+* A **missing** signature degrades rather than fails unless `require_signature` is set. An attacker
+  who can block a request can therefore force checksum-only integrity, which is exactly the state
+  that existed before this feature. For publishers in the signing table the downgrade is labelled
+  `signature expected`; mirrors outside that table are indistinguishable from unsigned publishers.
 * **Replay**: a validly signed old manifest still verifies. It authenticates old images, not the
   newest release.
 * Signatures over the ISO itself (Arch Linux `.iso.sig`, Tails, Raspberry Pi OS `.img.xz.sig`,
