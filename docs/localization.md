@@ -17,7 +17,9 @@ or missing string.
 | `Message` (typed keys), lookup, interpolation, plurals, coverage | `crates/bootable-core/src/messages.rs` |
 | Per-locale tables (embedded with `include_str!`) | `crates/bootable-core/locales/<tag>.lang` |
 | Persisted override | `Preferences.language: Option<Locale>` |
-| Converted core strings | help guide, drive detail rows, target eligibility, removable-media status, readiness/guidance/status text, step titles, progress phase names, integrity labels |
+| `Strings` (a `Locale` bound to the catalog) | `crates/bootable-core/src/messages.rs`, `Locale::strings()` |
+| Converted core strings | help guide, drive detail rows, target eligibility, removable-media status, readiness/guidance/status text, step titles, progress phase names, integrity labels, download status/kind labels, catalog load states, write completion status/result text, bad-block labels |
+| Shared app strings (the text both interfaces write themselves) | see [Shared app strings](#shared-app-strings): 371 keys grouped by screen |
 
 There are no new dependencies. The catalog format is a small `key = value`
 file rather than Fluent. Fluent would be the right choice if messages needed
@@ -56,6 +58,11 @@ Message                        typed key enum; Message::ALL, message.key()
   message.plural(locale, count, &[...])            -> String   ({count} is implicit)
   message.is_plural()
 
+Strings                        Copy handle: Locale + catalog (Locale::strings())
+  t.text(m) / t.format(m, args) / t.plural(m, count, args)
+  t.heading(m)                 upper-cased text for headings and badges
+  t.locale()
+
 Preferences
   preferences.language         Option<Locale>   (None = follow the system)
   preferences.locale()         effective Locale (override > system > English)
@@ -72,6 +79,11 @@ Localized variants (each English-only original still exists and is unchanged)
   ProgressPhase::label_in(locale)                                 Display (English)
   IntegrityState::{label_in, completion_message_in,
                    finalized_message_in, ready_message_in}(locale, ...)
+  DownloadStatus::label_in(locale), DownloadKind::label_in(locale)
+  CatalogState::short_label_in(locale, subject)
+  CatalogFetch::{source_label_in, status_suffix_in}(locale)
+  BadBlockCheck::{label_in, status_in}(locale)
+  WriteCompletion::{status_in, title_in, detail_in}(locale)
 ```
 
 The English-only functions and constants delegate to the catalog in `en`, so
@@ -108,7 +120,7 @@ status when the language changes.
 
 | Tag | Language | State |
 | --- | --- | --- |
-| `en` | English | Source of truth, complete (78/78) |
+| `en` | English | Source of truth, complete (457/457) |
 | `es` | Spanish | Machine-quality draft, complete. Needs native review. |
 | `fr` | French | Machine-quality draft, complete. Needs native review (also NBSP typography, see the file header). |
 | `de` | German | Machine-quality draft, complete. Needs native review. |
@@ -122,9 +134,16 @@ Every shipped table is a first draft by a model, not a professional or native
 translation. They are a starting point for reviewers, not a release-quality
 claim. In particular, review:
 
-* the erase/safety wording in `help.intro`, `help.target.choose.detail`, and the
-  `workspace.*` / `readiness.*` strings, which tell people nothing has been
-  written yet; a mistranslation here is a safety problem, not a style problem;
+* the erase/safety wording in `help.intro`, `help.target.choose.detail`, the
+  `workspace.*` / `readiness.*` strings, and the shared app strings
+  `confirm.*`, `review.*`, `status.write.*`, `result.*`,
+  `target.confirm_physical` and `status.target.*`, which tell people nothing
+  has been written yet or what an irreversible step will do; a mistranslation
+  here is a safety problem, not a style problem;
+* the Windows setup option labels and their on/off status lines
+  (`options.windows.*`), which describe real installer behavior;
+* the catalog load-state phrasing (`catalog.state.*`), written as label-style
+  sentences (`Nicht geladen: {subject}`) to dodge gender/number agreement;
 * the integrity strings (`integrity.*`): "checksum" versus "hash", and keeping
   "signature verified" strictly stronger than "checksum verified";
 * terminology choices: image (imagen / image / Abbild / imagem / образ /
@@ -190,6 +209,15 @@ count.thing.other = {count} files
 * The English help text equals the legacy `HELP_SECTIONS` constants; help has
   identical section/entry shape in every locale; terminal key chords are never
   translated.
+* No message, in any locale, contains `ERASE ` or takes a confirmation-phrase
+  placeholder.
+* Technical tokens (`SHA-256`, `SkuSiPolicy.p7b`, `autounattend.xml`,
+  `BitLocker`, `DistroWatch`, `Raspberry Pi`, `HTTPS`, `UEFI`, `MBR`, `TPM`,
+  `Copilot`, `OneDrive`, `Teams`, `CA 2023`) that appear in the English text
+  appear in every translation.
+* The English output of the localized helpers (`DownloadStatus::label_in`,
+  `CatalogState::short_label_in`, `WriteCompletion::status`, ...) equals the
+  legacy `Display`/`short_label`/`status` text.
 
 ## Detection and the override
 
@@ -226,12 +254,18 @@ field existed load normally, and an older build ignores the new field.
 * **The erase confirmation phrase** (`plan.confirmation_phrase`, e.g.
   `ERASE /dev/sdb TEST`). It is typed verbatim and compared exactly; it is a
   protocol token, not prose. Surround it with translated text, never translate
-  it.
+  it. The catalog never contains it: no message, in any locale, may include
+  `ERASE ` or take a confirmation-phrase placeholder (tests enforce this), and
+  neither interface asks the user to type it.
 * Device paths, device ids, serials, file names, checksum algorithm names
   (`SHA-256`), key fingerprints, URLs, command-line flags and the privileged
   helper protocol.
 * Key chords (`Ctrl+O`, `Esc`, `↑ ↓ · j k`). Only descriptions of inputs such
-  as "Stop button" are translated.
+  as "Stop button" are translated. Shared strings that mention a shortcut take
+  it as a placeholder (`tooltip.guide`: `{shortcut}`).
+* Technical identifiers rendered inside translated sentences: partition scheme
+  and firmware values (`GPT`, `MBR`, `UEFI`, `BIOS + UEFI (CSM)`), `SkuSiPolicy.p7b`,
+  `autounattend.xml`, and the other tokens listed under "Per-key notes".
 * Text that originates outside Bootable (DistroWatch descriptions, distribution
   names, Raspberry Pi catalog text, `signature_note` reasons). These display as
   received.
@@ -265,9 +299,11 @@ When the first RTL locale (Arabic, Hebrew, Persian) is added:
   phrase) inside RTL sentences need isolation (U+2066 LRI ... U+2069 PDI) so
   they do not reorder. Core will need an `isolate()` helper applied to
   `{placeholder}` data for RTL locales.
-* Arrows in messages (`→`, `Select →`) are directional and need a mirrored
-  variant per direction. Keep them out of translatable text where possible and
-  let the adapter draw them.
+* Arrows are directional and need a mirrored variant per direction. The shared
+  app strings already keep them out of translatable text (`action.select` is
+  `Select`, not `Select →`; see "Conventions"), so the adapter draws and mirrors
+  them. The only arrow left inside catalog text is the `Source → Target →
+  Review & write` flow in `help.intro`.
 
 Wide characters (zh-Hans, ja; `uses_wide_characters()`):
 
@@ -288,339 +324,756 @@ Wide characters (zh-Hans, ja; `uses_wide_characters()`):
 * The French typographic convention uses a (narrow) no-break space before
   `: ; ! ?`; the shipped table uses plain spaces so wrapping stays predictable.
 
-## UI strings still to extract (adapter work)
+## Shared app strings
 
-Everything below is hard-coded in `apps/bootable-tui/src/main.rs` (TUI) or
-`apps/bootable-desktop/src/main.rs` (GUI) and not yet in the catalog. Proposed
-key names use the prefix `app.` so they do not collide with the core-owned
-messages. "Both" means the same English text exists in both apps (move it to one
-key). "GUI/TUI differ" marks wording drift that must be unified when extracting,
-which the parity invariant requires anyway.
+Everything both interfaces write themselves (headers, buttons, panel bodies and
+empty states, Windows option labels and hints, the review and confirmation
+dialogs, download rows, status lines) now lives in the catalog, so the GUI and
+TUI cannot drift apart again. The catalog was extracted from
+`apps/bootable-desktop/src/main.rs` and `apps/bootable-tui/src/main.rs`; where
+the two worded one concept differently, one wording was chosen (see
+[Unification decisions](#unification-decisions)).
 
-Where several strings share a stem the placeholders are shown as `{name}`.
-Text produced by `format!` should become `Message::format`; counts such as
-`{n} source error(s)` and `Detected {added} new drive(s)` should become plural
-messages instead of the `(s)` pattern, which does not translate.
+Adapters call `Message::X.text(locale)`, `.format(locale, &[...])`,
+`.plural(locale, count, &[...])` or, to avoid threading the locale, a
+`Strings` bound to it:
 
-### Header, brand, global actions
+```rust
+let t = preferences.locale().strings();          // Copy; rebuild on language change
+let label = t.text(Message::ActionBrowse);
+let line  = t.format(Message::StatusBackupDone, &[("path", &destination.display())]);
+let line  = t.plural(Message::StatusDrivesAdded, added as u64, &[]);
+let badge = t.heading(Message::ReviewStepErases);   // "ERASES DATA"
+```
 
-| Key | English | Notes |
-| --- | --- | --- |
-| `app.name` | Bootable | window title; brand, likely not translated |
-| `app.tagline.idle` | Boot media, written deliberately. | GUI |
-| `app.header.title.create` | Create boot media | both |
-| `app.header.title.review` | Review write plan | GUI header; TUI modal title |
-| `app.header.subtitle.create` | One deliberate path from image to removable drive. | TUI; GUI uses `app.header.subtitle.flow` |
-| `app.header.subtitle.flow` | Image → removable drive → verified result | GUI |
-| `app.header.subtitle.review` | Inspect every operation before confirmation. | GUI |
-| `app.action.downloads` | Downloads · {count} | GUI; "Jobs · {count}" compact |
-| `app.action.downloads_compact` | Jobs · {count} | GUI |
-| `app.action.discover` | Discover images | both |
-| `app.action.catalog_open` / `app.action.catalog_close` | Catalog × / Close catalog | GUI |
-| `app.action.options` / `app.action.setup_options` / `app.action.hide_options` | Options / Setup options / Hide options | GUI |
-| `app.tooltip.guide` | Guide and shortcuts (F1) | GUI |
-| `app.tooltip.refresh_drives` | Refresh removable drives | GUI |
-| `app.tooltip.refresh_distrowatch` | Refresh DistroWatch data | GUI |
-| `app.tooltip.refresh_pi` | Refresh Raspberry Pi catalog | GUI |
-| `app.guide.title` | Guide | GUI |
-| `app.guide.close` | Close | GUI |
-| `app.guide.dismiss_hint` | Press Esc, ? or click to close | TUI |
-| `app.footer.keys` | Tab / Shift+Tab focus · Enter select · ? help · q quit | TUI |
+### Conventions
 
-### Workspace focus (TUI status when focus moves)
+* **Names**: `<screen>.<thing>[.<variant>]`, snake case, dot separated. Screens:
+  `header`, `action`, `tooltip`, `guide`, `source`, `target`, `focus`,
+  `options`, `review`, `confirm`, `result`, `discover`, `pi`, `catalog`,
+  `downloads`, `status`, `common`. The Rust variant is the CamelCase of the key
+  (`status.drives.added` is `Message::StatusDrivesAdded`).
+* **Sentence case.** Catalog text is stored in sentence case. Section headings
+  and badges that were upper case (`SOURCE`, `RECENT IMAGES`, `SELECTED DRIVE`,
+  `ERASES DATA`, `PERMANENT`, `DIRECT ISO FILES`) are the same keys rendered
+  with `Strings::heading` (Rust `to_uppercase`; caseless scripts are
+  unchanged). Do not store shouting text in a translation.
+* **No glyphs or key chords in text.** `→ ✓ × ⇩ ↻ ›` and similar are drawn by the
+  adapter (`Select` + `→`). Shortcuts are injected: `tooltip.guide` takes
+  `{shortcut}` (`F1` in the GUI, `?` in the TUI).
+* **Width variants.** `*_compact`, `*.short` and `*_value_compact` are
+  narrow-layout forms of the *same* concept. Pick by available width; never
+  use a different wording elsewhere. The long form is canonical.
+* **Label + value** uses `common.labeled` (`{label}: {value}`), which fixes
+  spacing rules per language (the French table puts a space before the colon).
+* **Counts** are always plural messages (`.plural(...)`, `{count}` implicit),
+  never `(s)`.
+* **External text** (`{error}`, `{path}`, `{kind}`, `{name}`, `{description}`,
+  `{warning}`, `{reason}`, `{source}`) is shown as received; see
+  [Per-key notes](#per-key-notes-verbatim-and-external-text).
+
+### Core helpers that use these keys
+
+These return catalog text and keep the English output of their predecessor
+byte-for-byte (tests pin it):
+
+| Helper | Replaces |
+| --- | --- |
+| `DownloadStatus::label_in(locale)` | `Display` of the status in download rows |
+| `DownloadKind::label_in(locale)` | `Display` of the download kind |
+| `CatalogState::short_label_in(locale, subject)` | `short_label` (pass `Message::CatalogSubject*` text as `subject`) |
+| `CatalogFetch::source_label_in` / `status_suffix_in(locale)` | `source_label` / `status_suffix` (the `{source}` argument) |
+| `BadBlockCheck::label_in(locale)` / `status_in(locale)` | "Bad blocks off / 2x" control label and the bad-block status line |
+| `WriteCompletion::status_in` / `title_in` / `detail_in(locale)` | `status()` and the hand-written result panel title/body in both apps |
+| `Locale::strings()` | threading `locale` through every call |
+
+### Unification decisions
+
+Where the GUI and TUI differed, the clearer wording was chosen for both. "GUI"
+and "TUI" are the wordings before this change; the last column is the key every
+adapter now uses.
+
+| Concept | GUI said | TUI said | Chosen |
+| --- | --- | --- | --- |
+| Brand tagline | `Boot media, written deliberately.` | (none) | `header.tagline` in both, next to the brand when there is room |
+| Create-screen subtitle | `Image → removable drive → verified result` | `One deliberate path from image to removable drive.` | TUI wording, `header.subtitle.create`; the GUI flow line is dropped |
+| Review subtitle | header `Inspect every operation before confirmation.`; card `Nothing is written until a separate destructive confirmation succeeds.` | `Nothing is written until the consequences are reviewed and acknowledged.` | header: `header.subtitle.review`; review panel: `review.subtitle` (TUI wording), `review.subtitle_writing` while writing |
+| Downloads button | `Downloads · n` / `Jobs · n` | `Downloads` / `Jobs` | `action.downloads` (`_count` when a number is shown, `_compact` = Jobs) |
+| Catalog toggle | `Catalog ×` / `Close catalog` | `× Catalog` / `× Cat` | `action.catalog_close` (`_compact` = Catalog); the `×` is drawn by the adapter |
+| Discover button | `Discover images` | `Discover` / `Find` | `action.discover` (`_compact` = Find) |
+| Setup toggle | `Setup options` / `Hide options` / `Options` | `Setup options` / `Hide options` / `Setup` / `Hide` | `action.setup_options` / `action.hide_options` (+ `_compact` Setup / Hide); `Options` is dropped |
+| Refresh drives | tooltip `Refresh removable drives` | `Refresh` / `USB` | label `action.refresh_drives` (same words as the Guide), tooltip `tooltip.refresh_drives`, narrow label `action.refresh` |
+| Select / Selected / Blocked | `Select →` / `Selected` / `Blocked` | same | `action.select` / `action.selected` / `action.blocked`; arrow drawn by adapter |
+| Source panel body | `ISO, IMG, RAW, or compressed disk image` + hint `The image is inspected before any write is allowed` | `ISO, IMG, … image` + `Inspected before writing` | `source.formats` + `source.hint`; `source.inspected` for the checked state |
+| Inspecting button | `Inspecting…` | `…  Inspecting` | `action.inspecting` |
+| Physical-drive reminder | `Confirm the physical drive before continuing · erasure starts only after review` | `Confirm the physical drive · erasure starts only after review` | GUI wording, `target.confirm_physical` |
+| No target chosen | `Choose a target drive first` | `No target device is selected` | `status.target.choose_first` (GUI) |
+| Windows option labels | long sentence (`Bypass TPM, Secure Boot and RAM checks`) | short caption (`Hardware bypass`) | `options.windows.<id>.label` is canonical; `.short` is its compact caption (both are in the catalog, one concept) |
+| Offline account caption | n/a | `Local account` (setup panel) and `Offline account` (Windows card) | `Offline account` (`options.windows.offline_account.short`); `Named account` is the other one |
+| Windows toggle feedback | `Windows installer selections updated` (generic) | specific on/off lines for six options, generic for QoL / CA 2023 / SkuSiPolicy / S Mode | every option has its own `.on` / `.off` line (`options.windows.<id>.on/off`), shown by both |
+| Scheme / firmware status | `… partition scheme: {} · target firmware: {}` | `… partition scheme: {} · boot firmware: {}` and `Boot firmware: {} (experimental) · partition scheme: {}` | "boot firmware" everywhere: `status.windows.scheme`, `status.windows.firmware` |
+| Linux always-on options | two long checkboxes | four short checkboxes | both show the same four items: `options.linux.layout` + `options.linux.verify` (long) and the `*_short` captions; the TUI uses captions where it is narrow |
+| Bad blocks control | `Bad blocks off` / `Bad blocks 2x` | `Bad blocks: off` / `Bad blocks: 2x` | no colon (`options.tools.bad_blocks_off` / `_passes`), via `BadBlockCheck::label_in` |
+| Review consequence | `…will be erased` (no period) | `…will be erased.` | with period, `review.consequence` |
+| Write result body | `The image was written and verified. …` | `Image written and verified. …` | GUI wording, `result.success.body` |
+| Confirmation bullets | four long sentences | four different sentences plus a three-bullet compact variant | the four GUI sentences (`confirm.consequence.*`); the TUI compact mode shows the first two |
+| Confirmation buttons | `Cancel` / `Confirm erase & write` | `Cancel · target unchanged` / `Acknowledge first` (disabled) | `action.cancel` (the status line already says the target is unchanged), `confirm.submit`, and `confirm.acknowledge_first` as the disabled-state label in both |
+| Review buttons | `Back` | `Back to selection` / `Back locked`; `Quit locked` | `action.back`, `action.quit`; locked state is the disabled style, not a different label |
+| Download row actions | `Retry` / `Use` / `Remove` | `Retry / resume` / `Use image` / `Remove entry` | TUI wording (`downloads.action.*`); the active-download button is `downloads.action.cancel` (`Cancel download`) in both |
+| Download empty state | `No managed downloads yet` | `… · choose an image from Discover to begin` | TUI wording, `downloads.empty` |
+| Discover title | `Discover distributions` | `Discover bootable images` | `discover.title` (TUI) |
+| DistroWatch disclaimer | `…measures interest—not quality or market share` | long `six-month page-hit ranking + Interest indicator only; not usage, quality, or market share.` | short sentence, `discover.disclaimer` |
+| Unknown origin / date | `Unknown origin` / `Date unknown` | `Unknown` / `unknown` | `discover.detail.unknown_origin` ("Unknown", the `Origin` label gives context) and `pi.date_unknown` |
+| Status: download queued / retrying / retry queued / history removed / paused | `…it will start…`, `…will be resumed…`, `Download history entry removed`, `…resume or cancel when ready` | `…it starts…`, `…resume when supported`, `History entry removed`, `…press p to resume or x to cancel` | GUI wording without key legends (`status.download.*`); a TUI that wants the key legend appends it itself |
+| Status: catalog loading | `Searching DistroWatch for active {base}-based…`, `Resolving current {name} ISO files…` | `Loading {base}-based distributions…`, `Loading {name} releases…` | GUI wording |
+| Status: profile with no ISO | `Profile loaded • no direct ISO was resolved from its current links` | `Profile ready · no direct ISO found` | TUI wording (shorter, consistent with the error variant) |
+| Status: ISO / Pi selected | `ISO selected • publisher checksum will be verified before use` / `…unavailable; HTTPS length…`; `…will be extracted and verified` | `ISO selected • choose Download & use ISO`; `…download will be verified` | GUI wording (two checksum-aware ISO lines) |
+| Status: backup running | `Backing up {} in the background…` | `Backing up {}…` | neutral `Backing up {drive}…` (the TUI backup blocks) |
+| Status: options toggled | `…every choice is included…` | `…every option is included…` | `every choice` |
+
+### Per-key notes (verbatim and external text)
+
+* **The erase confirmation phrase is never in the catalog.** No message
+  contains `ERASE ` or a `{phrase}`/`{confirmation}` placeholder (a test
+  enforces both). The GUI and TUI confirm with an acknowledgement
+  checkbox (`confirm.ack`), not typed text; the CLI `flash` / `write` commands
+  print and compare `plan.confirmation_phrase` themselves. `confirm.*` and
+  `review.*` text surrounds the destructive action, it never replaces it.
+* **Safety-critical wording to prioritise in native review**: `confirm.*`,
+  `review.consequence`, `review.warning.*`, `review.state.*`,
+  `status.write.*`, `result.*`, `target.confirm_physical`, `status.target.*`,
+  `focus.review`.
+* **Technical tokens survive translation verbatim** (enforced by a test over
+  every locale): `SHA-256`, `SkuSiPolicy.p7b`, `autounattend.xml`, `BitLocker`,
+  `DistroWatch`, `Raspberry Pi`, `HTTPS`, `UEFI`, `MBR`, `TPM`, `Copilot`,
+  `OneDrive`, `Teams`, `CA 2023`. German may hyphenate a brand into a compound
+  (`Raspberry-Pi-Katalog`).
+* **Partition scheme and firmware values** (`GPT`, `MBR`, `UEFI`, `BIOS + UEFI
+  (CSM)`) come from `Display` of `WindowsPartitionScheme` /
+  `WindowsBootFirmware`. They are technical identifiers, never localized, and
+  arrive as `{scheme}`, `{firmware}`, `{value}`. The GUI's select matches rows
+  by `to_string()`, so they must stay as they are.
+* **User and host data**: `{account}` / `{name}` (suggested local account
+  name; the fallback `User` is adapter-local), `{locale}` and `{zone}` (host
+  locale and time zone), `{path}`, `{drive}`, `{board}`, `{query}`,
+  `{description}`.
+* **Core text still shown as received** because core has not been converted
+  yet: `{kind}` in `status.image.recognized` (`ImageKind` `Display`), `{error}`
+  everywhere (core `Error` text), `{step}` in `status.backup.failed`
+  (`Progress.message`), `{name}` of distributions, and the `{reason}` /
+  `{warning}` inside `catalog.state.*` which *are* localized
+  (`catalog.failure.*`).
+* **`{source}`** in `status.catalog.*_loaded` is
+  `CatalogFetch::source_label_in(locale)` (`catalog.source.*`).
+* **`status.download.ready` starts with `Ready ·` in English.** Both apps test
+  `status.starts_with("Ready ·")` so a later status does not overwrite it. That
+  comparison breaks as soon as the text is localized; replace it with a state
+  flag (for example "download finished, keep status until the next user
+  action") before wiring this key.
+* **`catalog.subject.*`** are nouns fed into `catalog.state.*` through
+  `CatalogState::short_label_in`. English keeps them lower case as today
+  (`distributions not loaded`); other tables use label-style sentences
+  (`Nicht geladen: {subject}`) to avoid gender and number agreement problems.
+* `options.windows.boot_firmware_hint` states the feature is experimental and
+  unverified on real hardware; keep that disclaimer in every translation.
+* `discover.item.hits_per_day` is `{hits}/day`; `{hits}` is a number the adapter
+  formats.
+* `options.windows.named_account.on` quotes the account name in backticks;
+  keep them (they delimit user data).
+
+### Adapter migration notes
+
+* Rebuild `Strings` (and clear or re-render cached `String` statuses) when the
+  language changes. Statuses that carry user data are best stored as a
+  `Message` plus arguments and rendered at draw time.
+* Several statuses are assigned by core objects (`ReviewedWriteSession::begin`
+  errors, `apply_progress`, `Progress.message`); those are listed under "Core
+  strings not yet converted" below and remain English for now.
+* The GUI should stop hand-building the three Windows scheme/firmware strings
+  and the per-checkbox statuses; the TUI's `panel_heading` English-only
+  qualifier (` · choose an image`, ` · removable media`) can show
+  `source.title` / `target.title` instead of dropping the qualifier in
+  non-English locales.
+
+### Key list
+
+Every key below exists in all shipped locales. Plural keys are marked; the
+table shows the English `other` form. `{placeholders}` are identical in every
+translation.
+
+#### Header and brand
 
 | Key | English |
 | --- | --- |
-| `app.focus.source` | Source · choose or change the image |
-| `app.focus.target` | Target · choose an eligible removable drive |
-| `app.focus.setup` | Setup options · configure image-specific choices |
-| `app.focus.review` | Review & write · inspect the plan before erasure |
-| `app.focus.discover` | Discover images · browse trusted catalogs |
-| `app.focus.refresh` | Refresh drives · rescan removable media |
+| `header.tagline` | Boot media, written deliberately. |
+| `header.title.create` | Create boot media |
+| `header.subtitle.create` | One deliberate path from image to removable drive. |
+| `header.subtitle.review` | Inspect every operation before confirmation. |
+| `guide.title` | Guide |
+| `common.labeled` | {label}: {value} |
 
-### Source panel
-
-| Key | English |
-| --- | --- |
-| `app.source.title` | Choose an image |
-| `app.source.hint` | The image is inspected before any write is allowed |
-| `app.source.formats` | ISO, IMG, RAW, or compressed disk image |
-| `app.source.formats_inspected` | ISO, IMG, RAW, or compressed disk image\nInspected before writing |
-| `app.source.action.browse` / `change` / `inspecting` | Browse / Change / Inspecting… |
-| `app.source.recent.title` | RECENT IMAGES (TUI appends ` · press 1-4`) |
-| `app.source.recent.empty` | Images you use appear here for one-click reuse |
-| `app.source.recent.in_use` | In use |
-| `app.source.dialog.title` | Boot images |
-| `app.source.dialog.filter_iso` | ISO images |
-| `app.source.dialog.filter_backup` | Raw drive image |
-| `app.discover.card.title` | Discover images |
-| `app.discover.card.subtitle` | Browse trusted catalogs · Open → |
-
-### Target panel
+#### Buttons and actions shared by both interfaces
 
 | Key | English |
 | --- | --- |
-| `app.target.title` | Choose a drive |
-| `app.target.empty` | Connect a removable USB or SD drive, then refresh |
-| `app.target.state.blocked` / `selected` / `select` | Blocked / Selected / Select → |
-| `app.target.selected_header` | SELECTED DRIVE |
-| `app.target.confirm_physical` | Confirm the physical drive before continuing · erasure starts only after review |
-| `app.target.confirm_physical_short` | Confirm the physical drive · erasure starts only after review (TUI) |
-| `app.target.flag.read_only` / `app.target.flag.system_blocked` | READ-ONLY / SYSTEM—BLOCKED |
-| `app.target.erases_data` | ERASES DATA |
+| `action.downloads` | Downloads |
+| `action.downloads_count` | Downloads · {count} |
+| `action.downloads_compact` | Jobs |
+| `action.discover` | Discover images |
+| `action.discover_compact` | Find |
+| `action.catalog_close` | Close catalog |
+| `action.catalog_close_compact` | Catalog |
+| `action.setup_options` | Setup options |
+| `action.setup_options_compact` | Setup |
+| `action.hide_options` | Hide options |
+| `action.hide_options_compact` | Hide |
+| `action.refresh_drives` | Refresh drives |
+| `action.refresh` | Refresh |
+| `action.retry` | Retry |
+| `action.browse` | Browse |
+| `action.change` | Change |
+| `action.inspecting` | Inspecting… |
+| `action.select` | Select |
+| `action.selected` | Selected |
+| `action.blocked` | Blocked |
+| `action.close` | Close |
+| `action.cancel` | Cancel |
+| `action.cancelling` | Cancelling… |
+| `action.back` | Back |
+| `action.pause` | Pause |
+| `action.resume` | Resume |
+| `action.stop` | Stop |
+| `action.review` | Review |
+| `action.quit` | Quit |
 
-Device-name fallbacks, vendor/model strings and `Drive details changed` messages
-are in "Status line messages" below.
-
-### Setup options (Windows and Linux/Unix media)
-
-| Key | English |
-| --- | --- |
-| `app.options.windows.title` | Windows installer options |
-| `app.options.windows.title_counted` | Windows installer options  ·  checkboxes  ·  {selected} selected (TUI) |
-| `app.options.windows.partition_scheme` | Partition scheme · target firmware |
-| `app.options.windows.scheme_status` | Windows partition scheme: {scheme} · target firmware: UEFI |
-| `app.options.windows.bypass_hardware` | Bypass TPM, Secure Boot and RAM checks |
-| `app.options.windows.local_account` | Expose local/offline account setup |
-| `app.options.windows.named_account` | Create local account: {name} |
-| `app.options.windows.host_region` | Copy this computer's locale and time zone |
-| `app.options.windows.privacy` | Apply privacy-focused OOBE defaults |
-| `app.options.windows.bitlocker` | Disable automatic BitLocker encryption |
-| `app.options.windows.qol` | QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup |
-| `app.options.windows.ca2023` | Use Windows UEFI CA 2023 signed bootloaders |
-| `app.options.windows.skusipolicy` | Apply SkuSiPolicy.p7b Secure Boot revocations |
-| `app.options.windows.smode` | Force Windows S Mode (expert) |
-| `app.options.windows.installer_ready` | Windows ISO ready · setup choices unlocked |
-| `app.options.windows.installer_locked` | Choose a Windows ISO to unlock setup choices |
-| `app.options.windows.choose_iso` / `replace_iso` | Choose Windows ISO / Replace Windows ISO |
-| `app.options.windows.headline` | Windows installer media · Rufus-inspired workflow (TUI) |
-| `app.options.windows.features_available` | Rufus 4.15 inventory below: ✓ available now · ○ not implemented (TUI) |
-| `app.options.windows.unavailable_note` | Unavailable items are not clickable. Existing autounattend.xml files are never overwritten. |
-| `app.options.linux.title` | Linux / Unix boot media (TUI: `Linux / Unix boot media  ·  active features`) |
-| `app.options.linux.layout` | Preserve the complete bootable disk layout |
-| `app.options.linux.verify` | Verify the written bytes with SHA-256 |
-| `app.options.always_on.layout` / `boot_records` / `byte_verification` / `safe_unmount` | Full disk layout / Boot records / Byte verification / Safe unmount (TUI) |
-| `app.options.tools.title` | Media tools |
-| `app.options.tools.subtitle` | Verification and backup utilities |
-| `app.options.tools.bad_blocks` | Bad blocks · {mode} |
-| `app.options.tools.bad_blocks_off` / `bad_blocks_n` | Bad blocks off / Bad blocks {passes}x (TUI colon form: `Bad blocks: off`, `Bad blocks: {passes}x`; GUI/TUI differ) |
-| `app.options.tools.verify_image` / `image_folder` / `backup_drive` | Verify image / Image folder / Back up drive |
-| `app.options.verification_on` | Verification on · {bad_blocks} |
-| `app.windows.feature.*` | Feature inventory (GUI list): Standard Windows installation; GPT or MBR + UEFI FAT32 media; Split WIM files above 4 GiB; Remove TPM / Secure Boot / RAM requirements; Remove online Microsoft-account requirement; Disable data collection / skip privacy questions; Disable automatic BitLocker device encryption; Create a named local administrator account; Copy host locale and time zone; QoL policies for bundled Windows experiences; Windows CA 2023 signed bootloaders; Apply SkuSiPolicy.p7b revocations; Force Windows S Mode; MD5 / SHA-1 / SHA-256 / SHA-512 checksums; Reviewed erase phrase and removable-drive safety; Windows To Go and internal-disk isolation; Legacy BIOS boot and NTFS / UEFI:NTFS media; Fully unattended silent disk installation |
-| `app.windows.heading` / `app.windows.subheading` | Windows installer media / Complete Rufus 4.15 Windows inventory · working controls are clearly separated (GUI) |
-| `app.windows.coming` | Rufus Windows features still being implemented (GUI) |
-| `app.windows.reveal_hint` | Choose an inspected Windows installer ISO to reveal the independent Windows setup checkboxes. No Windows option is applied silently. (GUI) |
-| `app.windows.unavailable_warning` | Unavailable items are intentionally not clickable. Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design. (GUI) |
-
-The TUI short labels used as checkbox captions: `Hardware bypass`, `Offline
-account`, `Privacy defaults`, `Disable BitLocker`, `Named account`, `Host
-region`, `QoL policies`, `CA 2023`, `SkuSiPolicy`, `Force S Mode`, `Local
-account`, `Scheme: {scheme}`; these should each be a key (`app.options.short.*`)
-and ideally collapse into the long GUI labels where both fit.
-
-### Review and confirmation
+#### Tooltips
 
 | Key | English |
 | --- | --- |
-| `app.review.title` | Review write plan |
-| `app.review.subtitle.idle` | Nothing is written until the consequences are reviewed and acknowledged. (TUI) / Nothing is written until a separate destructive confirmation succeeds. (GUI) (GUI/TUI differ) |
-| `app.review.subtitle.writing` | Writing and verification are active • do not unplug the target. (TUI) |
-| `app.review.field.source` / `target` / `method` / `consequence` | SOURCE / TARGET / METHOD / CONSEQUENCE |
-| `app.review.consequence` | All existing data and partitions on the selected target will be erased. |
-| `app.review.ordered_operations` | Ordered operations |
-| `app.review.state.writing` | Writing and verification are active |
-| `app.review.state.final_confirm` | One final confirmation is required |
-| `app.review.warning.writing` | Do not close the app, power off, or unplug the target drive. |
-| `app.review.warning.idle` | Review the exact target changes and irreversible consequences before writing. |
-| `app.review.hint.open_confirmation` | Open the confirmation to review changes, consequences, and the physical target. (TUI) |
-| `app.review.action.stop` / `written` / `retry` / `consequences` | Stop safely / Written & verified / Review & retry / Review consequences |
-| `app.review.action.back` | Back |
-| `app.review.status.writing` | Writing and verification are active · do not unplug the target |
-| `app.review.status.complete` | Complete · the written media passed byte verification |
-| `app.review.status.review` | Review the physical target and permanent changes before writing |
-| `app.confirm.title` | Confirm permanent changes |
-| `app.confirm.subtitle` | Review what Bootable will change and what can go wrong. |
-| `app.confirm.badge` | PERMANENT |
-| `app.confirm.physical_target` | PHYSICAL TARGET |
-| `app.confirm.changes` | Changes to this drive |
-| `app.confirm.consequences` | Consequences |
-| `app.confirm.consequence.1` | Every existing file and partition on this physical drive will be permanently erased. |
-| `app.confirm.consequence.2` | Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below. |
-| `app.confirm.consequence.3` | Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media. |
-| `app.confirm.consequence.4` | Bootable rechecks the target identity immediately before erasure and verifies the result afterward. |
-| `app.confirm.ack` | I checked the physical target and understand that all of its existing data will be permanently erased. |
-| `app.confirm.cancel` / `app.confirm.submit` | Cancel / Confirm erase & write |
-| `app.confirm.ack_required` | Acknowledge the consequences before confirming the write |
-| `app.result.success.title` / `.body` | Write complete / The image was written and verified. The removable drive can now be safely removed. |
-| `app.result.cancelled.title` / `.body` | Write cancelled before erasure / Administrator authentication was cancelled or denied. |
-| `app.result.stopped.title` / `.body` | Write stopped safely / The media is incomplete and must be rewritten before use. |
-| `app.result.failed.title` | Write failed |
+| `tooltip.guide` | Guide and shortcuts ({shortcut}) |
+| `tooltip.refresh_drives` | Refresh removable drives |
+| `tooltip.refresh_distrowatch` | Refresh DistroWatch data |
+| `tooltip.refresh_pi` | Refresh Raspberry Pi catalog |
 
-The confirmation phrase prompt must show the untranslated phrase (see "Things
-that must never be localized").
-
-### Discovery (distributions, ISOs, Raspberry Pi)
+#### Source panel
 
 | Key | English |
 | --- | --- |
-| `app.discover.title` | Discover distributions |
-| `app.discover.disclaimer` | DistroWatch page-hit ranking measures interest—not quality or market share (GUI) / DistroWatch popularity · six-month page-hit ranking + Interest indicator only; not usage, quality, or market share. (CLI) (differ) |
-| `app.discover.search_placeholder` | Search by name, slug, or base family… (TUI adds `  / to type`) |
-| `app.discover.section.popular` / `search` / `arch` / `debian` / `omarchy` | POPULAR · SIX MONTHS / SEARCH RESULTS / ARCH-BASED / DEBIAN-BASED / OMARCHY |
-| `app.discover.quick.arch` / `debian` / `omarchy` / `windows` / `raspberry_pi` | Arch / Debian / Omarchy / Windows / Raspberry Pi |
-| `app.discover.state.retry` / `refresh` | Retry / Refresh |
-| `app.discover.item.select` / `selected` | Select → / Selected |
-| `app.discover.item.independent` / `directory` | Independent / Directory; DistroWatch directory |
-| `app.discover.item.size_unknown` | Size unknown |
-| `app.discover.item.publisher_checksum` / `no_publisher_checksum` | Publisher {algorithm} / No publisher checksum |
-| `app.discover.item.https_only` | HTTPS only |
-| `app.discover.detail.empty` | Choose a distribution to load its profile and ISO files (TUI) / Choose a distribution to resolve its current ISO files (GUI) (differ) |
-| `app.discover.detail.os_type` / `status` / `based_on` / `origin` / `description` / `logo` / `screenshot` | Unknown OS / Unknown status / Independent / Unknown / No description / Not listed / Not listed |
-| `app.discover.detail.arch_desktop` | Architecture: {arch}  ·  Desktop: {desktop} |
-| `app.discover.detail.direct_isos` | DIRECT ISO FILES |
-| `app.discover.detail.loading` | Loading… |
-| `app.discover.detail.open_page` | Open DistroWatch download page |
-| `app.discover.detail.download_use` | Download & use ISO |
-| `app.discover.artwork.loading` / `none` / `unavailable` | Loading artwork… / No artwork / Artwork unavailable |
-| `app.discover.omarchy_mx.title` / `.body` / `.badge` | Omarchy MX Mac · Apple Silicon derivative / Installs onto an existing Asahi Arch Minimal system; its releases contain signed installer files, not an ISO/IMG. / Not writable to USB |
-| `app.pi.title` | Official Raspberry Pi Imager catalog |
-| `app.pi.subtitle` | Board compatibility, compressed and extracted checksums included |
-| `app.pi.board_filter` / `compatible_images` | BOARD FILTER / COMPATIBLE IMAGES |
-| `app.pi.all_images` | All images |
-| `app.pi.empty` / `app.pi.empty_query` | No compatible Raspberry Pi images found / No Raspberry Pi images match “{query}” |
-| `app.pi.hint` | Choose a board and image. Official checksums are verified before the image is used. |
-| `app.pi.default_category` / `date_unknown` | Raspberry Pi image / Date unknown |
-| `app.pi.sizes` | Download {download} · Expanded {expanded}\nReleased {date}\n{description} |
-| `app.pi.download_use` | Download, verify & use |
+| `source.title` | Choose an image |
+| `source.hint` | The image is inspected before any write is allowed |
+| `source.formats` | ISO, IMG, RAW, or compressed disk image |
+| `source.inspected` | Inspected |
+| `source.recent.title` | Recent images |
+| `source.recent.empty` | Images you use appear here for one-click reuse |
+| `source.recent.in_use` | In use |
+| `source.dialog.title` | Boot images |
+| `source.dialog.filter_iso` | ISO images |
+| `source.dialog.filter_backup` | Raw drive image |
 
-### Downloads panel
+#### Target panel
 
 | Key | English |
 | --- | --- |
-| `app.downloads.title` | Downloads |
-| `app.downloads.subtitle` | Persistent history · interrupted transfers can resume |
-| `app.downloads.empty` | No managed downloads yet (TUI: `No managed downloads yet · choose an image from Discover to begin`; differ) |
-| `app.downloads.interrupted_note` | Interrupted transfers retain only owned partial files; explicit cancellation removes them. |
-| `app.downloads.action.pause` / `resume` / `cancel` / `cancelling` / `retry` / `remove` | Pause / Resume / Cancel / Cancelling… / Retry / Remove |
+| `target.title` | Choose a drive |
+| `target.empty` | Connect a removable USB or SD drive, then refresh |
+| `target.selected_drive` | Selected drive |
+| `target.confirm_physical` | Confirm the physical drive before continuing · erasure starts only after review |
 
-### Status line messages (identical or near-identical in both apps)
-
-These are assigned to `self.status` in both apps. Where wording differs between
-GUI and TUI the GUI form is listed second; pick one when extracting.
+#### Workspace focus guidance (shown when keyboard focus moves)
 
 | Key | English |
 | --- | --- |
-| `app.status.image.busy` | Image inspection is already running |
-| `app.status.image.cancelled` | Image selection cancelled |
-| `app.status.image.inspecting` | Inspecting image • compressed sources are measured after expansion… |
-| `app.status.image.recognized` | Recognized {kind} |
-| `app.status.image.stopped` | Image inspection stopped unexpectedly |
-| `app.status.image.folder` | Image browser folder: {path} |
-| `app.status.image.folder_cancelled` | Folder selection cancelled |
-| `app.status.image.choose_first` | Choose an image first |
-| `app.status.image.no_recent` | No recent image in that position |
-| `app.status.prefs.save_failed` | Preferences were not saved: {error} |
-| `app.status.target.none_eligible` | No eligible removable drive is available |
-| `app.status.target.selected` | Target selected · confirm the physical drive before reviewing the erase plan |
-| `app.status.target.blocked` | That drive is blocked and cannot be selected |
-| `app.status.target.choose_first` | Choose a target drive first / No target device is selected |
-| `app.status.drives.refresh_paused` | Drive refresh is paused while writing • do not unplug the target |
-| `app.status.drives.up_to_date` | Drive list is up to date • automatic detection is on |
-| `app.status.drives.changed` | Drive details changed • list updated automatically |
-| `app.status.drives.added` | Detected {count} new drive(s) • list updated automatically (plural) |
-| `app.status.drives.removed` | Removed {count} drive(s) • list updated automatically (plural) |
-| `app.status.drives.added_removed` | Drive list changed: {added} added, {removed} removed • updated automatically |
-| `app.status.review.start_with_image` | Start with --image /path/to/image.iso to create a plan (TUI) |
-| `app.status.review.open` | Reviewing the write plan • nothing has been written |
-| `app.status.review.consequences` | Review the target changes and consequences before writing |
-| `app.status.review.ack_required` | Acknowledge the consequences before confirming the write |
-| `app.status.write.active` | Writing is active • do not close the app or unplug the target |
-| `app.status.write.active_stop_hint` | Writing is active • press x to stop safely; do not unplug the target (TUI) |
-| `app.status.write.started` | Write started • do not unplug the target |
-| `app.status.write.cancelled` | Write cancelled before erasure • the target is unchanged |
-| `app.status.write.stopping` | Stopping safely • flushing completed writes; media will remain incomplete (GUI: `...; the media will remain incomplete`) |
-| `app.status.write.close_while_cancelling_download` | Cancelling download safely • close again after temporary data is cleaned up (GUI) |
-| `app.status.write.close_while_stopping` | Stopping write safely • close again after completed writes are flushed (GUI) |
-| `app.status.catalog.closed` | Catalog closed • {guidance} |
-| `app.status.catalog.search_hint` | Type to search · results update live · Esc leaves search |
-| `app.status.catalog.search_closed` | Search closed · showing DistroWatch six-month popularity |
-| `app.status.catalog.popularity` | Showing DistroWatch six-month popularity |
-| `app.status.catalog.ready` | DistroWatch catalog ready • rankings indicate interest, not quality |
-| `app.status.catalog.loading_popularity` | Loading DistroWatch six-month popularity… |
-| `app.status.catalog.searching_directory` | Searching DistroWatch's full distribution directory… |
-| `app.status.catalog.loading` | Loading distributions… |
-| `app.status.catalog.loading_base` | Searching DistroWatch for active {base}-based distributions… (TUI: `Loading {base}-based distributions…`) |
-| `app.status.catalog.showing_base` | Showing {count} active {base}-based distributions from DistroWatch |
-| `app.status.catalog.loading_releases` | Loading {name} releases… / Resolving current {name} ISO files… |
-| `app.status.catalog.profile_ready_no_iso` | Profile ready · no direct ISO found / Profile loaded • no direct ISO was resolved from its current links |
-| `app.status.catalog.profile_ready_errors` | Profile ready · no direct ISO found · {count} source error(s) (plural) |
-| `app.status.catalog.omarchy_enter` | Omarchy quick access · press Enter to resolve ISOs |
-| `app.status.catalog.omarchy_missing` | Omarchy is missing from the current DistroWatch directory |
-| `app.status.catalog.omarchy_family` | Omarchy family · ISO releases are writable; installer-only derivatives are clearly marked |
-| `app.status.catalog.windows_tools` | Windows media tools · press o to choose a Windows ISO (GUI: `... · choose a Windows ISO to unlock setup options`) |
-| `app.status.catalog.windows_uses_iso` | Windows tools use the selected local ISO |
-| `app.status.catalog.pi_selected` | Raspberry Pi image discovery selected |
-| `app.status.catalog.pi_loading` | Loading Raspberry Pi images… / Loading the official Raspberry Pi Imager catalog… |
-| `app.status.catalog.pi_compatible` | Showing images compatible with {board} |
-| `app.status.catalog.pi_all` | Showing every Raspberry Pi image |
-| `app.status.catalog.pi_choose` | Choose a Raspberry Pi image first / Choose a Raspberry Pi image to download |
-| `app.status.catalog.pi_selected_verify` | Raspberry Pi image selected • download will be verified (GUI: `... will be extracted and verified`) |
-| `app.status.catalog.iso_selected` | ISO selected • choose Download & use ISO (GUI: `ISO selected • publisher checksum will be verified before use` / `... unavailable; HTTPS length and boot structure will be checked`) |
-| `app.status.catalog.choose_distribution` | Choose a distribution first |
-| `app.status.catalog.choose_release` | Choose an ISO release first / Choose an ISO release to download |
-| `app.status.catalog.browser_opened` | Opened the DistroWatch distribution page in your browser |
-| `app.status.catalog.artwork_error` | Could not decode catalog artwork: {error} |
-| `app.status.download.history_unavailable` | Download history unavailable · {error} |
-| `app.status.download.queued` | Download queued · it starts when the active job finishes (GUI: `... it will start when the active job finishes`) |
-| `app.status.download.retrying` | Retrying download · preserved bytes resume when supported (GUI: `... will be resumed when supported`) |
-| `app.status.download.starting` | Starting managed download… |
-| `app.status.download.retry_queued` | Retry queued · it starts after the active download (GUI: `it will start after`) |
-| `app.status.download.choose_job` | Choose a download job first |
-| `app.status.download.job_gone` | Download job no longer exists (GUI) |
-| `app.status.download.start_failed` | Could not start queued download · {error} |
-| `app.status.download.using_completed` | Using completed download {path} |
-| `app.status.download.completed_unavailable` | Downloaded image is unavailable · {error} |
-| `app.status.download.history_removed` | History entry removed · completed image kept (GUI: `Download history entry removed · completed image kept`) |
-| `app.status.download.iso_cancelled` | ISO download cancelled |
-| `app.status.download.pi_cancelled` | Raspberry Pi image download cancelled |
-| `app.status.download.ready` | Ready · downloaded, verified, and inspected {name} · discovery remains open |
-| `app.status.download.cancelled_cleaned` | Download cancelled • temporary data cleaned up |
-| `app.status.download.stopped` | Download stopped · {error} |
-| `app.status.download.paused` | Download paused • press p to resume or x to cancel (GUI: `... • resume or cancel when ready`) |
-| `app.status.download.resumed` | Download resumed |
-| `app.status.download.cancelling` | Cancelling download safely • cleaning temporary data… |
-| `app.status.windows.choose_image` | Choose a Windows image before changing Windows options |
-| `app.status.windows.not_windows` | Windows setup options apply only to Windows installer images |
-| `app.status.windows.choose_installer` | Choose a Windows installer image before changing Windows options |
-| `app.status.windows.updated` | Windows installer selections updated (GUI) / Windows QoL policy selection updated (TUI) |
-| `app.status.windows.bypass_on` / `off` | Windows 11 TPM, Secure Boot, and RAM checks will be bypassed / Windows 11 hardware checks use Microsoft defaults |
-| `app.status.windows.local_on` / `off` | Windows OOBE will expose the offline/local-account path / Windows OOBE will use its standard account flow |
-| `app.status.windows.privacy_on` / `off` | Windows OOBE will use privacy-focused defaults / Windows OOBE privacy questions will remain at their defaults |
-| `app.status.windows.bitlocker_on` / `off` | Automatic Windows device encryption will be disabled / Windows may automatically enable device encryption |
-| `app.status.windows.account_off` | Automatic local-account creation disabled |
-| `app.status.windows.account_on` | Windows will create local administrator account `{account}` |
-| `app.status.windows.region_off` / `on` | Windows Setup will ask for regional options / Windows will use locale {locale} and time zone {zone} |
-| `app.status.windows.ca2023` | CA 2023 boot media requires updated Secure Boot certificates (GUI: `CA 2023 media requires updated Secure Boot firmware certificates`) |
-| `app.status.windows.skusipolicy` | SkuSiPolicy.p7b selection updated |
-| `app.status.windows.smode` | S Mode may remain enforced after reinstall; review the plan carefully (GUI: `... review before writing`) |
-| `app.status.options.expanded` / `collapsed` | Advanced options expanded • every option is included in the reviewed plan (GUI: `every choice`) / Advanced options collapsed • configured values remain active |
-| `app.status.options.open_needs_image` | Choose or download an image before opening media options |
-| `app.status.checksum.algorithm` | Checksum algorithm: {algorithm} |
-| `app.status.checksum.choose_image` | Choose an image before computing its checksum |
-| `app.status.badblocks.off` / `n` | Destructive bad-block check disabled / Bad-block check: {passes} destructive pattern(s) before writing (plural) |
-| `app.status.backup.choose_drive` | Choose a removable drive to back up |
-| `app.status.backup.cancelled` | Drive backup cancelled |
-| `app.status.backup.running` | Backing up {drive}… (GUI: `Backing up {drive} in the background…`) |
-| `app.status.backup.done` | Drive image saved to {path} |
+| `focus.source` | Source · choose or change the image |
+| `focus.target` | Target · choose an eligible removable drive |
+| `focus.setup` | Setup options · configure image-specific choices |
+| `focus.review` | Review & write · inspect the plan before erasure |
+| `focus.discover` | Discover images · browse trusted catalogs |
+| `focus.refresh` | Refresh drives · rescan removable media |
 
-Wording differences marked above ("GUI/TUI differ") are existing parity drift;
-resolve them by choosing one phrasing per key rather than keeping two keys.
+#### Setup options: panel titles
+
+| Key | English |
+| --- | --- |
+| `options.windows.title` | Windows installer options |
+| `options.linux.title` | Linux / Unix boot media |
+| `options.selected_count` | {count} selected |
+| `options.summary.verification` | Verification on · {bad_blocks} |
+
+#### Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+
+| Key | English |
+| --- | --- |
+| `options.windows.partition_scheme` | Partition scheme |
+| `options.windows.scheme_value` | Scheme: {scheme} |
+| `options.windows.boot_firmware` | Boot firmware |
+| `options.windows.boot_firmware_experimental` | Boot firmware · experimental |
+| `options.windows.boot_firmware_value` | Boot firmware: {value} |
+| `options.windows.boot_firmware_value_experimental` | Boot firmware: {value} · experimental |
+| `options.windows.boot_firmware_value_compact` | Firmware: {value} |
+| `options.windows.boot_firmware_hint` | Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware. |
+
+#### Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+
+| Key | English |
+| --- | --- |
+| `options.windows.bypass_hardware.label` | Bypass TPM, Secure Boot and RAM checks |
+| `options.windows.bypass_hardware.short` | Hardware bypass |
+| `options.windows.bypass_hardware.on` | Windows 11 TPM, Secure Boot, and RAM checks will be bypassed |
+| `options.windows.bypass_hardware.off` | Windows 11 hardware checks use Microsoft defaults |
+| `options.windows.offline_account.label` | Expose local/offline account setup |
+| `options.windows.offline_account.short` | Offline account |
+| `options.windows.offline_account.on` | Windows OOBE will expose the offline/local-account path |
+| `options.windows.offline_account.off` | Windows OOBE will use its standard account flow |
+| `options.windows.named_account.label` | Create local account: {name} |
+| `options.windows.named_account.short` | Named account |
+| `options.windows.named_account.on` | Windows will create local administrator account `{account}` |
+| `options.windows.named_account.off` | Automatic local-account creation disabled |
+| `options.windows.host_region.label` | Copy this computer's locale and time zone |
+| `options.windows.host_region.short` | Host region |
+| `options.windows.host_region.on` | Windows will use locale {locale} and time zone {zone} |
+| `options.windows.host_region.off` | Windows Setup will ask for regional options |
+| `options.windows.privacy.label` | Apply privacy-focused OOBE defaults |
+| `options.windows.privacy.short` | Privacy defaults |
+| `options.windows.privacy.on` | Windows OOBE will use privacy-focused defaults |
+| `options.windows.privacy.off` | Windows OOBE privacy questions will remain at their defaults |
+| `options.windows.bitlocker.label` | Disable automatic BitLocker encryption |
+| `options.windows.bitlocker.short` | Disable BitLocker |
+| `options.windows.bitlocker.on` | Automatic Windows device encryption will be disabled |
+| `options.windows.bitlocker.off` | Windows may automatically enable device encryption |
+| `options.windows.qol.label` | QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup |
+| `options.windows.qol.short` | QoL policies |
+| `options.windows.qol.on` | Windows will reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup |
+| `options.windows.qol.off` | Windows keeps its default Copilot, OneDrive, Teams, suggestions, and Fast Startup behavior |
+| `options.windows.ca2023.label` | Use Windows UEFI CA 2023 signed bootloaders |
+| `options.windows.ca2023.short` | CA 2023 |
+| `options.windows.ca2023.on` | CA 2023 boot media requires updated Secure Boot firmware certificates |
+| `options.windows.ca2023.off` | Boot media will use the standard Windows bootloaders |
+| `options.windows.skusipolicy.label` | Apply SkuSiPolicy.p7b Secure Boot revocations |
+| `options.windows.skusipolicy.short` | SkuSiPolicy |
+| `options.windows.skusipolicy.on` | SkuSiPolicy.p7b Secure Boot revocations will be applied |
+| `options.windows.skusipolicy.off` | SkuSiPolicy.p7b Secure Boot revocations will not be applied |
+| `options.windows.smode.label` | Force Windows S Mode (expert) |
+| `options.windows.smode.short` | Force S Mode |
+| `options.windows.smode.on` | S Mode may remain enforced after reinstall; review the plan carefully |
+| `options.windows.smode.off` | Windows S Mode will not be forced |
+
+#### Setup options: Windows status lines
+
+| Key | English |
+| --- | --- |
+| `status.windows.choose_installer` | Choose a Windows installer image before changing Windows options |
+| `status.windows.not_windows` | Windows setup options apply only to Windows installer images |
+| `status.windows.scheme` | Windows partition scheme: {scheme} · boot firmware: {firmware} |
+| `status.windows.firmware` | Boot firmware: {firmware} (experimental) · partition scheme: {scheme} |
+
+#### Setup options: Windows installer media card (Discover)
+
+| Key | English |
+| --- | --- |
+| `options.windows.heading` | Windows installer media |
+| `options.windows.installer_ready` | Windows ISO ready · setup choices unlocked |
+| `options.windows.installer_locked` | Choose a Windows ISO to unlock setup choices |
+| `options.windows.choose_iso` | Choose Windows ISO |
+| `options.windows.replace_iso` | Replace Windows ISO |
+| `options.windows.unavailable_note` | Unavailable items are not clickable. Existing autounattend.xml files are never overwritten. |
+| `options.windows.silent_install_warning` | Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design. |
+
+#### Setup options: Linux / Unix media
+
+| Key | English |
+| --- | --- |
+| `options.linux.layout` | Preserve the complete bootable disk layout |
+| `options.linux.layout_short` | Full disk layout |
+| `options.linux.verify` | Verify the written bytes with SHA-256 |
+| `options.linux.verify_short` | Byte verification |
+| `options.linux.boot_records_short` | Boot records |
+| `options.linux.unmount_short` | Safe unmount |
+
+#### Setup options: media tools
+
+| Key | English |
+| --- | --- |
+| `options.tools.title` | Media tools |
+| `options.tools.subtitle` | Verification and backup utilities |
+| `options.tools.bad_blocks_off` | Bad blocks off |
+| `options.tools.bad_blocks_passes` | Bad blocks {passes}x |
+| `options.tools.verify_image` | Verify image |
+| `options.tools.image_folder` | Image folder |
+| `options.tools.backup_drive` | Back up drive |
+
+#### Review screen
+
+| Key | English |
+| --- | --- |
+| `review.title` | Review write plan |
+| `review.subtitle` | Nothing is written until the consequences are reviewed and acknowledged. |
+| `review.subtitle_writing` | Writing and verification are active • do not unplug the target. |
+| `review.plan_summary` | Plan summary |
+| `review.field.source` | Source |
+| `review.field.target` | Target |
+| `review.field.method` | Method |
+| `review.field.consequence` | Consequence |
+| `review.consequence` | All existing data and partitions on the selected target will be erased. |
+| `review.permanent_changes` | Permanent changes |
+| `review.ordered_operations` | Ordered operations |
+| `review.step.erases` | Erases data |
+| `review.step.safe` | Safe |
+| `review.step.verifies` | Verifies |
+| `review.state.writing` | Writing and verification are active |
+| `review.state.final_confirm` | One final confirmation is required |
+| `review.warning.writing` | Do not close the app, power off, or unplug the target drive. |
+| `review.warning.idle` | Review the exact target changes and irreversible consequences before writing. |
+| `review.hint.open_confirmation` | Open the confirmation to review changes, consequences, and the physical target. |
+| `review.action.stop_safely` | Stop safely |
+| `review.action.written` | Written & verified |
+| `review.action.retry` | Review & retry |
+| `review.action.consequences` | Review consequences |
+| `review.status.writing` | Writing and verification are active · do not unplug the target |
+| `review.status.complete` | Complete · the written media passed byte verification |
+| `review.status.review` | Review the physical target and permanent changes before writing |
+
+#### Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+
+| Key | English |
+| --- | --- |
+| `confirm.title` | Confirm permanent changes |
+| `confirm.subtitle` | Review what Bootable will change and what can go wrong. |
+| `confirm.badge` | Permanent |
+| `confirm.physical_target` | Physical target |
+| `confirm.changes` | Changes to this drive |
+| `confirm.consequences` | Consequences |
+| `confirm.consequence.erase` | Every existing file and partition on this physical drive will be permanently erased. |
+| `confirm.consequence.wrong_drive` | Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below. |
+| `confirm.consequence.interrupted` | Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media. |
+| `confirm.consequence.recheck` | Bootable rechecks the target identity immediately before erasure and verifies the result afterward. |
+| `confirm.ack` | I checked the physical target and understand that all of its existing data will be permanently erased. |
+| `confirm.submit` | Confirm erase & write |
+| `confirm.acknowledge_first` | Acknowledge first |
+
+#### Write result
+
+| Key | English |
+| --- | --- |
+| `result.success.title` | Write complete |
+| `result.success.body` | The image was written and verified. The removable drive can now be safely removed. |
+| `result.authentication_denied.title` | Write cancelled before erasure |
+| `result.authentication_denied.body` | Administrator authentication was cancelled or denied. |
+| `result.stopped.title` | Write stopped safely |
+| `result.stopped.body` | The media is incomplete and must be rewritten before use. |
+| `result.failed.title` | Write failed |
+
+#### Review and write status lines
+
+| Key | English |
+| --- | --- |
+| `status.review.open` | Reviewing the write plan • nothing has been written |
+| `status.review.consequences` | Review the target changes and consequences before writing |
+| `status.review.ack_required` | Acknowledge the consequences before confirming the write |
+| `status.write.active` | Writing is active • do not close the app or unplug the target |
+| `status.write.started` | Write started • do not unplug the target |
+| `status.write.cancelled` | Write cancelled before erasure • the target is unchanged |
+| `status.write.stopping` | Stopping safely • flushing completed writes; the media will remain incomplete |
+
+#### Discover: catalog shell
+
+| Key | English |
+| --- | --- |
+| `discover.title` | Discover bootable images |
+| `discover.collapsed_hint` | Browse trusted catalogs · Open |
+| `discover.disclaimer` | DistroWatch page-hit ranking measures interest, not quality or market share. |
+| `discover.search_title` | Search |
+| `discover.search_placeholder` | Search by name, slug, or base family… |
+| `discover.windows_hint` | Windows installer workflow · select an ISO to unlock every setup checkbox |
+| `discover.quick.all` | All |
+| `discover.section.popular` | Popular · six months |
+| `discover.section.search` | Search results |
+| `discover.section.arch` | Arch-based |
+| `discover.section.debian` | Debian-based |
+
+#### Discover: distribution rows and profile
+
+| Key | English |
+| --- | --- |
+| `discover.item.independent` | Independent |
+| `discover.item.directory` | Directory |
+| `discover.item.directory_source` | DistroWatch directory |
+| `discover.item.hits_per_day` | {hits}/day |
+| `discover.item.size_unknown` | Size unknown |
+| `discover.item.publisher_checksum` | Publisher {algorithm} |
+| `discover.item.no_publisher_checksum` | No publisher checksum |
+| `discover.item.https_only` | HTTPS only |
+| `discover.detail.empty` | Choose a distribution to load its profile and ISO files |
+| `discover.detail.unknown_os` | Unknown OS |
+| `discover.detail.unknown_status` | Unknown status |
+| `discover.detail.unknown_origin` | Unknown |
+| `discover.detail.no_description` | No description |
+| `discover.detail.not_listed` | Not listed |
+| `discover.detail.based_on` | Based on |
+| `discover.detail.origin` | Origin |
+| `discover.detail.architecture` | Architecture |
+| `discover.detail.desktop` | Desktop |
+| `discover.detail.logo` | Logo |
+| `discover.detail.screenshot` | Screenshot |
+| `discover.detail.screenshot_of` | {name} screenshot |
+| `discover.detail.rating` (plural) | ★ {rating}/10 · {count} reviews |
+| `discover.detail.direct_isos` | Direct ISO files |
+| `discover.detail.loading` | Loading… |
+| `discover.detail.found` | {count} found |
+| `discover.detail.open_page` | Open DistroWatch download page |
+| `discover.detail.download_use` | Download & use ISO |
+| `discover.artwork.loading` | Loading artwork… |
+| `discover.artwork.none` | No artwork |
+| `discover.artwork.unavailable` | Artwork unavailable |
+
+#### Discover: Raspberry Pi catalog
+
+| Key | English |
+| --- | --- |
+| `pi.title` | Official Raspberry Pi Imager catalog |
+| `pi.subtitle` | Board compatibility, compressed and extracted checksums included |
+| `pi.board_filter` | Board filter |
+| `pi.compatible_images` | Compatible images |
+| `pi.all_images` | All images |
+| `pi.empty` | No compatible Raspberry Pi images found |
+| `pi.empty_query` | No Raspberry Pi images match “{query}” |
+| `pi.hint` | Choose a board and image. Official checksums are verified before the image is used. |
+| `pi.default_category` | Raspberry Pi image |
+| `pi.date_unknown` | Date unknown |
+| `pi.details` | Download {download} · Expanded {expanded}\nReleased {date}\n{description} |
+| `pi.download_use` | Download, verify & use |
+
+#### Discover: catalog load states ({subject} comes from catalog.subject.*; {reason} and {warning} are core-produced text shown as received)
+
+| Key | English |
+| --- | --- |
+| `catalog.state.idle` | {subject} not loaded |
+| `catalog.state.loading` | Loading {subject}… |
+| `catalog.state.ready` | {subject} ready |
+| `catalog.state.ready_cached` | {subject} ready · cached |
+| `catalog.state.ready_warning` | {subject} ready · cached · {warning} |
+| `catalog.state.empty` | No {subject} found |
+| `catalog.state.failed` | Could not load {subject} · {reason} · retry |
+| `catalog.subject.distributions` | distributions |
+| `catalog.subject.search_catalog` | search catalog |
+| `catalog.subject.pi_images` | Raspberry Pi images |
+| `catalog.subject.pi_boards` | Raspberry Pi boards |
+| `catalog.subject.base_distributions` | {base}-based distributions |
+| `catalog.subject.iso_releases` | ISO releases |
+| `catalog.subject.distribution_profile` | distribution profile |
+
+#### Discover: status lines
+
+| Key | English |
+| --- | --- |
+| `status.catalog.closed` | Catalog closed • {guidance} |
+| `status.catalog.search_closed` | Search closed · showing DistroWatch six-month popularity |
+| `status.catalog.popularity` | Showing DistroWatch six-month popularity |
+| `status.catalog.ready` | DistroWatch catalog ready • rankings indicate interest, not quality |
+| `status.catalog.loading_popularity` | Loading DistroWatch six-month popularity… |
+| `status.catalog.searching_directory` | Searching DistroWatch's full distribution directory… |
+| `status.catalog.loading` | Loading distributions… |
+| `status.catalog.loading_base` | Searching DistroWatch for active {base}-based distributions… |
+| `status.catalog.showing_base` (plural) | Showing {count} active {base}-based distributions from DistroWatch |
+| `status.catalog.loading_releases` | Resolving current {name} ISO files… |
+| `status.catalog.profile_ready_no_iso` | Profile ready · no direct ISO found |
+| `status.catalog.profile_ready_errors` (plural) | Profile ready · no direct ISO found · {count} source errors |
+| `status.catalog.releases_loaded` (plural) | {count} direct ISO releases · {source} |
+| `status.catalog.source_warnings` (plural) | {count} source warnings |
+| `status.catalog.with_warnings` | {summary} · {warnings} |
+| `status.catalog.omarchy` | Omarchy family · ISO releases are writable; installer-only derivatives are clearly marked |
+| `status.catalog.omarchy_missing` | Omarchy is missing from the current DistroWatch directory |
+| `status.catalog.windows_tools` | Windows media tools · choose a Windows ISO to unlock setup options |
+| `status.catalog.windows_uses_iso` | Windows tools use the selected local ISO |
+| `status.catalog.pi_selected` | Raspberry Pi image discovery selected |
+| `status.catalog.pi_loading` | Loading the official Raspberry Pi Imager catalog… |
+| `status.catalog.pi_compatible` | Showing images compatible with {board} |
+| `status.catalog.pi_all` | Showing every Raspberry Pi image |
+| `status.catalog.pi_choose` | Choose a Raspberry Pi image to download |
+| `status.catalog.pi_selected_verify` | Raspberry Pi image selected • download will be extracted and verified |
+| `status.catalog.iso_selected_checksum` | ISO selected • publisher checksum will be verified before use |
+| `status.catalog.iso_selected_https` | ISO selected • publisher checksum unavailable; HTTPS length and boot structure will be checked |
+| `status.catalog.choose_distribution` | Choose a distribution first |
+| `status.catalog.choose_release` | Choose an ISO release to download |
+| `status.catalog.browser_opened` | Opened the DistroWatch distribution page in your browser |
+| `status.catalog.artwork_error` | Could not decode catalog artwork: {error} |
+
+#### Downloads panel
+
+| Key | English |
+| --- | --- |
+| `downloads.subtitle` | Persistent history · interrupted transfers can resume |
+| `downloads.empty` | No managed downloads yet · choose an image from Discover to begin |
+| `downloads.selected` | Selected download |
+| `downloads.interrupted_note` | Interrupted transfers retain only owned partial files; explicit cancellation removes them. |
+| `downloads.action.retry_resume` | Retry / resume |
+| `downloads.action.use_image` | Use image |
+| `downloads.action.remove` | Remove entry |
+| `downloads.action.cancel` | Cancel download |
+| `downloads.jobs_in_history` (plural) | {count} download jobs in history |
+| `downloads.status.queued` | Queued |
+| `downloads.status.running` | Downloading |
+| `downloads.status.paused` | Paused |
+| `downloads.status.interrupted` | Interrupted |
+| `downloads.status.completed` | Completed |
+| `downloads.status.failed` | Failed |
+| `downloads.status.cancelled` | Cancelled |
+| `downloads.kind.iso` | ISO |
+| `downloads.kind.raspberry_pi` | Raspberry Pi image |
+
+#### Download status lines
+
+| Key | English |
+| --- | --- |
+| `status.download.history_unavailable` | Download history unavailable · {error} |
+| `status.download.queued` | Download queued · it will start when the active job finishes |
+| `status.download.retrying` | Retrying download · preserved bytes will be resumed when supported |
+| `status.download.starting` | Starting managed download… |
+| `status.download.retry_queued` | Retry queued · it will start after the active download |
+| `status.download.choose_job` | Choose a download job first |
+| `status.download.job_gone` | Download job no longer exists |
+| `status.download.start_failed` | Could not start queued download · {error} |
+| `status.download.using_completed` | Using completed download {path} |
+| `status.download.completed_unavailable` | Downloaded image is unavailable · {error} |
+| `status.download.history_removed` | History entry removed · completed image kept |
+| `status.download.iso_cancelled` | ISO download cancelled |
+| `status.download.pi_cancelled` | Raspberry Pi image download cancelled |
+| `status.download.ready` | Ready · downloaded, verified, and inspected {name} · discovery remains open |
+| `status.download.cancelled_cleaned` | Download cancelled • temporary data cleaned up |
+| `status.download.stopped` | Download stopped · {error} |
+| `status.download.paused` | Download paused • resume or cancel when ready |
+| `status.download.resumed` | Download resumed |
+| `status.download.cancelling` | Cancelling download safely • cleaning temporary data… |
+
+#### Image, drive and options status lines
+
+| Key | English |
+| --- | --- |
+| `status.startup` | {media} · choose an image to begin |
+| `status.image.busy` | Image inspection is already running |
+| `status.image.cancelled` | Image selection cancelled |
+| `status.image.inspecting` | Inspecting image • compressed sources are measured after expansion… |
+| `status.image.recognized` | Recognized {kind} |
+| `status.image.stopped` | Image inspection stopped unexpectedly |
+| `status.image.folder` | Image browser folder: {path} |
+| `status.image.folder_cancelled` | Folder selection cancelled |
+| `status.image.choose_first` | Choose an image first |
+| `status.image.no_recent` | No recent image in that position |
+| `status.prefs.save_failed` | Preferences were not saved: {error} |
+| `status.target.none_eligible` | No eligible removable drive is available |
+| `status.target.selected` | Target selected · confirm the physical drive before reviewing the erase plan |
+| `status.target.blocked` | That drive is blocked and cannot be selected |
+| `status.target.choose_first` | Choose a target drive first |
+| `status.drives.refresh_paused` | Drive refresh is paused while writing • do not unplug the target |
+| `status.drives.up_to_date` | Drive list is up to date • automatic detection is on |
+| `status.drives.changed` | Drive details changed • list updated automatically |
+| `status.drives.added` (plural) | Detected {count} new drives • list updated automatically |
+| `status.drives.removed` (plural) | Removed {count} drives • list updated automatically |
+| `status.drives.added_removed` | Drive list changed: {added} added, {removed} removed • updated automatically |
+| `status.options.expanded` | Advanced options expanded • every choice is included in the reviewed plan |
+| `status.options.collapsed` | Advanced options collapsed • configured values remain active |
+| `status.options.open_needs_image` | Choose or download an image before opening media options |
+| `status.checksum.algorithm` | Checksum algorithm: {algorithm} |
+| `status.checksum.choose_image` | Choose an image before computing its checksum |
+| `status.badblocks.off` | Destructive bad-block check disabled |
+| `status.badblocks.passes` (plural) | Bad-block check: {count} destructive patterns before writing |
+| `status.backup.choose_drive` | Choose a removable drive to back up |
+| `status.backup.cancelled` | Drive backup cancelled |
+| `status.backup.running` | Backing up {drive}… |
+| `status.backup.done` | Drive image saved to {path} |
+| `status.backup.failed` | {error} • last step: {step} |
+
+#### Catalog load failures and origins (shown inside catalog.state.* lines)
+
+| Key | English |
+| --- | --- |
+| `catalog.failure.network` | network unavailable |
+| `catalog.failure.refresh` | refresh unavailable |
+| `catalog.failure.cache` | cache unavailable |
+| `catalog.failure.unsupported` | catalog response unsupported |
+| `catalog.failure.service` | service unavailable |
+| `catalog.source.network` | updated now |
+| `catalog.source.cache` | cached |
+| `catalog.source.stale_cache` | cached · refresh failed |
+
+#### Write completion status lines (core-owned write session)
+
+| Key | English |
+| --- | --- |
+| `status.write.complete` | Complete • image written and verified • target can be safely removed |
+| `status.write.auth_denied` | Write cancelled before erasure • administrator authentication was cancelled or denied |
+| `status.write.stopped` | Write stopped safely • media is incomplete and must be rewritten before use |
+| `status.write.failed` | Write failed • {error} |
+
+#### Discover: result counts ({source} is the catalog origin label)
+
+| Key | English |
+| --- | --- |
+| `status.catalog.distributions_loaded` (plural) | {count} distributions · {source} |
+| `status.catalog.pi_images_loaded` (plural) | {count} Raspberry Pi images · {source} |
+| `status.catalog.base_loaded` (plural) | {count} active {base}-based distributions · {source} |
+
+
+### Adapter-local strings (deliberately not in the catalog)
+
+Strings that exist in only one interface, are input legends, or are not prose.
+Each adapter keeps these; if one is shown to people it should still be
+localized in that adapter.
+
+*TUI only*
+
+* Keyboard and mouse legends: the footer (`Tab / Shift+Tab focus · Enter select
+  · ? help · q quit` and its wide variant), `Press Esc, ? or click to close`,
+  ` Space/click to acknowledge `, `RECENT IMAGES · press 1-4` (the `· press 1-4`
+  part), the downloads panel title legend (`persistent history · ↑/↓ select · m
+  closes`), `Type to search · results update live · Esc leaves search`,
+  `Omarchy quick access · press Enter to resolve ISOs`, `Windows media tools ·
+  press o to choose a Windows ISO`, `Press o, Enter, or click Choose Windows ISO
+  to unlock setup customizations`, `Writing is active • press x to stop safely;
+  do not unplug the target`, `Download paused • press p to resume or x to
+  cancel`, the `[b]` suffix on the open-page button, `Boot firmware (f): …`.
+* `Start with --image /path/to/image.iso to create a plan` (mentions a CLI flag),
+  the `Resize to at least 44 × 22` / `q Quit` / `Terminal too small` screen.
+* Panel titles that describe TUI layout: ` Windows media features `, ` Complete
+  Rufus 4.15 Windows coverage ` and its coverage lines, ` Image details ·
+  official Imager feed `, ` Distribution profile · artwork `, ` Raspberry Pi
+  board `, ` Compatible boot images `, the Raspberry Pi `Category / Archive /
+  SHA-256 available|not listed` detail lines, and the compact
+  three-bullet consequence list.
+* Checksum result line `{algorithm}: {hex}` (all verbatim).
+
+*GUI only*
+
+* `BOOTABLE` / `v{version}` brand text and window chrome.
+* The Omarchy MX Mac card (title, installer explanation, repository line,
+  `Not writable to USB` badge).
+* The Windows feature inventory lists (`Standard Windows installation`, … , 18
+  lines), `Complete Rufus 4.15 Windows inventory · …`, `Rufus Windows features
+  still being implemented`, `Choose an inspected Windows installer ISO to reveal
+  the independent Windows setup checkboxes. No Windows option is applied
+  silently.` These duplicate Rufus feature names and need a product decision
+  about whether the TUI should show the same inventory before they are
+  extracted.
+* `Cancelling download safely • close again after temporary data is cleaned up`
+  and `Stopping write safely • close again after completed writes are flushed`
+  (window-close guards).
+* The `User` fallback for the suggested local account name; file-dialog
+  extension lists and the default `bootable-backup.img` name.
+
+*Both, but not prose*
+
+* Technical values: file extensions, `GPT`/`MBR`/`UEFI`/`BIOS + UEFI (CSM)`,
+  checksum algorithm names, distribution and board names, `Omarchy`, quick
+  access names `Arch` / `Debian` / `Omarchy` / `Windows` / `Raspberry Pi`
+  (`All` is `discover.quick.all`).
+* `ReviewedWriteSession::begin` errors and the initial
+  `Waiting for administrator authentication…` progress message (core).
 
 ### CLI output (`bootable` subcommands, TUI binary)
 
 CLI output is partly machine-oriented. Decide per line whether it is prose
 (translate) or a field name scripts rely on (keep stable and English, or make
-output locale-independent with a `--json`-style mode). Candidate keys:
+output locale-independent with a `--json`-style mode). Not changed by this
+work. Candidate keys:
 
 | Key | English |
 | --- | --- |
@@ -636,6 +1089,7 @@ output locale-independent with a `--json`-style mode). Candidate keys:
 | `cli.done` | Done: {image} written and verified on {device} |
 | `cli.plan.field.source` / `target` / `strategy` / `confirmation` | Source / Target / Strategy / Confirmation |
 | `cli.plan.erases` | ERASES DATA |
+| `device_flags` | `removable`, `READ-ONLY`, `SYSTEM—BLOCKED`, `internal—blocked` (TUI `devices` listing) |
 
 ### Core strings not yet converted
 
@@ -645,21 +1099,27 @@ for free):
 
 * `Progress.message` text throughout `lib.rs`, `download.rs`, `catalog.rs`,
   `pi_catalog.rs`, `write_session.rs`, `platform/*` (for example `Stage 5/5 ·
-  Inspecting boot structure and media strategy`, `Ready · downloaded ...`).
+  Inspecting boot structure and media strategy`, `Ready · downloaded ...`,
+  `Waiting for administrator authentication, then revalidating the target`).
   Because `Progress` carries a `String`, either add a typed `ProgressMessage`
   alongside it or keep the string and add a `kind` the adapter can localize.
+* `ReviewedWriteSession::begin` errors (`Review the write plan before
+  writing`, `the reviewed write cannot be started again`) and
+  `apply_progress` (`{phase} • {message}`).
 * `WritePlan.steps[*].title` in `plan.rs` (for example `Unmount target
   filesystems`). Plan steps need to be generated per locale or carried as a
   `Message` plus arguments.
 * `Error` `Display` text in `error.rs` (`thiserror` messages). Keep the English
   `Display` for logs and add `Error::message(locale)`.
-* `ImageKind`, `WriteStrategy`, `WindowsPartitionScheme`, `BadBlockCheck`
-  `Display` impls in `model.rs`; `Progress::metrics` (`remaining`, `elapsed`).
+* `ImageKind`, `WriteStrategy` `Display` impls in `model.rs`;
+  `Progress::metrics` (`remaining`, `elapsed`).
 * The `signature_note` reasons inside `IntegrityState::ChecksumVerified`
   (`the publisher does not publish a signature`, ...) are English strings
   stored in data; make them a typed enum before localizing them. The phrasing
   around the note is already translated.
-* `DownloadJob` row labels (`download.rs`).
+* `DownloadJob.message` and `DownloadJob.error` (row detail text). The row
+  status and kind labels are converted (`DownloadStatus::label_in`,
+  `DownloadKind::label_in`).
 
 ## Open questions for review
 
@@ -669,4 +1129,9 @@ for free):
   mechanical.
 * Hindi: ship a reviewed translation or keep it listed-but-hidden?
 * Should the confirmation-phrase prompt text be localized while the phrase
-  stays literal? (Recommended: yes.)
+  stays literal? (Recommended: yes. Neither the GUI nor the TUI types the
+  phrase today, so no catalog message carries it; the CLI prompt would add a
+  `cli.*` message that surrounds the literal phrase.)
+* Should the TUI show the same Windows feature inventory as the GUI (and the
+  GUI the TUI's coverage lines)? They are currently different, listed under
+  "Adapter-local strings".
