@@ -2434,6 +2434,7 @@ impl BootableView {
         cx: &mut Context<Self>,
         layout: ViewportLayout,
     ) -> impl IntoElement {
+        let t = self.t();
         let show_page_fallback = self.selected_distribution.is_some()
             && self.catalog_releases.is_empty()
             && !self
@@ -2500,9 +2501,9 @@ impl BootableView {
                                     .child(div().text_xs().text_color(rgb(0x7890a8)).child(
                                         distribution.based_on.clone().unwrap_or_else(|| {
                                             if distribution.rank == 0 {
-                                                "DistroWatch directory".into()
+                                                t.text(Message::DiscoverItemDirectorySource).into()
                                             } else {
-                                                "Independent".into()
+                                                t.text(Message::DiscoverItemIndependent).into()
                                             }
                                         }),
                                     )),
@@ -2515,9 +2516,12 @@ impl BootableView {
                             .items_end()
                             .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
                                 if distribution.rank == 0 {
-                                    "Directory".into()
+                                    t.text(Message::DiscoverItemDirectory).to_string()
                                 } else {
-                                    format!("{} / day", distribution.hits_per_day)
+                                    t.format(
+                                        Message::DiscoverItemHitsPerDay,
+                                        &[("hits", &distribution.hits_per_day)],
+                                    )
                                 },
                             ))
                             .child(
@@ -2525,7 +2529,11 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(if selected { 0x5bd7c0 } else { 0x8fc7ff }))
-                                    .child(if selected { "Selected" } else { "Select →" }),
+                                    .child(if selected {
+                                        t.text(Message::ActionSelected).to_string()
+                                    } else {
+                                        format!("{} →", t.text(Message::ActionSelect))
+                                    }),
                             ),
                     )
             })
@@ -2540,12 +2548,18 @@ impl BootableView {
                 let size = release
                     .size
                     .map(format_bytes)
-                    .unwrap_or_else(|| "Size unknown".into());
-                let integrity = release
+                    .unwrap_or_else(|| t.text(Message::DiscoverItemSizeUnknown).into());
+                let publisher_checksum = release
                     .checksum_algorithm
-                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
-                    .map(|algorithm| format!("Publisher {algorithm}"))
-                    .unwrap_or_else(|| "No publisher checksum".into());
+                    .filter(|_| release.checksum.is_some() || release.checksum_url.is_some());
+                let has_publisher_checksum = publisher_checksum.is_some();
+                let integrity = match publisher_checksum {
+                    Some(algorithm) => t.format(
+                        Message::DiscoverItemPublisherChecksum,
+                        &[("algorithm", &algorithm)],
+                    ),
+                    None => t.text(Message::DiscoverItemNoPublisherChecksum).into(),
+                };
                 div()
                     .id(("release", index))
                     .flex()
@@ -2561,14 +2575,18 @@ impl BootableView {
                     .border_color(rgb(if selected { 0x3ebfa7 } else { 0x1f2c3c }))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected_release = Some(index);
-                        let has_checksum = this.catalog_releases.get(index).is_some_and(|release| {
-                            release.checksum.is_some() || release.checksum_url.is_some()
-                        });
-                        this.status = if has_checksum {
-                            "ISO selected • publisher checksum will be verified before use".into()
-                        } else {
-                            "ISO selected • publisher checksum unavailable; HTTPS length and boot structure will be checked".into()
-                        };
+                        let has_checksum =
+                            this.catalog_releases.get(index).is_some_and(|release| {
+                                release.checksum.is_some() || release.checksum_url.is_some()
+                            });
+                        this.status = this
+                            .t()
+                            .text(if has_checksum {
+                                Message::StatusCatalogIsoSelectedChecksum
+                            } else {
+                                Message::StatusCatalogIsoSelectedHttps
+                            })
+                            .into();
                         cx.notify();
                     }))
                     .child(
@@ -2587,7 +2605,7 @@ impl BootableView {
                             .child(
                                 div()
                                     .text_xs()
-                                    .text_color(rgb(if integrity.starts_with("Publisher") {
+                                    .text_color(rgb(if has_publisher_checksum {
                                         0x5bd7c0
                                     } else {
                                         0x7890a8
@@ -2613,27 +2631,28 @@ impl BootableView {
             ) {
             catalog_search_summary(&query, 0)
         } else {
-            distribution_state.short_label("distributions")
+            distribution_state
+                .short_label_in(self.locale, t.text(Message::CatalogSubjectDistributions))
         };
         let release_message = if self.selected_distribution.is_none()
             && matches!(
                 self.discovery_session.state(CatalogFacet::Details),
                 CatalogState::Idle
             ) {
-            "Choose a distribution to resolve its current ISO files".into()
+            t.text(Message::DiscoverDetailEmpty).into()
         } else {
             self.discovery_session
                 .state(CatalogFacet::Details)
-                .short_label("ISO releases")
+                .short_label_in(self.locale, t.text(Message::CatalogSubjectIsoReleases))
         };
         let distribution_heading = if !query.is_empty() {
-            "SEARCH RESULTS"
+            t.heading(Message::DiscoverSectionSearch)
         } else {
             match self.discovery_session.quick_access() {
-                QuickAccess::Arch => "ARCH-BASED",
-                QuickAccess::Debian => "DEBIAN-BASED",
-                QuickAccess::Omarchy => "OMARCHY",
-                _ => "POPULAR · SIX MONTHS",
+                QuickAccess::Arch => t.heading(Message::DiscoverSectionArch),
+                QuickAccess::Debian => t.heading(Message::DiscoverSectionDebian),
+                QuickAccess::Omarchy => "OMARCHY".to_string(),
+                _ => t.heading(Message::DiscoverSectionPopular),
             }
         };
         let refresh_label = if distribution_state.is_failed()
@@ -2642,9 +2661,9 @@ impl BootableView {
                 .state(CatalogFacet::Details)
                 .is_failed()
         {
-            "Retry"
+            t.text(Message::ActionRetry)
         } else {
-            "Refresh"
+            t.text(Message::ActionRefresh)
         };
 
         div()
@@ -2661,9 +2680,12 @@ impl BootableView {
                     .flex()
                     .items_center()
                     .justify_between()
+                    .gap_3()
                     .child(
                         div()
                             .flex()
+                            .flex_1()
+                            .min_w(px(0.))
                             .items_center()
                             .gap_3()
                             .child(Icon::empty().path("ui/discover.svg"))
@@ -2671,19 +2693,19 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .child(
                                         div()
                                             .text_base()
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .child("Discover distributions"),
+                                            .child(t.text(Message::DiscoverTitle)),
                                     )
                                     .child(
                                         div()
                                             .text_xs()
                                             .text_color(rgb(0x7890a8))
-                                            .child(
-                                                "DistroWatch page-hit ranking measures interest—not quality or market share",
-                                            ),
+                                            .child(t.text(Message::DiscoverDisclaimer)),
                                     ),
                             ),
                     )
@@ -2692,7 +2714,7 @@ impl BootableView {
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
                             .label(refresh_label)
-                            .tooltip("Refresh DistroWatch data")
+                            .tooltip(t.text(Message::TooltipRefreshDistrowatch))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.retry_discovery(cx);
                             })),
@@ -2770,7 +2792,10 @@ impl BootableView {
                                                             .path("ui/image.svg")
                                                             .size(px(18.)),
                                                     )
-                                                    .child(format!("{} screenshot", details.name)),
+                                                    .child(t.format(
+                                                        Message::DiscoverDetailScreenshotOf,
+                                                        &[("name", &details.name)],
+                                                    )),
                                             )
                                             .child(
                                                 img(url.clone())
@@ -2823,15 +2848,15 @@ impl BootableView {
                                                                 details
                                                                     .os_type
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown OS"),
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownOs)),
                                                                 details
                                                                     .origin
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown origin"),
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownOrigin)),
                                                                 details
                                                                     .status
                                                                     .as_deref()
-                                                                    .unwrap_or("Unknown status")
+                                                                    .unwrap_or(t.text(Message::DiscoverDetailUnknownStatus))
                                                             )),
                                                     )
                                                     .when_some(
@@ -2841,11 +2866,13 @@ impl BootableView {
                                                                 div()
                                                                     .text_xs()
                                                                     .text_color(rgb(0x5bd7c0))
-                                                                    .child(format!(
-                                                                        "★ {rating}/10 · {} reviews",
+                                                                    .child(t.plural(
+                                                                        Message::DiscoverDetailRating,
                                                                         details
                                                                             .visitor_review_count
                                                                             .unwrap_or_default()
+                                                                            as u64,
+                                                                        &[("rating", rating)],
                                                                     )),
                                                             )
                                                         },
@@ -2867,9 +2894,17 @@ impl BootableView {
                                             .text_xs()
                                             .text_color(rgb(0x7890a8))
                                             .child(format!(
-                                                "Architecture: {}  ·  Desktop: {}",
-                                                compact_list(&details.architectures, 4),
-                                                compact_list(&details.desktops, 4)
+                                                "{}  ·  {}",
+                                                labeled(
+                                                    t,
+                                                    Message::DiscoverDetailArchitecture,
+                                                    &compact_list(t, &details.architectures, 4)
+                                                ),
+                                                labeled(
+                                                    t,
+                                                    Message::DiscoverDetailDesktop,
+                                                    &compact_list(t, &details.desktops, 4)
+                                                )
                                             )),
                                     )
                             })
@@ -2883,7 +2918,7 @@ impl BootableView {
                                             .text_xs()
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(rgb(0x8fa4bd))
-                                            .child("DIRECT ISO FILES"),
+                                            .child(t.heading(Message::DiscoverDetailDirectIsos)),
                                     )
                                     .child(
                                         div()
@@ -2894,9 +2929,12 @@ impl BootableView {
                                                 .state(CatalogFacet::Details)
                                                 .is_loading()
                                             {
-                                                "Loading…".into()
+                                                t.text(Message::DiscoverDetailLoading).into()
                                             } else {
-                                                format!("{} found", self.catalog_releases.len())
+                                                t.format(
+                                                    Message::DiscoverDetailFound,
+                                                    &[("count", &self.catalog_releases.len())],
+                                                )
                                             }),
                                     ),
                             )
@@ -2925,7 +2963,7 @@ impl BootableView {
                                     Button::new("open-distrowatch-page")
                                         .primary()
                                         .icon(Icon::empty().path("ui/discover.svg"))
-                                        .label("Open DistroWatch download page")
+                                        .label(t.text(Message::DiscoverDetailOpenPage))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.open_selected_distrowatch_page(cx)
                                         })),
@@ -2937,7 +2975,7 @@ impl BootableView {
                                         .primary()
                                         .disabled(self.selected_release.is_none())
                                         .icon(Icon::empty().path("ui/download.svg"))
-                                        .label("Download & use ISO")
+                                        .label(t.text(Message::DiscoverDetailDownloadUse))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.download_catalog_release(cx)
                                         })),
@@ -2948,11 +2986,8 @@ impl BootableView {
     }
 
     fn catalog_card(&self, cx: &mut Context<Self>, layout: ViewportLayout) -> impl IntoElement {
-        let advanced_label = if self.advanced {
-            "Hide options"
-        } else {
-            "Setup options"
-        };
+        let t = self.t();
+        let advanced_label = self.advanced_label(false);
         let content = if self.discovery_session.quick_access() == QuickAccess::Windows {
             self.windows_quick_card(cx).into_any_element()
         } else if self.discovery_session.quick_access() == QuickAccess::Omarchy {
@@ -2974,6 +3009,7 @@ impl BootableView {
                     .flex()
                     .items_center()
                     .gap_3()
+                    .when(!layout.compact, |toolbar| toolbar.flex_wrap())
                     .when(layout.compact, |toolbar| toolbar.flex_col().items_start())
                     .child(
                         div()
@@ -2986,7 +3022,7 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Discover"),
+                                    .child(t.text(Message::ActionDiscover)),
                             ),
                     )
                     .child(
@@ -3003,7 +3039,7 @@ impl BootableView {
                                                 == DiscoverySource::DistroWatch,
                                         |button| button.primary(),
                                     )
-                                    .label("All")
+                                    .label(t.text(Message::DiscoverQuickAll))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.show_quick_access(QuickAccess::All, window, cx)
                                     })),
@@ -3096,9 +3132,9 @@ impl BootableView {
                                     Button::new("downloads")
                                         .compact()
                                         .icon(Icon::empty().path("ui/download.svg"))
-                                        .label(format!(
-                                            "Downloads · {}",
-                                            self.download_session.jobs().len()
+                                        .label(t.format(
+                                            Message::ActionDownloadsCount,
+                                            &[("count", &self.download_session.jobs().len())],
                                         ))
                                         .when(self.downloads_open, |button| button.primary())
                                         .on_click(
@@ -3109,7 +3145,7 @@ impl BootableView {
                                     Button::new("catalog")
                                         .compact()
                                         .icon(Icon::empty().path("ui/discover.svg"))
-                                        .label("Close catalog")
+                                        .label(t.text(Message::ActionCatalogClose))
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.toggle_catalog(cx)),
                                         ),
@@ -3129,7 +3165,7 @@ impl BootableView {
                                     Button::new("refresh")
                                         .compact()
                                         .icon(Icon::empty().path("ui/refresh.svg"))
-                                        .tooltip("Refresh removable drives")
+                                        .tooltip(t.text(Message::TooltipRefreshDrives))
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.refresh_devices(cx)),
                                         ),
@@ -3195,6 +3231,7 @@ impl BootableView {
     }
 
     fn windows_quick_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let windows_image = self
             .image
             .as_ref()
@@ -3245,7 +3282,7 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Windows installer media"),
+                                    .child(t.text(Message::OptionsWindowsHeading)),
                             )
                             .child(
                                 div()
@@ -3258,11 +3295,11 @@ impl BootableView {
                         Button::new("windows-choose-iso")
                             .primary()
                             .icon(Icon::empty().path("ui/image.svg"))
-                            .label(if windows_image {
-                                "Replace Windows ISO"
+                            .label(t.text(if windows_image {
+                                Message::OptionsWindowsReplaceIso
                             } else {
-                                "Choose Windows ISO"
-                            })
+                                Message::OptionsWindowsChooseIso
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.choose_image(cx))),
                     ),
             )
@@ -3316,10 +3353,24 @@ impl BootableView {
                         div()
                             .text_xs()
                             .text_color(rgb(0x806f55))
-                            .child("Unavailable items are intentionally not clickable. Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design."),
+                            .child(format!(
+                                "{} {}",
+                                t.text(Message::OptionsWindowsUnavailableNote),
+                                t.text(Message::OptionsWindowsSilentInstallWarning)
+                            )),
                     ),
             )
-            .when(windows_image, |panel| panel.child(self.advanced_card(cx)))
+            .when(windows_image, |panel| {
+                panel
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x5bd7c0))
+                            .child(t.text(Message::OptionsWindowsInstallerReady)),
+                    )
+                    .child(self.advanced_card(cx))
+            })
             .when(!windows_image, |panel| {
                 panel.child(
                     div()
@@ -3328,12 +3379,13 @@ impl BootableView {
                         .bg(rgb(0x0f1925))
                         .text_sm()
                         .text_color(rgb(0x8fa4bd))
-                        .child("Choose an inspected Windows installer ISO to reveal the independent Windows setup checkboxes. No Windows option is applied silently."),
+                        .child(t.text(Message::OptionsWindowsInstallerLocked)),
                 )
             })
     }
 
     fn pi_catalog_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let query = self.catalog_search_query(cx);
         let devices = self
             .pi_catalog
@@ -3426,9 +3478,7 @@ impl BootableView {
                     .border_color(rgb(if selected { 0x3ebfa7 } else { 0x1f2c3c }))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected_pi_image = Some(index);
-                        this.status =
-                            "Raspberry Pi image selected • download will be extracted and verified"
-                                .into();
+                        this.status = this.t().text(Message::StatusCatalogPiSelectedVerify).into();
                         cx.notify();
                     }))
                     .when_some(image.icon_url.as_ref(), |row, icon| {
@@ -3451,7 +3501,10 @@ impl BootableView {
                             )
                             .child(div().text_xs().text_color(rgb(0x7890a8)).child(format!(
                                 "{} · {}",
-                                image.release_date.as_deref().unwrap_or("Date unknown"),
+                                image
+                                    .release_date
+                                    .as_deref()
+                                    .unwrap_or(t.text(Message::PiDateUnknown)),
                                 image.download_size.map(format_bytes).unwrap_or_default()
                             ))),
                     )
@@ -3463,11 +3516,11 @@ impl BootableView {
         let pi_message = self
             .discovery_session
             .state(CatalogFacet::RaspberryPi)
-            .short_label("Raspberry Pi images");
+            .short_label_in(self.locale, t.text(Message::CatalogSubjectPiImages));
         let image_message = if self.pi_catalog.is_some() && !query.is_empty() {
-            format!("No Raspberry Pi images match “{query}”")
+            t.format(Message::PiEmptyQuery, &[("query", &query)])
         } else if self.pi_catalog.is_some() {
-            "No compatible Raspberry Pi images found".into()
+            t.text(Message::PiEmpty).into()
         } else {
             pi_message.clone()
         };
@@ -3494,11 +3547,14 @@ impl BootableView {
                                 div()
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Official Raspberry Pi Imager catalog"),
+                                    .child(t.text(Message::PiTitle)),
                             )
-                            .child(div().text_xs().text_color(rgb(0x7890a8)).child(
-                                "Board compatibility, compressed and extracted checksums included",
-                            )),
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x7890a8))
+                                    .child(t.text(Message::PiSubtitle)),
+                            ),
                     )
                     .child(
                         Button::new("reload-pi-catalog")
@@ -3510,12 +3566,12 @@ impl BootableView {
                                     .state(CatalogFacet::RaspberryPi)
                                     .is_failed()
                                 {
-                                    "Retry"
+                                    t.text(Message::ActionRetry)
                                 } else {
-                                    "Refresh"
+                                    t.text(Message::ActionRefresh)
                                 },
                             )
-                            .tooltip("Refresh Raspberry Pi catalog")
+                            .tooltip(t.text(Message::TooltipRefreshPi))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.show_raspberry_pi_with(CacheMode::Refresh, cx);
                             })),
@@ -3536,14 +3592,14 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0x8fa4bd))
-                                    .child("BOARD FILTER"),
+                                    .child(t.heading(Message::PiBoardFilter)),
                             )
                             .child(
                                 Button::new("pi-device-all")
                                     .when(self.selected_pi_device.is_none(), |button| {
                                         button.primary()
                                     })
-                                    .label("All images")
+                                    .label(t.text(Message::PiAllImages))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.select_pi_device(None, cx)
                                     })),
@@ -3581,7 +3637,7 @@ impl BootableView {
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(0x8fa4bd))
-                                    .child("COMPATIBLE IMAGES"),
+                                    .child(t.heading(Message::PiCompatibleImages)),
                             )
                             .child(
                                 div()
@@ -3632,36 +3688,59 @@ impl BootableView {
                                                 .child(description.clone()),
                                         )
                                     })
-                                    .child(div().text_xs().text_color(rgb(0x7890a8)).child(
-                                        format!(
-                                            "Download {} · Expanded {}\nReleased {}\n{}",
-                                            image
-                                                .download_size
-                                                .map(format_bytes)
-                                                .unwrap_or_default(),
-                                            image
-                                                .extracted_size
-                                                .map(format_bytes)
-                                                .unwrap_or_default(),
-                                            image.release_date.as_deref().unwrap_or("unknown"),
-                                            image
-                                                .category
-                                                .as_deref()
-                                                .unwrap_or("Raspberry Pi image")
+                                    .child(
+                                        div().text_xs().text_color(rgb(0x7890a8)).child(
+                                            t.format(
+                                                Message::PiDetails,
+                                                &[
+                                                    (
+                                                        "download",
+                                                        &image
+                                                            .download_size
+                                                            .map(format_bytes)
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                    (
+                                                        "expanded",
+                                                        &image
+                                                            .extracted_size
+                                                            .map(format_bytes)
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                    (
+                                                        "date",
+                                                        &image.release_date.as_deref().unwrap_or(
+                                                            t.text(Message::PiDateUnknown),
+                                                        ),
+                                                    ),
+                                                    (
+                                                        "description",
+                                                        &image.category.as_deref().unwrap_or(
+                                                            t.text(Message::PiDefaultCategory),
+                                                        ),
+                                                    ),
+                                                ],
+                                            ),
                                         ),
-                                    ))
+                                    )
                             })
                             .child(
                                 Button::new("download-pi-image")
                                     .primary()
                                     .disabled(selected.is_none())
                                     .icon(Icon::empty().path("ui/download.svg"))
-                                    .label("Download, verify & use")
+                                    .label(t.text(Message::PiDownloadUse))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.download_pi_catalog_image(cx)
                                     })),
                             ),
                     ),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x7890a8))
+                    .child(t.text(Message::PiHint)),
             )
     }
 
@@ -5420,9 +5499,17 @@ fn review_value(label: String, value: String) -> impl IntoElement {
         .child(div().text_sm().child(value))
 }
 
-fn compact_list(values: &[String], limit: usize) -> String {
+/// `label: value` through the catalog, so spacing follows the language.
+fn labeled(t: Strings, label: Message, value: &str) -> String {
+    t.format(
+        Message::CommonLabeled,
+        &[("label", &t.text(label)), ("value", &value)],
+    )
+}
+
+fn compact_list(t: Strings, values: &[String], limit: usize) -> String {
     if values.is_empty() {
-        return "Not listed".into();
+        return t.text(Message::DiscoverDetailNotListed).into();
     }
     let mut result = values
         .iter()
