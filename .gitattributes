@@ -1,0 +1,10 @@
+# Signed manifests, signatures and pinned keys must be byte-exact: a CRLF
+# conversion on a Windows checkout invalidates every signature over them.
+crates/bootable-core/testdata/** -text
+crates/bootable-core/keys/** -text
+crates/bootable-core/assets/bios/** -text
+
+# Files parsed or executed by line must keep LF on every platform.
+*.lang text eol=lf
+*.sh text eol=lf
+*.S text eol=lf
