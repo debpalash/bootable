@@ -854,10 +854,14 @@ impl BootableView {
                                     view.browse_directory = destination
                                         .parent()
                                         .map(std::path::PathBuf::from);
-                                    view.status = format!(
-                                        "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                        report.path.display()
-                                    );
+                                    // Core's final progress message already names the integrity result
+                                    // (for example a verified signature); keep it instead of a generic line.
+                                    if !view.status.starts_with("Ready ·") {
+                                        view.status = format!(
+                                            "Ready · downloaded, verified, and inspected {} · discovery remains open",
+                                            report.path.display()
+                                        );
+                                    }
                                     view.image = Some(report.clone());
                                     view.advanced = false;
                                 }

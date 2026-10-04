@@ -1941,10 +1941,14 @@ impl App {
                             destination,
                         } => {
                             self.browse_directory = destination.parent().map(PathBuf::from);
-                            self.status = format!(
-                                "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                report.path.display()
-                            );
+                            // Core's final progress message already names the integrity result
+                            // (for example a verified signature); keep it instead of a generic line.
+                            if !self.status.starts_with("Ready ·") {
+                                self.status = format!(
+                                    "Ready · downloaded, verified, and inspected {} · discovery remains open",
+                                    report.path.display()
+                                );
+                            }
                             self.image = Some(report.clone());
                             self.advanced = false;
                         }
