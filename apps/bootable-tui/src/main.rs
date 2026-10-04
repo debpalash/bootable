@@ -10,11 +10,12 @@ use bootable_core::{
     BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogFetch, CatalogState,
     ChecksumAlgorithm, Device, DiscoverySession, DiscoverySource, DistributionBundle,
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
-    DownloadStatus, HELP_INTRO, HELP_SECTIONS, ImageReport, IsoRelease, ManagedDownloadSession,
+    DownloadStatus, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message,
     OperationState, PiCatalog, Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness,
-    ReviewedWriteSession, WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan,
-    catalog_search_summary, device_details, distribution_matches_query, format_bytes,
-    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
+    ReviewedWriteSession, WorkspaceProgress, WorkspaceStepState, WriteCompletion, WriteOptions,
+    WritePlan, catalog_search_summary, device_details_in, distribution_matches_query, format_bytes,
+    help_intro, help_sections, removable_media_status_in, review_readiness,
+    target_eligibility_label, target_eligibility_label_in, workspace_progress,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
@@ -35,6 +36,7 @@ use ratatui::widgets::{
     Block, BorderType, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Wrap,
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 const DEVICE_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const DOWNLOAD_SCAN_INTERVAL: Duration = Duration::from_secs(5);
@@ -1024,6 +1026,7 @@ struct App {
     hit_regions: HitRegions,
     workspace_focus: WorkspaceFocus,
     preferences: Preferences,
+    locale: Locale,
     help_open: bool,
 }
 
@@ -1103,6 +1106,7 @@ impl WorkspaceFocus {
 struct HitRegions {
     open_image: Option<Rect>,
     guide: Option<Rect>,
+    language: Option<Rect>,
     recent_rows: Vec<(Rect, usize)>,
     discover: Option<Rect>,
     choose_folder: Option<Rect>,
@@ -1156,12 +1160,14 @@ struct HitRegions {
 
 impl App {
     fn load(engine: Bootable, image_path: Option<PathBuf>, artwork_picker: Picker) -> Self {
+        let preferences = Preferences::load();
+        let locale = preferences.locale();
         let devices_result = engine.discover_devices();
         let (devices, status) = match devices_result {
             Ok(devices) => {
                 let status = format!(
                     "{} · choose an image to begin",
-                    removable_media_status(&devices)
+                    removable_media_status_in(locale, &devices)
                 );
                 (devices, status)
             }
@@ -1169,7 +1175,6 @@ impl App {
         };
         let initial_image = image_path;
         let image = None;
-        let preferences = Preferences::load();
         let (catalog_sender, catalog_receiver) = mpsc::channel();
         Self {
             engine,
@@ -1218,6 +1223,7 @@ impl App {
             hit_regions: HitRegions::default(),
             workspace_focus: WorkspaceFocus::Source,
             preferences,
+            locale,
             help_open: false,
         }
     }
@@ -1243,6 +1249,20 @@ impl App {
 
     fn toggle_help(&mut self) {
         self.help_open = !self.help_open;
+    }
+
+    /// Steps System default -> each available language -> System default,
+    /// persists the choice, and re-renders in the new language.
+    fn cycle_language(&mut self) {
+        self.preferences.language = next_language(self.preferences.language);
+        self.locale = self.preferences.locale();
+        // Cached status text was produced in the previous language; replace it
+        // with the confirmation instead of showing a stale mix.
+        self.status = language_hint_variants(self.preferences.language, self.locale)
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+        self.save_preferences();
     }
 
     fn load_distrowatch(&mut self) {
@@ -1393,7 +1413,10 @@ impl App {
     fn toggle_catalog(&mut self) {
         if self.catalog_open {
             self.catalog_open = false;
-            self.status = format!("Catalog closed • {}", self.review_readiness().guidance());
+            self.status = format!(
+                "Catalog closed • {}",
+                self.review_readiness().guidance_in(self.locale)
+            );
             return;
         }
         self.catalog_open = true;
@@ -2503,7 +2526,7 @@ impl App {
             self.status = "Writing is active • do not close the app or unplug the target".into();
             return;
         }
-        self.status = self.review_readiness().guidance().into();
+        self.status = self.review_readiness().guidance_in(self.locale).into();
     }
 
     fn open_write_confirmation(&mut self) {
@@ -2902,7 +2925,9 @@ impl App {
         if self.write_session.is_reviewing() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let point = (mouse.column, mouse.row);
-                if contains(self.hit_regions.review_back, point) {
+                if contains(self.hit_regions.language, point) {
+                    self.cycle_language();
+                } else if contains(self.hit_regions.review_back, point) {
                     self.close_review();
                 } else if contains(self.hit_regions.review_write, point) {
                     if self.write_session.active() {
@@ -2925,6 +2950,10 @@ impl App {
             let point = (mouse.column, mouse.row);
             if contains(self.hit_regions.guide, point) {
                 self.toggle_help();
+                return false;
+            }
+            if contains(self.hit_regions.language, point) {
+                self.cycle_language();
                 return false;
             }
             if contains(self.hit_regions.downloads, point) {
@@ -3173,6 +3202,13 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                         app.toggle_help();
                         continue;
                     }
+                    if key.code == KeyCode::Char('L')
+                        && !app.write_session.confirmation_open()
+                        && !app.catalog_searching
+                    {
+                        app.cycle_language();
+                        continue;
+                    }
                     if app.download_session.is_active() {
                         match key.code {
                             KeyCode::Char('p') => {
@@ -3310,37 +3346,63 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
 fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
     draw_screen(frame, app);
     if app.help_open && !app.write_session.confirmation_open() {
-        draw_help(frame, frame.area());
+        draw_help(frame, frame.area(), app.locale);
     }
 }
 
-fn draw_help(frame: &mut ratatui::Frame<'_>, area: Rect) {
-    let mut lines = vec![
-        Line::from(Span::styled(HELP_INTRO, Style::default().fg(Color::White))),
-        Line::raw(""),
-    ];
-    for section in HELP_SECTIONS {
+fn draw_help(frame: &mut ratatui::Frame<'_>, area: Rect, locale: Locale) {
+    let width = area.width.saturating_sub(4).min(110);
+    let text_width = usize::from(width.saturating_sub(2));
+    let sections = help_sections(locale);
+    let key_style = Style::default().fg(Color::Rgb(229, 185, 95));
+    let white = Style::default().fg(Color::White);
+    let muted = Style::default().fg(MUTED);
+    // Key chords are never translated, but size the column from the data
+    // rather than assuming the English widths.
+    let key_column = sections
+        .iter()
+        .flat_map(|section| &section.entries)
+        .map(|entry| display_width(entry.terminal) + 2)
+        .max()
+        .unwrap_or(0)
+        .max(12);
+    let indent = 2 + key_column;
+    let mut lines = wrap_styled(&[(help_intro(locale), white)], text_width)
+        .into_iter()
+        .map(Line::from)
+        .collect::<Vec<_>>();
+    lines.push(Line::raw(""));
+    for section in &sections {
         lines.push(Line::from(Span::styled(
             section.title.to_uppercase(),
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         )));
-        for entry in section.entries {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  {:<12}", entry.terminal),
-                    Style::default().fg(Color::Rgb(229, 185, 95)),
-                ),
-                Span::styled(entry.action, Style::default().fg(Color::White)),
-                Span::styled(format!(" · {}", entry.detail), Style::default().fg(MUTED)),
-            ]));
+        for entry in &section.entries {
+            let detail = format!(" · {}", entry.detail);
+            let body = wrap_styled(
+                &[(entry.action, white), (detail.as_str(), muted)],
+                text_width.saturating_sub(indent),
+            );
+            for (index, mut spans) in body.into_iter().enumerate() {
+                let prefix = if index == 0 {
+                    Span::styled(
+                        format!("  {}", pad_display(entry.terminal, key_column)),
+                        key_style,
+                    )
+                } else {
+                    Span::raw(" ".repeat(indent))
+                };
+                spans.insert(0, prefix);
+                lines.push(Line::from(spans));
+            }
         }
     }
     lines.push(Line::raw(""));
-    lines.push(Line::from(Span::styled(
-        "Press Esc, ? or click to close",
-        Style::default().fg(MUTED),
-    )));
-    let width = area.width.saturating_sub(4).min(110);
+    lines.extend(
+        wrap_styled(&[("Press Esc, ? or click to close", muted)], text_width)
+            .into_iter()
+            .map(Line::from),
+    );
     let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
     let modal = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
@@ -3533,6 +3595,13 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     constraints.push(Constraint::Length(3));
     let rows = Layout::vertical(constraints).spacing(1).split(area);
     let mut row = 0;
+    {
+        // The brand lockup uses at most two lines; the last line of the
+        // header carries the language hint.
+        let header = rows[row];
+        let hint_row = Rect::new(header.x, header.bottom().saturating_sub(1), header.width, 1);
+        draw_language_hint(frame, app, hint_row, usize::from(header.width));
+    }
     frame.render_widget(
         Paragraph::new(brand_lockup(
             area.width >= 60,
@@ -3600,7 +3669,11 @@ fn draw_review(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             .started_at()
             .map(|started| started.elapsed())
             .unwrap_or_default();
-        let progress_title = format!(" {} · {} ", progress.phase, progress.message);
+        let progress_title = format!(
+            " {} · {} ",
+            progress.phase.label_in(app.locale),
+            progress.message
+        );
         frame.render_widget(
             Gauge::default()
                 .block(panel_block(&progress_title))
@@ -3958,22 +4031,34 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     draw_workspace_steps(frame, app, header_rows[1]);
 }
 
-fn draw_workspace_steps(frame: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
+fn draw_workspace_steps(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let progress = workspace_progress(
         app.image.as_ref(),
         app.selected.and_then(|index| app.devices.get(index)),
     );
+    let titles = WorkspaceProgress::step_titles(app.locale);
     let line = Line::from(vec![
-        step_span("1 Source", progress.source),
+        step_span(format!("1 {}", titles[0]), progress.source),
         Span::styled("  ─────  ", Style::default().fg(BORDER)),
-        step_span("2 Target", progress.target),
+        step_span(format!("2 {}", titles[1]), progress.target),
         Span::styled("  ─────  ", Style::default().fg(BORDER)),
-        step_span("3 Review & write", progress.review),
+        step_span(format!("3 {}", titles[2]), progress.review),
     ]);
-    frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), area);
+    let room = usize::from(area.width).saturating_sub(line.width() + 1);
+    let taken = draw_language_hint(frame, app, area, room);
+    let steps_area = Rect::new(
+        area.x,
+        area.y,
+        area.width.saturating_sub(taken),
+        area.height,
+    );
+    frame.render_widget(
+        Paragraph::new(line).alignment(Alignment::Center),
+        steps_area,
+    );
 }
 
-fn step_span(label: &'static str, state: WorkspaceStepState) -> Span<'static> {
+fn step_span(label: String, state: WorkspaceStepState) -> Span<'static> {
     let (marker, style) = match state {
         WorkspaceStepState::Complete => (
             "✓",
@@ -4040,10 +4125,9 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .unwrap_or_else(|| {
             "ISO, IMG, RAW, or compressed disk image\nInspected before writing".into()
         });
-    let source_block = focused_panel_block(
-        " 1  Source · choose an image ",
-        app.workspace_focus == WorkspaceFocus::Source,
-    );
+    let source_title = panel_heading(app.locale, 1, " · choose an image");
+    let source_block =
+        focused_panel_block(&source_title, app.workspace_focus == WorkspaceFocus::Source);
     let source_inner = source_block.inner(area);
     frame.render_widget(source_block, area);
     let recents = app.preferences.recent_images();
@@ -4120,14 +4204,14 @@ fn draw_recent_images(
         } else {
             format_bytes(recent.size)
         };
-        let name_width = usize::from(row.width).saturating_sub(size.chars().count() + 5);
+        let name_width = usize::from(row.width).saturating_sub(display_width(&size) + 5);
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(format!("{} ", index + 1), Style::default().fg(ACCENT)),
                 Span::styled(
-                    format!(
-                        "{:<name_width$}",
-                        truncate_middle(&recent.file_name(), name_width)
+                    pad_display(
+                        &truncate_middle(&recent.file_name(), name_width),
+                        name_width,
                     ),
                     Style::default().fg(Color::White),
                 ),
@@ -4165,9 +4249,9 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
                     .map(|ratio| format!(" · {:>5.1}%", ratio * 100.))
                     .unwrap_or_default();
                 ListItem::new(format!(
-                    "{:<11} {:<28} {}{}",
+                    "{:<11} {} {}{}",
                     job.status,
-                    truncate_middle(&job.label, 28),
+                    pad_display(&truncate_middle(&job.label, 28), 28),
                     job.destination.display(),
                     progress
                 ))
@@ -4252,21 +4336,183 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     app.hit_regions.download_remove = can_remove.then_some(actions[2]);
 }
 
+/// Terminal columns `value` occupies. East Asian glyphs take two, so
+/// `chars().count()` is wrong for them.
+fn display_width(value: &str) -> usize {
+    UnicodeWidthStr::width(value)
+}
+
+/// Pads `value` with spaces to `width` terminal columns (never truncates).
+fn pad_display(value: &str, width: usize) -> String {
+    let padding = width.saturating_sub(display_width(value));
+    format!("{value}{}", " ".repeat(padding))
+}
+
+/// The longest prefix of `value` that fits in `columns` terminal columns.
+fn take_columns(value: impl Iterator<Item = char>, columns: usize) -> String {
+    let mut used = 0;
+    let mut taken = String::new();
+    for character in value {
+        let width = UnicodeWidthChar::width(character).unwrap_or(0);
+        if used + width > columns {
+            break;
+        }
+        used += width;
+        taken.push(character);
+    }
+    taken
+}
+
 fn truncate_middle(value: &str, limit: usize) -> String {
-    if value.chars().count() <= limit {
+    if display_width(value) <= limit {
         return value.into();
     }
     let side = limit.saturating_sub(1) / 2;
-    let start = value.chars().take(side).collect::<String>();
-    let end = value
-        .chars()
-        .rev()
-        .take(side)
-        .collect::<String>()
+    let start = take_columns(value.chars(), side);
+    let end = take_columns(value.chars().rev(), side)
         .chars()
         .rev()
         .collect::<String>();
     format!("{start}…{end}")
+}
+
+/// Greedy word wrap that measures terminal columns, preserves the style of
+/// each segment, and may break between any two wide (CJK) characters because
+/// those scripts have no word spacing.
+fn wrap_styled(segments: &[(&str, Style)], width: usize) -> Vec<Vec<Span<'static>>> {
+    let width = width.max(1);
+    let cells = segments
+        .iter()
+        .flat_map(|(text, style)| text.chars().map(move |character| (character, *style)))
+        .collect::<Vec<_>>();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    while start < cells.len() {
+        if start > 0 {
+            while start < cells.len() && cells[start].0 == ' ' {
+                start += 1;
+            }
+            if start >= cells.len() {
+                break;
+            }
+        }
+        let (mut columns, mut end, mut last_break) = (0, start, None);
+        while end < cells.len() {
+            let glyph = UnicodeWidthChar::width(cells[end].0).unwrap_or(0);
+            if columns + glyph > width && end > start {
+                break;
+            }
+            columns += glyph;
+            end += 1;
+            if cells[end - 1].0 == ' ' || glyph == 2 {
+                last_break = Some(end);
+            }
+        }
+        let cut = if end >= cells.len() {
+            end
+        } else {
+            last_break
+                .filter(|position| *position > start)
+                .unwrap_or(end)
+        };
+        let mut line = &cells[start..cut];
+        while line.last().is_some_and(|(character, _)| *character == ' ') {
+            line = &line[..line.len() - 1];
+        }
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        let mut run = String::new();
+        let mut run_style: Option<Style> = None;
+        for (character, style) in line {
+            if run_style.is_some_and(|current| current != *style) {
+                spans.push(Span::styled(
+                    std::mem::take(&mut run),
+                    run_style.unwrap_or_default(),
+                ));
+            }
+            run_style = Some(*style);
+            run.push(*character);
+        }
+        if let Some(style) = run_style {
+            spans.push(Span::styled(run, style));
+        }
+        lines.push(spans);
+        start = cut;
+    }
+    if lines.is_empty() {
+        lines.push(Vec::new());
+    }
+    lines
+}
+
+/// System default -> every available language -> System default.
+fn next_language(current: Option<Locale>) -> Option<Locale> {
+    let available = Locale::available();
+    match current {
+        None => available.first().copied(),
+        Some(current) => available
+            .iter()
+            .position(|locale| *locale == current)
+            .and_then(|index| available.get(index + 1).copied()),
+    }
+}
+
+/// The language hint from most to least descriptive. `locale` is the
+/// effective language, so the label itself is rendered in it.
+fn language_hint_variants(language: Option<Locale>, locale: Locale) -> Vec<String> {
+    let label = Message::LanguageLabel.text(locale);
+    let name = locale.native_name();
+    match language {
+        Some(_) => vec![format!("{label}: {name}"), name.to_string()],
+        None => vec![
+            format!(
+                "{label}: {} ({name})",
+                Message::LanguageSystemDefault.text(locale)
+            ),
+            format!("{label}: {name}"),
+            name.to_string(),
+        ],
+    }
+}
+
+/// Renders the clickable language hint right-aligned in a one-row `area` and
+/// returns the columns it took (including one column of padding), choosing the
+/// most descriptive variant that fits in `room` columns.
+fn draw_language_hint(
+    frame: &mut ratatui::Frame<'_>,
+    app: &mut App,
+    area: Rect,
+    room: usize,
+) -> u16 {
+    let variants = language_hint_variants(app.preferences.language, app.locale);
+    let hint = variants
+        .iter()
+        .find(|variant| display_width(variant) <= room)
+        .or(variants.last())
+        .cloned()
+        .unwrap_or_default();
+    let width = (display_width(&hint) as u16).min(area.width);
+    let region = Rect::new(area.right().saturating_sub(width), area.y, width, 1);
+    frame.render_widget(
+        Paragraph::new(hint).style(
+            Style::default()
+                .fg(MUTED)
+                .add_modifier(Modifier::UNDERLINED),
+        ),
+        region,
+    );
+    app.hit_regions.language = Some(region);
+    width + 1
+}
+
+/// Heading of a numbered workspace panel. The English-only qualifier is
+/// dropped in other languages rather than leaving a mixed-language title.
+fn panel_heading(locale: Locale, step: usize, english_qualifier: &str) -> String {
+    let title = WorkspaceProgress::step_titles(locale)[step - 1];
+    if locale.is_source() {
+        format!(" {step}  {title}{english_qualifier} ")
+    } else {
+        format!(" {step}  {title} ")
+    }
 }
 
 fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
@@ -5222,6 +5468,7 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let locale = app.locale;
     let items = if app.devices.is_empty() {
         vec![
             ListItem::new("Connect a removable USB or SD drive, then refresh")
@@ -5252,22 +5499,21 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                         " {:>9}  {}  ·  {}  ·  {action}",
                         format_bytes(device.capacity),
                         device.display_name(),
-                        target_eligibility_label(device)
+                        target_eligibility_label_in(app.locale, device)
                     )),
                 ]))
             })
             .collect::<Vec<_>>()
     };
-    let target_block = focused_panel_block(
-        " 2  Target · removable media ",
-        app.workspace_focus == WorkspaceFocus::Target,
-    );
+    let target_title = panel_heading(app.locale, 2, " · removable media");
+    let target_block =
+        focused_panel_block(&target_title, app.workspace_focus == WorkspaceFocus::Target);
     let target_inner = target_block.inner(area);
     frame.render_widget(target_block, area);
     let detail_rows = app
         .selected
         .and_then(|index| app.devices.get(index))
-        .map(device_details)
+        .map(|device| device_details_in(locale, device))
         .filter(|_| target_inner.height >= 9)
         .map(|rows| {
             let join = |labels: &[&str]| {
@@ -5277,7 +5523,13 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                     .collect::<Vec<_>>()
                     .join(" · ")
             };
-            [join(&["Connection", "Serial"]), join(&["Mounted"])]
+            [
+                join(&[
+                    Message::DetailConnection.text(locale),
+                    Message::DetailSerial.text(locale),
+                ]),
+                join(&[Message::DetailMounted.text(locale)]),
+            ]
         });
     let target_rows = Layout::vertical([
         Constraint::Length(1),
@@ -5295,7 +5547,8 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         );
     }
     frame.render_widget(
-        Paragraph::new(removable_media_status(&app.devices)).style(Style::default().fg(ACCENT)),
+        Paragraph::new(removable_media_status_in(locale, &app.devices))
+            .style(Style::default().fg(ACCENT)),
         target_rows[0],
     );
     let mut state = ListState::default().with_selected(app.selected);
@@ -5329,10 +5582,9 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
 }
 
 fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
-    let status_block = focused_panel_block(
-        " 3  Review & write ",
-        app.workspace_focus == WorkspaceFocus::Review,
-    );
+    let review_title = panel_heading(app.locale, 3, "");
+    let status_block =
+        focused_panel_block(&review_title, app.workspace_focus == WorkspaceFocus::Review);
     let status_inner = status_block.inner(area);
     frame.render_widget(status_block, area);
     let status_rows = Layout::vertical([
@@ -5375,7 +5627,7 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     let help = if status_inner.width >= 100 {
         format!(
             "{}  ·  Tab next · Shift+Tab previous · Enter select · ? help · q quit",
-            workspace.status()
+            workspace.status_in(app.locale)
         )
     } else {
         "Tab / Shift+Tab focus · Enter select · ? help · q quit".into()
@@ -5422,18 +5674,18 @@ fn draw_status(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .split(status_rows[2]);
     let readiness = app.review_readiness();
     let review_label = if readiness == ReviewReadiness::Ready {
-        if compact {
-            "✓ Review"
+        if compact && app.locale.is_source() {
+            "✓ Review".to_string()
         } else {
-            "✓  Review plan"
+            format!("✓  {}", readiness.action_label_in(app.locale))
         }
     } else {
-        readiness.action_label()
+        readiness.action_label_in(app.locale).to_string()
     };
     render_button(
         frame,
         actions[0],
-        review_label,
+        &review_label,
         readiness == ReviewReadiness::Ready,
     );
     render_button(
@@ -5815,7 +6067,7 @@ mod layout_tests {
 #[cfg(test)]
 mod workspace_render_tests {
     use super::*;
-    use bootable_core::{DeviceId, MountPoint, Preferences};
+    use bootable_core::{DeviceId, HELP_SECTIONS, MountPoint, Preferences};
     use ratatui::backend::TestBackend;
 
     fn render(app: &mut App, width: u16, height: u16) -> String {
@@ -5835,6 +6087,8 @@ mod workspace_render_tests {
     fn app_with_drive() -> App {
         let mut app = App::load(Bootable::native(), None, Picker::halfblocks());
         app.preferences = Preferences::default();
+        // Do not depend on the language of the machine running the tests.
+        app.locale = Locale::En;
         app.devices = vec![Device {
             id: DeviceId::new("usb-1"),
             path: PathBuf::from("/dev/sdz"),
@@ -5880,6 +6134,192 @@ mod workspace_render_tests {
         let screen = render(&mut app, 130, 40);
         for section in HELP_SECTIONS {
             assert!(screen.contains(&section.title.to_uppercase()), "{screen}");
+        }
+    }
+
+    /// Like `render`, but advances by each glyph's display width so wide
+    /// characters appear contiguously instead of followed by a blank cell.
+    fn render_text(app: &mut App, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
+        terminal.draw(|frame| draw(frame, app)).expect("draw");
+        let buffer = terminal.backend().buffer();
+        (0..height)
+            .map(|y| {
+                let mut line = String::new();
+                let mut x = 0;
+                while x < width {
+                    let symbol = buffer[(x, y)].symbol();
+                    line.push_str(symbol);
+                    x += display_width(symbol).max(1) as u16;
+                }
+                line
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn localized_app(locale: Locale) -> App {
+        let mut app = app_with_drive();
+        app.preferences.language = Some(locale);
+        app.locale = locale;
+        app
+    }
+
+    #[test]
+    fn workspace_headings_and_language_hint_are_localized() {
+        for locale in [Locale::De, Locale::Ru, Locale::Ja] {
+            let mut app = localized_app(locale);
+            let screen = render_text(&mut app, 130, 40);
+            for title in WorkspaceProgress::step_titles(locale) {
+                assert!(screen.contains(title), "{locale}: {title}\n{screen}");
+            }
+            let hint = format!(
+                "{}: {}",
+                Message::LanguageLabel.text(locale),
+                locale.native_name()
+            );
+            assert!(screen.contains(&hint), "{locale}: {hint}\n{screen}");
+            assert!(
+                screen.contains(removable_media_status_in(locale, &app.devices).as_str()),
+                "{locale}\n{screen}"
+            );
+            assert!(
+                screen.contains(Message::DetailConnection.text(locale)),
+                "{locale}\n{screen}"
+            );
+            assert!(app.hit_regions.language.is_some());
+        }
+    }
+
+    #[test]
+    fn guide_renders_localized_sections_without_breaking_layout() {
+        for locale in [Locale::De, Locale::Ru, Locale::Ja] {
+            let mut app = localized_app(locale);
+            app.help_open = true;
+            let screen = render_text(&mut app, 130, 40);
+            for section in help_sections(locale) {
+                assert!(
+                    screen.contains(&section.title.to_uppercase()),
+                    "{locale}: {}\n{screen}",
+                    section.title
+                );
+                for entry in &section.entries {
+                    assert!(screen.contains(entry.terminal), "{locale}\n{screen}");
+                    let first = entry.action.chars().take(6).collect::<String>();
+                    assert!(screen.contains(&first), "{locale}: {first}\n{screen}");
+                }
+            }
+            let intro = help_intro(locale).chars().take(8).collect::<String>();
+            assert!(screen.contains(&intro), "{locale}\n{screen}");
+            // The modal's right border stays in one column on every row.
+            let border_columns = screen
+                .lines()
+                .filter(|line| line.contains('\u{2502}'))
+                .filter_map(|line| line.trim_end().rsplit_once('\u{2502}'))
+                .map(|(before, _)| display_width(before))
+                .collect::<std::collections::BTreeSet<_>>();
+            assert!(border_columns.len() <= 2, "{locale}\n{screen}");
+        }
+    }
+
+    #[test]
+    fn wrapping_respects_display_width_in_every_language() {
+        let style = Style::default();
+        for locale in Locale::available() {
+            for section in help_sections(locale) {
+                for entry in section.entries {
+                    let detail = format!(" \u{b7} {}", entry.detail);
+                    for width in [20, 37, 60, 90] {
+                        let lines =
+                            wrap_styled(&[(entry.action, style), (detail.as_str(), style)], width);
+                        for line in lines {
+                            let text = line
+                                .iter()
+                                .map(|span| span.content.as_ref())
+                                .collect::<String>();
+                            assert!(display_width(&text) <= width, "{locale} {width}: {text:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wrapped_text_never_loses_characters() {
+        let style = Style::default();
+        let text = "\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30c6}\u{30ad}\u{30b9}\u{30c8}\u{306f}\u{5358}\u{8a9e}\u{306e}\u{9593}\u{306b}\u{7a7a}\u{767d} and mixed words";
+        let lines = wrap_styled(&[(text, style)], 16);
+        let joined = lines
+            .iter()
+            .map(|line| {
+                line.iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(joined.replace(' ', ""), text.replace(' ', ""));
+        assert!(lines.len() > 1);
+    }
+
+    #[test]
+    fn middle_truncation_counts_columns_not_characters() {
+        assert_eq!(truncate_middle("short.iso", 20), "short.iso");
+        let wide = "\u{65e5}\u{672c}\u{8a9e}".repeat(4) + ".iso";
+        let truncated = truncate_middle(&wide, 11);
+        assert!(display_width(&truncated) <= 11, "{truncated}");
+        assert!(truncated.contains('\u{2026}'));
+        assert_eq!(display_width(&pad_display("\u{65e5}\u{672c}", 6)), 6);
+    }
+
+    #[test]
+    fn language_cycles_through_system_default_and_every_available_locale() {
+        let available = Locale::available();
+        let mut current = None;
+        let mut seen = Vec::new();
+        for _ in 0..=available.len() {
+            current = next_language(current);
+            seen.push(current);
+        }
+        let expected = available
+            .iter()
+            .copied()
+            .map(Some)
+            .chain([None])
+            .collect::<Vec<_>>();
+        assert_eq!(seen, expected);
+        // A stored language that is no longer offered restarts the cycle.
+        assert_eq!(next_language(Some(Locale::Hi)), None);
+    }
+
+    #[test]
+    fn language_hint_names_system_default_or_the_explicit_choice() {
+        assert_eq!(
+            language_hint_variants(Some(Locale::De), Locale::De)[0],
+            "Sprache: Deutsch"
+        );
+        assert_eq!(
+            language_hint_variants(None, Locale::De)[0],
+            "Sprache: Systemstandard (Deutsch)"
+        );
+        assert_eq!(
+            language_hint_variants(None, Locale::En)[0],
+            "Language: System default (English)"
+        );
+    }
+
+    #[test]
+    fn english_workspace_headings_are_unchanged() {
+        let mut app = app_with_drive();
+        let screen = render(&mut app, 130, 40);
+        for heading in [
+            " 1  Source \u{b7} choose an image ",
+            " 2  Target \u{b7} removable media ",
+            " 3  Review & write ",
+            "Language: System default (English)",
+        ] {
+            assert!(screen.contains(heading), "{heading}\n{screen}");
         }
     }
 }
