@@ -1,0 +1,96 @@
+# Bootable message catalog: Spanish (es).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+
+help.intro = Origen → Destino → Revisar y escribir. No se escribe nada hasta que revises el plan y confirmes el borrado.
+help.section.source = Origen
+help.section.target = Destino
+help.section.review = Revisar y escribir
+help.section.general = General
+
+help.source.choose.action = Elegir una imagen
+help.source.choose.detail = Busca una imagen ISO, IMG, RAW o comprimida
+help.source.recent.action = Usar una imagen reciente
+help.source.recent.detail = Vuelve a inspeccionar una de tus últimas imágenes
+help.source.recent.desktop = Clic en una imagen reciente
+help.source.discover.action = Descubrir imágenes
+help.source.discover.detail = Abre o cierra el catálogo de distribuciones
+help.source.downloads.action = Descargas
+help.source.downloads.detail = Abre o cierra el gestor de descargas
+help.source.downloads.desktop = Botón Descargas
+
+help.target.refresh.action = Actualizar unidades
+help.target.refresh.detail = Vuelve a buscar medios extraíbles
+help.target.choose.action = Elegir una unidad
+help.target.choose.detail = La selección siempre es explícita; los discos fijos están bloqueados
+help.target.choose.desktop = Clic en una unidad
+
+help.review.plan.action = Revisar el plan
+help.review.plan.detail = Abre el plan; todavía no se escribe nada
+help.review.stop.action = Detener una escritura
+help.review.stop.detail = Se detiene en el siguiente punto seguro
+help.review.stop.desktop = Botón Detener
+
+help.general.toggle.action = Mostrar u ocultar esta guía
+help.general.toggle.detail = Vuelve a abrirla cuando quieras
+help.general.close.action = Cerrar un panel
+help.general.close.detail = Cierra esta guía o el catálogo
+
+detail.drive = Unidad
+detail.path = Ruta
+detail.capacity = Capacidad
+detail.connection = Conexión
+detail.serial = N.º de serie
+detail.status = Estado
+detail.mounted = Montado
+detail.connection.unknown = desconocida
+detail.serial.not_reported = no informado
+detail.mounted.none = nada montado
+detail.mounted.list = {listed} · se desmonta antes de escribir
+detail.mounted.list_more = {listed} +{hidden} más · se desmonta antes de escribir
+
+target.system_blocked = Disco del sistema · bloqueado
+target.internal_blocked = Disco interno · bloqueado
+target.read_only_blocked = Solo lectura · bloqueado
+target.eligible = Extraíble · apto
+
+media.none = No hay unidades extraíbles conectadas
+media.ready.one = {count} unidad extraíble lista
+media.ready.other = {count} unidades extraíbles listas
+media.none_eligible.one = {count} unidad extraíble conectada · ninguna apta
+media.none_eligible.other = {count} unidades extraíbles conectadas · ninguna apta
+media.some_ready.one = {count} unidad extraíble conectada · listas: {ready}
+media.some_ready.other = {count} unidades extraíbles conectadas · listas: {ready}
+
+readiness.needs_image.action = Elige primero una imagen
+readiness.needs_target.action = Elegir una unidad extraíble
+readiness.ready.action = Revisar el plan
+readiness.needs_image.guidance = Elige o descarga una imagen para continuar
+readiness.needs_target.guidance = Conecta y elige una unidad extraíble para continuar
+readiness.ready.guidance = Listo para revisar la imagen, el destino y el plan de borrado
+workspace.needs_image.status = Elige o descarga una imagen para continuar
+workspace.needs_target.status = Elige una unidad extraíble · no se ha escrito nada
+workspace.ready.status = Listo para revisar · no se ha escrito nada
+
+step.source = Origen
+step.target = Destino
+step.review = Revisar y escribir
+
+phase.preparing = Preparando
+phase.downloading = Descargando
+phase.reading = Leyendo
+phase.writing = Escribiendo
+phase.syncing = Sincronizando
+phase.verifying = Verificando
+phase.finished = Finalizado
+
+integrity.transfer_checked = Transferencia HTTPS y estructura de arranque comprobadas · suma de verificación del editor no disponible
+integrity.checksum_verified = Suma de verificación del editor verificada
+integrity.checksum_unsigned = Suma de verificación del editor verificada · firma no verificada ({note})
+integrity.signature_verified = Firma verificada · {publisher} (clave {fingerprint}) · {algorithm} coincide con el manifiesto firmado
+integrity.completion = {label} · listo
+integrity.ready = Listo · {label} · {path}
+integrity.finalized.transfer = Etapa 4/5 · Longitud de la transferencia HTTPS verificada · suma de verificación del editor no disponible · finalizado en {path}
+integrity.finalized.checksum = Etapa 4/5 · {algorithm} del editor verificado · finalizado en {path}
+integrity.finalized.checksum_unsigned = Etapa 4/5 · {algorithm} del editor verificado · firma no verificada ({note}) · finalizado en {path}
+integrity.finalized.signature = Etapa 4/5 · {label} · finalizado en {path}

@@ -1,0 +1,96 @@
+# Bootable message catalog: Brazilian Portuguese (pt-BR).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+
+help.intro = Origem → Destino → Revisar e gravar. Nada é gravado até você revisar o plano e confirmar o apagamento.
+help.section.source = Origem
+help.section.target = Destino
+help.section.review = Revisar e gravar
+help.section.general = Geral
+
+help.source.choose.action = Escolher uma imagem
+help.source.choose.detail = Procure uma imagem ISO, IMG, RAW ou compactada
+help.source.recent.action = Usar uma imagem recente
+help.source.recent.detail = Inspeciona novamente uma das suas últimas imagens
+help.source.recent.desktop = Clique em uma imagem recente
+help.source.discover.action = Descobrir imagens
+help.source.discover.detail = Abre ou fecha o catálogo de distribuições
+help.source.downloads.action = Downloads
+help.source.downloads.detail = Abre ou fecha o gerenciador de downloads
+help.source.downloads.desktop = Botão Downloads
+
+help.target.refresh.action = Atualizar unidades
+help.target.refresh.detail = Verifica novamente as mídias removíveis
+help.target.choose.action = Escolher uma unidade
+help.target.choose.detail = A seleção é sempre explícita; discos fixos ficam bloqueados
+help.target.choose.desktop = Clique em uma unidade
+
+help.review.plan.action = Revisar o plano
+help.review.plan.detail = Abre o plano; nada foi gravado ainda
+help.review.stop.action = Interromper uma gravação
+help.review.stop.detail = Para no próximo ponto seguro
+help.review.stop.desktop = Botão Parar
+
+help.general.toggle.action = Mostrar ou ocultar este guia
+help.general.toggle.detail = Reabra a qualquer momento
+help.general.close.action = Fechar um painel
+help.general.close.detail = Fecha este guia ou o catálogo
+
+detail.drive = Unidade
+detail.path = Caminho
+detail.capacity = Capacidade
+detail.connection = Conexão
+detail.serial = Nº de série
+detail.status = Status
+detail.mounted = Montado
+detail.connection.unknown = desconhecida
+detail.serial.not_reported = não informado
+detail.mounted.none = nada montado
+detail.mounted.list = {listed} · desmontado antes da gravação
+detail.mounted.list_more = {listed} +{hidden} a mais · desmontado antes da gravação
+
+target.system_blocked = Disco do sistema · bloqueado
+target.internal_blocked = Disco interno · bloqueado
+target.read_only_blocked = Somente leitura · bloqueado
+target.eligible = Removível · elegível
+
+media.none = Nenhuma unidade removível conectada
+media.ready.one = {count} unidade removível pronta
+media.ready.other = {count} unidades removíveis prontas
+media.none_eligible.one = {count} unidade removível conectada · nenhuma elegível
+media.none_eligible.other = {count} unidades removíveis conectadas · nenhuma elegível
+media.some_ready.one = {count} unidade removível conectada · prontas: {ready}
+media.some_ready.other = {count} unidades removíveis conectadas · prontas: {ready}
+
+readiness.needs_image.action = Escolha uma imagem primeiro
+readiness.needs_target.action = Escolher uma unidade removível
+readiness.ready.action = Revisar o plano
+readiness.needs_image.guidance = Escolha ou baixe uma imagem para continuar
+readiness.needs_target.guidance = Conecte e escolha uma unidade removível para continuar
+readiness.ready.guidance = Pronto para revisar a imagem, o destino e o plano de apagamento
+workspace.needs_image.status = Escolha ou baixe uma imagem para continuar
+workspace.needs_target.status = Escolha uma unidade removível · nada foi gravado
+workspace.ready.status = Pronto para revisar · nada foi gravado
+
+step.source = Origem
+step.target = Destino
+step.review = Revisar e gravar
+
+phase.preparing = Preparando
+phase.downloading = Baixando
+phase.reading = Lendo
+phase.writing = Gravando
+phase.syncing = Sincronizando
+phase.verifying = Verificando
+phase.finished = Concluído
+
+integrity.transfer_checked = Transferência HTTPS e estrutura de inicialização verificadas · checksum do editor indisponível
+integrity.checksum_verified = Checksum do editor verificado
+integrity.checksum_unsigned = Checksum do editor verificado · assinatura não verificada ({note})
+integrity.signature_verified = Assinatura verificada · {publisher} (chave {fingerprint}) · {algorithm} corresponde ao manifesto assinado
+integrity.completion = {label} · pronto
+integrity.ready = Pronto · {label} · {path}
+integrity.finalized.transfer = Etapa 4/5 · Tamanho da transferência HTTPS verificado · checksum do editor indisponível · finalizado em {path}
+integrity.finalized.checksum = Etapa 4/5 · {algorithm} do editor verificado · finalizado em {path}
+integrity.finalized.checksum_unsigned = Etapa 4/5 · {algorithm} do editor verificado · assinatura não verificada ({note}) · finalizado em {path}
+integrity.finalized.signature = Etapa 4/5 · {label} · finalizado em {path}

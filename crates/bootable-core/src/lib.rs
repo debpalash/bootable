@@ -8,6 +8,8 @@ mod error;
 mod guide;
 mod inspect;
 mod integrity;
+mod locale;
+mod messages;
 mod model;
 mod operation;
 mod pi_catalog;
@@ -42,15 +44,21 @@ pub use download_session::{
     DownloadCompletion, DownloadLaunch, DownloadRequest, ManagedDownloadSession,
 };
 pub use error::{Error, Result};
-pub use guide::{DetailRow, HELP_INTRO, HELP_SECTIONS, HelpEntry, HelpSection, device_details};
+pub use guide::{
+    DetailRow, HELP_INTRO, HELP_SECTIONS, HelpEntry, HelpSection, LocalizedHelpSection,
+    device_details, device_details_in, help_intro, help_sections,
+};
 pub use integrity::IntegrityState;
+pub use locale::{Locale, PluralCategory, TextDirection, UnsupportedLocale};
+pub use messages::{Arg, Coverage, Message};
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,
     Progress, ProgressPhase, ReviewReadiness, WindowsExperienceOptions, WindowsPartitionScheme,
     WindowsPayload, WindowsRegionalOptions, WorkspaceProgress, WorkspaceStepState, WriteOptions,
     WritePlan, WriteStrategy, destructive_confirmation_ready, format_bytes, removable_media_status,
-    review_readiness, target_eligibility_label, workspace_progress,
+    removable_media_status_in, review_readiness, target_eligibility_label,
+    target_eligibility_label_in, workspace_progress,
 };
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};

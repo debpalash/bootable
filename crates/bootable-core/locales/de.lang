@@ -1,0 +1,96 @@
+# Bootable message catalog: German (de).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+
+help.intro = Quelle → Ziel → Prüfen & schreiben. Es wird nichts geschrieben, bis Sie den Plan geprüft und das Löschen bestätigt haben.
+help.section.source = Quelle
+help.section.target = Ziel
+help.section.review = Prüfen & schreiben
+help.section.general = Allgemein
+
+help.source.choose.action = Abbild auswählen
+help.source.choose.detail = Nach einem ISO-, IMG-, RAW- oder komprimierten Abbild suchen
+help.source.recent.action = Letztes Abbild verwenden
+help.source.recent.detail = Eines Ihrer zuletzt verwendeten Abbilder erneut prüfen
+help.source.recent.desktop = Auf ein zuletzt verwendetes Abbild klicken
+help.source.discover.action = Abbilder entdecken
+help.source.discover.detail = Distributionskatalog öffnen oder schließen
+help.source.downloads.action = Downloads
+help.source.downloads.detail = Download-Manager öffnen oder schließen
+help.source.downloads.desktop = Schaltfläche „Downloads“
+
+help.target.refresh.action = Laufwerke aktualisieren
+help.target.refresh.detail = Wechselmedien erneut suchen
+help.target.choose.action = Laufwerk auswählen
+help.target.choose.detail = Die Auswahl erfolgt immer ausdrücklich; fest eingebaute Datenträger sind gesperrt
+help.target.choose.desktop = Auf ein Laufwerk klicken
+
+help.review.plan.action = Plan prüfen
+help.review.plan.detail = Öffnet den Plan; es wird noch nichts geschrieben
+help.review.stop.action = Schreibvorgang stoppen
+help.review.stop.detail = Hält an der nächsten sicheren Stelle an
+help.review.stop.desktop = Schaltfläche „Stopp“
+
+help.general.toggle.action = Diese Anleitung ein- oder ausblenden
+help.general.toggle.detail = Jederzeit erneut öffnen
+help.general.close.action = Bereich schließen
+help.general.close.detail = Schließt diese Anleitung oder den Katalog
+
+detail.drive = Laufwerk
+detail.path = Pfad
+detail.capacity = Kapazität
+detail.connection = Verbindung
+detail.serial = Seriennummer
+detail.status = Status
+detail.mounted = Eingehängt
+detail.connection.unknown = unbekannt
+detail.serial.not_reported = nicht gemeldet
+detail.mounted.none = nichts eingehängt
+detail.mounted.list = {listed} · wird vor dem Schreiben ausgehängt
+detail.mounted.list_more = {listed} +{hidden} weitere · wird vor dem Schreiben ausgehängt
+
+target.system_blocked = Systemdatenträger · gesperrt
+target.internal_blocked = Interner Datenträger · gesperrt
+target.read_only_blocked = Schreibgeschützt · gesperrt
+target.eligible = Wechselmedium · geeignet
+
+media.none = Keine Wechsellaufwerke verbunden
+media.ready.one = {count} Wechsellaufwerk bereit
+media.ready.other = {count} Wechsellaufwerke bereit
+media.none_eligible.one = {count} Wechsellaufwerk verbunden · keines geeignet
+media.none_eligible.other = {count} Wechsellaufwerke verbunden · keines geeignet
+media.some_ready.one = {count} Wechsellaufwerk verbunden · {ready} bereit
+media.some_ready.other = {count} Wechsellaufwerke verbunden · {ready} bereit
+
+readiness.needs_image.action = Zuerst ein Abbild auswählen
+readiness.needs_target.action = Wechsellaufwerk auswählen
+readiness.ready.action = Plan prüfen
+readiness.needs_image.guidance = Abbild auswählen oder herunterladen, um fortzufahren
+readiness.needs_target.guidance = Wechsellaufwerk verbinden und auswählen, um fortzufahren
+readiness.ready.guidance = Bereit zur Prüfung von Abbild, Ziel und Löschplan
+workspace.needs_image.status = Abbild auswählen oder herunterladen, um fortzufahren
+workspace.needs_target.status = Wechsellaufwerk auswählen · es wurde nichts geschrieben
+workspace.ready.status = Bereit zur Prüfung · es wurde nichts geschrieben
+
+step.source = Quelle
+step.target = Ziel
+step.review = Prüfen & schreiben
+
+phase.preparing = Vorbereitung
+phase.downloading = Herunterladen
+phase.reading = Lesen
+phase.writing = Schreiben
+phase.syncing = Synchronisieren
+phase.verifying = Überprüfen
+phase.finished = Abgeschlossen
+
+integrity.transfer_checked = HTTPS-Übertragung und Startstruktur geprüft · Prüfsumme des Herausgebers nicht verfügbar
+integrity.checksum_verified = Prüfsumme des Herausgebers verifiziert
+integrity.checksum_unsigned = Prüfsumme des Herausgebers verifiziert · Signatur nicht verifiziert ({note})
+integrity.signature_verified = Signatur verifiziert · {publisher} (Schlüssel {fingerprint}) · {algorithm} stimmt mit dem signierten Manifest überein
+integrity.completion = {label} · bereit
+integrity.ready = Bereit · {label} · {path}
+integrity.finalized.transfer = Schritt 4/5 · Länge der HTTPS-Übertragung verifiziert · Prüfsumme des Herausgebers nicht verfügbar · abgeschlossen unter {path}
+integrity.finalized.checksum = Schritt 4/5 · {algorithm} des Herausgebers verifiziert · abgeschlossen unter {path}
+integrity.finalized.checksum_unsigned = Schritt 4/5 · {algorithm} des Herausgebers verifiziert · Signatur nicht verifiziert ({note}) · abgeschlossen unter {path}
+integrity.finalized.signature = Schritt 4/5 · {label} · abgeschlossen unter {path}
