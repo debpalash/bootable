@@ -415,6 +415,7 @@ fn windows_write(
         "umount",
         "findmnt",
         "sync",
+        "blockdev",
     ] {
         ensure_tool(tool)?;
     }
@@ -587,7 +588,25 @@ fn windows_write(
 }
 
 /// Writes the BIOS boot sectors through the whole-disk node and re-reads them.
+///
+/// A desktop automounter can mount the fresh FAT32 partition the moment it is
+/// unmounted. The FAT driver then rewrites its cached copy of the boot sector
+/// (dirty flag) on the next unmount and silently reverts our boot record. So the
+/// partition is proven unmounted before the install, stale cached copies are
+/// dropped around it, and the result is verified, settled, and verified again.
+///
+/// Remaining gap: the re-reads go through the kernel page cache after
+/// `blockdev --flushbufs`, not through `O_DIRECT` (which needs aligned buffers
+/// and is not achievable here without `unsafe`). A device that acknowledges a
+/// write but returns the old data from its own cache is therefore not detected.
 fn install_bios_boot_sectors(disk: &Path) -> Result<()> {
+    let partition = partition_path(disk);
+    for node in [partition.as_path(), disk] {
+        unmount_device_if_mounted(node)?;
+    }
+    refuse_if_mounted(&[partition.as_path(), disk])?;
+    flush_buffers(&[partition.as_path(), disk])?;
+
     let mut file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -595,7 +614,69 @@ fn install_bios_boot_sectors(disk: &Path) -> Result<()> {
         .map_err(|error| io_error(disk, error))?;
     bios_boot::install(&mut file)?;
     file.sync_all().map_err(|error| io_error(disk, error))?;
+    drop(file);
+    flush_buffers(&[partition.as_path(), disk])?;
+    verify_bios_boot_sectors(disk)?;
+
+    // Give udev/automounters time to react to the change events, then prove
+    // nothing mounted the partition and the sectors are still ours.
+    let _ = run_status(
+        "udevadm",
+        [OsStr::new("settle"), OsStr::new("--timeout=10")],
+    );
+    thread::sleep(Duration::from_millis(500));
+    refuse_if_mounted_after_install(&[partition.as_path(), disk])?;
+    flush_buffers(&[partition.as_path(), disk])?;
+    verify_bios_boot_sectors(disk)
+}
+
+fn verify_bios_boot_sectors(disk: &Path) -> Result<()> {
+    let mut file = File::open(disk).map_err(|error| io_error(disk, error))?;
     bios_boot::verify(&mut file)
+}
+
+/// Drops cached blocks (`BLKFLSBUF`) so a read cannot be answered from a stale
+/// copy and a later writeback cannot resurrect old boot-sector contents.
+fn flush_buffers(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        run_status("blockdev", [OsStr::new("--flushbufs"), device.as_os_str()])?;
+    }
+    Ok(())
+}
+
+fn refuse_if_mounted(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        let mounts = mount_targets(device)?;
+        if !mounts.is_empty() {
+            return Err(still_mounted_error(device, &mounts, false));
+        }
+    }
+    Ok(())
+}
+
+fn refuse_if_mounted_after_install(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        let mounts = mount_targets(device)?;
+        if !mounts.is_empty() {
+            return Err(still_mounted_error(device, &mounts, true));
+        }
+    }
+    Ok(())
+}
+
+fn still_mounted_error(device: &Path, mounts: &[String], after_install: bool) -> Error {
+    let when = if after_install {
+        "was mounted again after the BIOS boot sectors were written (an automounter?); \
+         the filesystem driver may rewrite the old boot sector when it is unmounted"
+    } else {
+        "is still mounted (an automounter?); refusing to write boot sectors under a \
+         live filesystem"
+    };
+    Error::UnsafeTarget(format!(
+        "{} {when}: {}. Unmount it and retry.",
+        device.display(),
+        mounts.join(", ")
+    ))
 }
 
 /// The BIOS boot record addresses 512-byte sectors; 4Kn drives are refused
@@ -880,6 +961,14 @@ fn wait_for_partition(device: &Path) -> Result<PathBuf> {
 }
 
 fn unmount_device_if_mounted(device: &Path) -> Result<()> {
+    for mount in mount_targets(device)? {
+        run_status("umount", [OsStr::new(&mount)])?;
+    }
+    Ok(())
+}
+
+/// Mount points currently using `device` as their source (empty when unmounted).
+fn mount_targets(device: &Path) -> Result<Vec<String>> {
     let output = Command::new("findmnt")
         .args(["--noheadings", "--output", "TARGET", "--source"])
         .arg(device)
@@ -892,22 +981,26 @@ fn unmount_device_if_mounted(device: &Path) -> Result<()> {
             }
         })?;
     if output.status.success() {
-        for mount in String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|mount| !mount.is_empty())
-        {
-            run_status("umount", [OsStr::new(mount)])?;
-        }
-        return Ok(());
+        return Ok(parse_mount_targets(&String::from_utf8_lossy(
+            &output.stdout,
+        )));
     }
     if output.status.code() == Some(1) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     Err(Error::CommandFailed {
         program: "findmnt".into(),
         message: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
     })
+}
+
+fn parse_mount_targets(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|mount| !mount.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 fn partition_path(device: &Path) -> PathBuf {
@@ -1136,6 +1229,30 @@ mod tests {
             partition_path(Path::new("/dev/nvme0n1")),
             Path::new("/dev/nvme0n1p1")
         );
+    }
+
+    #[test]
+    fn findmnt_output_is_split_into_clean_mount_targets() {
+        assert!(parse_mount_targets("").is_empty());
+        assert_eq!(
+            parse_mount_targets("/run/media/user/WINDOWS\n\n  /mnt/usb \n"),
+            ["/run/media/user/WINDOWS", "/mnt/usb"]
+        );
+    }
+
+    #[test]
+    fn a_remounted_boot_partition_is_reported_with_its_mount_points() {
+        let before = still_mounted_error(
+            Path::new("/dev/sdb1"),
+            &["/run/media/u/WINDOWS".to_owned()],
+            false,
+        )
+        .to_string();
+        assert!(before.contains("/dev/sdb1") && before.contains("still mounted"));
+        assert!(before.contains("/run/media/u/WINDOWS"));
+        let after =
+            still_mounted_error(Path::new("/dev/sdb1"), &["/mnt".to_owned()], true).to_string();
+        assert!(after.contains("mounted again") && after.contains("old boot sector"));
     }
 
     #[test]
