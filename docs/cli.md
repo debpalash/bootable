@@ -12,11 +12,13 @@ full option list.
 | 1    | error                   | Any other failure: I/O, network, missing device, missing privileges, stale plan.         |
 | 2    | usage                   | Bad arguments (reported by the parser), out-of-range release index, no terminal for TUI. |
 | 3    | confirmation_required   | Nothing was written: `--confirm` missing, wrong phrase, or the target was refused.       |
-| 4    | verification_failed     | A checksum or post-write byte verification did not match. Treat the media as unusable.   |
+| 4    | verification_failed     | A checksum, signature, or post-write byte verification failed or was refused (including `--require-signature`). Treat the media as unusable. |
 
 Exit 3 covers every safety refusal: a missing `--confirm`, a phrase that does not match the plan,
 and a target that is a system disk, an internal disk, or read-only. Exit 4 covers the
-publisher-checksum check on downloads and the SHA-256 comparison after a write.
+publisher-checksum check on downloads, the SHA-256 comparison after a write, and signature
+refusals: a download refused by `--require-signature` (no verified publisher signature), or a
+signature that names a pinned key but does not verify (see [signatures.md](signatures.md)).
 
 Errors are printed to stderr as `error: <message>`. For commands that take `--json`, errors are
 instead a single JSON object on stderr:
@@ -35,7 +37,15 @@ instead a single JSON object on stderr:
   events: `{"event":"progress","data":{...}}`, then exactly one terminal event, either
   `{"event":"finished"}` or `{"event":"failed","data":{"message","kind","exit_code"}}`. A
   `write`/`flash` without `--confirm` emits `{"event":"confirmation_required","data":{"confirmation_phrase","plan"}}`
-  instead of the text plan.
+  instead of the text plan; that event is the terminal one and the exit code is 3.
+  The guarantee covers early failures too: a missing or ineligible target, a source that cannot be
+  planned, a failed fetch, and a refused signature each produce a `failed` event (with the same
+  `kind` and `exit_code` as the process) before the command exits. The only failures with no event
+  are argument errors rejected by the parser (exit 2), which happen before the command starts and
+  are reported on stderr.
+- After a catalog image is fetched (`download`, and `flash` with a slug), `--json-progress` also
+  emits one `integrity` event before the terminal event. See
+  [Integrity reporting](#integrity-reporting).
 - Targets are given by device id or path exactly as `bootable devices` prints them. Re-resolve the
   target immediately before a write; ids are the more stable handle across re-plugs.
 - Writing needs elevated rights. The CLI asks the platform's authorization helper (pkexec, UAC, or
@@ -92,7 +102,47 @@ checksum does not match (the staged file is discarded).
 ```sh
 bootable download linuxmint --index 0 --output ~/Downloads/mint.iso
 bootable download linuxmint --json-progress
+bootable download ubuntu --require-signature
 ```
+
+`--require-signature` refuses the download, before any image byte is transferred, unless the
+publisher's checksum manifest carries a verified signature from a key Bootable pins (see
+[signatures.md](signatures.md)). A publisher with no signature, or whose signature could not be
+used, is refused. The command exits 4 (`verification_failed`) with a message such as
+`download refused: a verified publisher signature is required but this image has only: ...`;
+with `--json-progress` the same refusal is a `failed` event with `"kind":"verification_failed"`
+and `"exit_code":4`. Without the flag a missing signature is not an error: the download proceeds
+and the integrity line says so.
+
+#### Integrity reporting
+
+After a successful catalog download the command reports how well the image was authenticated,
+using the same wording as the graphical and terminal interfaces:
+
+```
+Ready to write: /home/me/Downloads/ubuntu.iso
+Kind: ...
+Size: ...
+Integrity: Signature verified · Ubuntu (key D94A A3F0 EFE2 1092) · SHA-256 matches signed manifest
+```
+
+or, when the publisher normally signs but no usable signature was found:
+
+```
+Integrity: Publisher checksum verified · signature not verified (signature expected but unavailable: ...)
+```
+
+With `--json-progress` the line becomes one event, emitted after the last `progress` event and
+before `finished`:
+
+```json
+{"event":"integrity","data":{"label":"Signature verified · Ubuntu (key D94A A3F0 EFE2 1092) · ...","signature_verified":true,"signature_expected_but_unverified":false}}
+```
+
+`signature_verified` is true only for a signature from a pinned key.
+`signature_expected_but_unverified` is true when the publisher is known to sign but only the bare
+checksum could be used, a possible downgrade; scripts that must not accept that case should pass
+`--require-signature` rather than inspect the event. `pi-download` does not report integrity.
 
 ### pi-images and pi-download
 
@@ -184,6 +234,10 @@ One step from source to bootable media. `SLUG_OR_IMAGE` is a local file or a cat
 - For a slug, the target is checked for existence and eligibility before any download starts.
   Then the release (`--index`, default 0) is downloaded to `--output` (default: the release file
   name in the current directory) and verified exactly as `download` does.
+- `--require-signature` applies to that download exactly as it does for `download` (exit 4 when
+  the image has no verified publisher signature, before any image byte is fetched), and the
+  integrity line or `integrity` event is printed once the download completes. The flag is a
+  usage error (exit 2) with a local image, which has no publisher signature to check.
 - The image is then planned and written through the same confirmation gate as `write`, so it
   exits 3 without `--confirm` and the downloaded file is kept. Re-run with the printed path to
   skip the download.
