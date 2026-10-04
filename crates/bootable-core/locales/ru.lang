@@ -36,6 +36,11 @@ help.general.toggle.action = Показать или скрыть это рук�
 help.general.toggle.detail = Его можно открыть снова в любой момент
 help.general.close.action = Закрыть панель
 help.general.close.detail = Закрывает это руководство или каталог
+help.general.language.action = Сменить язык
+help.general.language.detail = Действует в обоих интерфейсах и сохраняется
+help.general.language.desktop = Меню языка
+language.label = Язык
+language.system_default = Как в системе
 
 detail.drive = Накопитель
 detail.path = Путь

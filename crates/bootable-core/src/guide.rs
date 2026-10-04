@@ -190,6 +190,12 @@ pub const HELP_SECTIONS: &[HelpSection] = &[
                 "Esc",
                 "Esc",
             ),
+            entry(
+                "Change the language",
+                "Applies to both interfaces; saved for next time",
+                "Language menu",
+                "L",
+            ),
         ],
     },
 ];
@@ -305,6 +311,12 @@ const GENERAL_ENTRIES: &[EntrySpec] = &[
         Message::HelpGeneralCloseDetail,
         Keys("Esc"),
         Keys("Esc"),
+    ),
+    spec(
+        Message::HelpGeneralLanguageAction,
+        Message::HelpGeneralLanguageDetail,
+        Text(Message::HelpGeneralLanguageDesktop),
+        Keys("L"),
     ),
 ];
 

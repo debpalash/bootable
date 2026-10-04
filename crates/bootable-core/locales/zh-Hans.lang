@@ -36,6 +36,11 @@ help.general.toggle.action = 显示或隐藏本指南
 help.general.toggle.detail = 可随时重新打开
 help.general.close.action = 关闭面板
 help.general.close.detail = 关闭本指南或目录
+help.general.language.action = 更改语言
+help.general.language.detail = 同时应用于两种界面并会保存
+help.general.language.desktop = 语言菜单
+language.label = 语言
+language.system_default = 跟随系统
 
 detail.drive = 驱动器
 detail.path = 路径

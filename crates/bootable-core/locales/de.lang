@@ -35,6 +35,11 @@ help.general.toggle.action = Diese Anleitung ein- oder ausblenden
 help.general.toggle.detail = Jederzeit erneut öffnen
 help.general.close.action = Bereich schließen
 help.general.close.detail = Schließt diese Anleitung oder den Katalog
+help.general.language.action = Sprache ändern
+help.general.language.detail = Gilt für beide Oberflächen und wird gespeichert
+help.general.language.desktop = Sprachmenü
+language.label = Sprache
+language.system_default = Systemstandard
 
 detail.drive = Laufwerk
 detail.path = Pfad

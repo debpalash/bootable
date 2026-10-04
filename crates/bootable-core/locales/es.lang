@@ -35,6 +35,11 @@ help.general.toggle.action = Mostrar u ocultar esta guía
 help.general.toggle.detail = Vuelve a abrirla cuando quieras
 help.general.close.action = Cerrar un panel
 help.general.close.detail = Cierra esta guía o el catálogo
+help.general.language.action = Cambiar el idioma
+help.general.language.detail = Se aplica a ambas interfaces y se guarda
+help.general.language.desktop = Menú de idioma
+language.label = Idioma
+language.system_default = Predeterminado del sistema
 
 detail.drive = Unidad
 detail.path = Ruta

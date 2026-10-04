@@ -36,6 +36,11 @@ help.general.toggle.action = このガイドを表示または非表示
 help.general.toggle.detail = いつでも再度開けます
 help.general.close.action = パネルを閉じる
 help.general.close.detail = このガイドまたはカタログを閉じます
+help.general.language.action = 言語を変更
+help.general.language.detail = 両方のインターフェースに適用され、保存されます
+help.general.language.desktop = 言語メニュー
+language.label = 言語
+language.system_default = システムの既定
 
 detail.drive = ドライブ
 detail.path = パス

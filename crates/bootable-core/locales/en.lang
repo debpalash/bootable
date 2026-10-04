@@ -45,6 +45,11 @@ help.general.toggle.action = Show or hide this guide
 help.general.toggle.detail = Reopen it any time
 help.general.close.action = Close a panel
 help.general.close.detail = Dismiss this guide or the catalog
+help.general.language.action = Change the language
+help.general.language.detail = Applies to both interfaces; saved for next time
+help.general.language.desktop = Language menu
+language.label = Language
+language.system_default = System default
 
 # Drive detail rows
 detail.drive = Drive
