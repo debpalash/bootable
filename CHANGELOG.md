@@ -2,6 +2,16 @@
 
 All notable changes to Bootable are documented here.
 
+## Unreleased
+
+- Added remembered preferences shared by the GUI and TUI: last image folder, checksum algorithm, and
+  the four most recent images, reusable in one click (GUI) or with keys `1`–`4` (TUI). Target
+  drives and destructive options are never remembered.
+- Added selected-drive details in both interfaces: connection, masked serial tail, and mounted
+  volumes that will be unmounted before writing.
+- Added a shared Guide (`?` button, F1 or `?`) listing every action and its key in each interface,
+  plus desktop shortcuts: Ctrl/Cmd+O image, G discover, R refresh drives, P review plan, Esc close.
+
 ## 0.1.1 — 2026-08-27
 
 - Added native Linux AppImage, DEB, and RPM packages, each containing the desktop app, TUI, and

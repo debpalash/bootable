@@ -8,11 +8,11 @@ use bootable_core::{
     BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogFetch, CatalogState,
     ChecksumAlgorithm, Device, DiscoverySession, DiscoverySource, DistributionBundle,
     DistributionDetails, DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest,
-    DownloadStatus, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog,
-    Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan, catalog_search_summary,
-    distribution_matches_query, format_bytes, removable_media_status, review_readiness,
-    target_eligibility_label, workspace_progress,
+    DownloadStatus, HELP_INTRO, HELP_SECTIONS, ImageReport, IsoRelease, ManagedDownloadSession,
+    OperationState, PiCatalog, Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness,
+    ReviewedWriteSession, WorkspaceStepState, WriteCompletion, WriteOptions, WritePlan,
+    catalog_search_summary, device_details, distribution_matches_query, format_bytes,
+    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
 };
 use clap::{Args, Parser, Subcommand};
 use crossterm::event::{
@@ -606,12 +606,14 @@ fn render_plan_text(plan: &WritePlan) {
     println!("Confirmation: {}", plan.confirmation_phrase);
 }
 
+type ImageInspection = std::result::Result<(ImageReport, PathBuf), (String, PathBuf)>;
+
 struct App {
     engine: Bootable,
     devices: Vec<Device>,
     image: Option<ImageReport>,
     image_loading: bool,
-    image_receiver: Option<Receiver<std::result::Result<(ImageReport, PathBuf), String>>>,
+    image_receiver: Option<Receiver<ImageInspection>>,
     initial_image: Option<PathBuf>,
     selected: Option<usize>,
     status: String,
@@ -652,6 +654,8 @@ struct App {
     write_receiver: Option<Receiver<WriteUpdate>>,
     hit_regions: HitRegions,
     workspace_focus: WorkspaceFocus,
+    preferences: Preferences,
+    help_open: bool,
 }
 
 enum DownloadUpdate {
@@ -729,6 +733,8 @@ impl WorkspaceFocus {
 #[derive(Default)]
 struct HitRegions {
     open_image: Option<Rect>,
+    guide: Option<Rect>,
+    recent_rows: Vec<(Rect, usize)>,
     discover: Option<Rect>,
     choose_folder: Option<Rect>,
     windows_options: Option<Rect>,
@@ -794,6 +800,7 @@ impl App {
         };
         let initial_image = image_path;
         let image = None;
+        let preferences = Preferences::load();
         let (catalog_sender, catalog_receiver) = mpsc::channel();
         Self {
             engine,
@@ -806,8 +813,8 @@ impl App {
             status,
             options: WriteOptions::default(),
             advanced: false,
-            checksum_algorithm: ChecksumAlgorithm::Sha256,
-            browse_directory: None,
+            checksum_algorithm: preferences.checksum_algorithm,
+            browse_directory: preferences.image_directory(),
             catalog_open: false,
             discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
@@ -841,7 +848,32 @@ impl App {
             write_receiver: None,
             hit_regions: HitRegions::default(),
             workspace_focus: WorkspaceFocus::Source,
+            preferences,
+            help_open: false,
         }
+    }
+
+    fn save_preferences(&mut self) {
+        if let Err(error) = self.preferences.save() {
+            self.status = format!("Preferences were not saved: {error}");
+        }
+    }
+
+    fn remember_image(&mut self, image: &ImageReport) {
+        self.preferences.remember_image(image);
+        self.save_preferences();
+        self.browse_directory = self.preferences.image_directory();
+    }
+
+    fn use_recent_image(&mut self, index: usize) {
+        match self.preferences.recent_images().get(index) {
+            Some(recent) => self.inspect_image_path(recent.path.clone()),
+            None => self.status = "No recent image in that position".into(),
+        }
+    }
+
+    fn toggle_help(&mut self) {
+        self.help_open = !self.help_open;
     }
 
     fn load_distrowatch(&mut self) {
@@ -1419,7 +1451,7 @@ impl App {
         let destination = job.destination.clone();
         match self.download_session.use_completed(&self.engine, &id) {
             Ok(report) => {
-                self.browse_directory = destination.parent().map(PathBuf::from);
+                self.remember_image(&report);
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
@@ -1914,10 +1946,10 @@ impl App {
         self.status = "Inspecting image • compressed sources are measured after expansion…".into();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
-            let result = Bootable::native()
-                .inspect_image(&path)
-                .map(|report| (report, path))
-                .map_err(|error| error.to_string());
+            let result = match Bootable::native().inspect_image(&path) {
+                Ok(report) => Ok((report, path)),
+                Err(error) => Err((error.to_string(), path)),
+            };
             let _ = sender.send(result);
         });
         self.image_receiver = Some(receiver);
@@ -1928,15 +1960,17 @@ impl App {
             return;
         };
         match receiver.try_recv() {
-            Ok(Ok((image, path))) => {
+            Ok(Ok((image, _))) => {
                 self.image_loading = false;
                 self.status = format!("Recognized {}", image.kind);
-                self.browse_directory = path.parent().map(PathBuf::from);
+                self.remember_image(&image);
                 self.image = Some(image);
                 self.advanced = false;
             }
-            Ok(Err(error)) => {
+            Ok(Err((error, path))) => {
                 self.image_loading = false;
+                self.preferences.forget_image(&path);
+                self.save_preferences();
                 self.image = None;
                 self.advanced = false;
                 self.status = error;
@@ -2334,6 +2368,8 @@ impl App {
     fn cycle_checksum_algorithm(&mut self) {
         self.checksum_algorithm = self.checksum_algorithm.next();
         self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.preferences.checksum_algorithm = self.checksum_algorithm;
+        self.save_preferences();
     }
 
     fn cycle_bad_blocks(&mut self) {
@@ -2400,6 +2436,14 @@ impl App {
             self.cancel_download();
         } else if contains(self.hit_regions.open_image, point) {
             self.choose_image();
+        } else if let Some(index) = self
+            .hit_regions
+            .recent_rows
+            .iter()
+            .find(|(area, _)| area.contains(point.into()))
+            .map(|(_, index)| *index)
+        {
+            self.use_recent_image(index);
         } else if contains(self.hit_regions.advanced, point) {
             self.toggle_advanced();
         } else if contains(self.hit_regions.choose_folder, point) {
@@ -2463,6 +2507,12 @@ impl App {
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> bool {
+        if self.help_open {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                self.help_open = false;
+            }
+            return false;
+        }
         if self.write_session.confirmation_open() {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
                 let point = (mouse.column, mouse.row);
@@ -2500,6 +2550,10 @@ impl App {
         }
         if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
             let point = (mouse.column, mouse.row);
+            if contains(self.hit_regions.guide, point) {
+                self.toggle_help();
+                return false;
+            }
             if contains(self.hit_regions.downloads, point) {
                 self.toggle_downloads();
                 return false;
@@ -2730,6 +2784,22 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
         if event::poll(Duration::from_millis(250))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    if app.help_open {
+                        if matches!(
+                            key.code,
+                            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?' | 'q')
+                        ) {
+                            app.help_open = false;
+                        }
+                        continue;
+                    }
+                    if key.code == KeyCode::Char('?')
+                        && !app.write_session.confirmation_open()
+                        && !app.catalog_searching
+                    {
+                        app.toggle_help();
+                        continue;
+                    }
                     if app.download_session.is_active() {
                         match key.code {
                             KeyCode::Char('p') => {
@@ -2836,8 +2906,8 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                         KeyCode::Char('p') => app.preview(),
                         KeyCode::Char('h') => app.checksum(),
                         KeyCode::Char('u') => app.backup(),
-                        KeyCode::Char('?') => {
-                            app.status = "Keyboard: Tab / Shift+Tab moves focus · Enter activates · arrows choose a target · o image · g discover · a setup · p review · r refresh · q quit".into();
+                        KeyCode::Char(digit @ '1'..='4') => {
+                            app.use_recent_image(usize::from(digit as u8 - b'1'));
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             app.move_target_selection(-1);
@@ -2865,6 +2935,56 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
 }
 
 fn draw(frame: &mut ratatui::Frame<'_>, app: &mut App) {
+    draw_screen(frame, app);
+    if app.help_open && !app.write_session.confirmation_open() {
+        draw_help(frame, frame.area());
+    }
+}
+
+fn draw_help(frame: &mut ratatui::Frame<'_>, area: Rect) {
+    let mut lines = vec![
+        Line::from(Span::styled(HELP_INTRO, Style::default().fg(Color::White))),
+        Line::raw(""),
+    ];
+    for section in HELP_SECTIONS {
+        lines.push(Line::from(Span::styled(
+            section.title.to_uppercase(),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )));
+        for entry in section.entries {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  {:<12}", entry.terminal),
+                    Style::default().fg(Color::Rgb(229, 185, 95)),
+                ),
+                Span::styled(entry.action, Style::default().fg(Color::White)),
+                Span::styled(format!(" · {}", entry.detail), Style::default().fg(MUTED)),
+            ]));
+        }
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::from(Span::styled(
+        "Press Esc, ? or click to close",
+        Style::default().fg(MUTED),
+    )));
+    let width = area.width.saturating_sub(4).min(110);
+    let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+    let modal = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(Clear, modal);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .block(panel_block(" Guide ").style(Style::default().bg(PANEL))),
+        modal,
+    );
+}
+
+fn draw_screen(frame: &mut ratatui::Frame<'_>, app: &mut App) {
     app.hit_regions = HitRegions::default();
     frame.render_widget(
         Block::default().style(Style::default().bg(BG)),
@@ -3393,10 +3513,15 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     };
     let columns = Layout::horizontal([
         Constraint::Min(if wide { 24 } else { 12 }),
-        Constraint::Length(action_width),
+        Constraint::Length(action_width + if wide { 6 } else { 0 }),
     ])
     .spacing(1)
     .split(area);
+    let action_columns = Layout::horizontal([Constraint::Min(0), Constraint::Length(5)])
+        .spacing(1)
+        .split(columns[1]);
+    render_button(frame, action_columns[1], "?", app.help_open);
+    app.hit_regions.guide = Some(action_columns[1]);
     frame.render_widget(
         Paragraph::new(brand_lockup(
             wide,
@@ -3411,7 +3536,7 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         action_count
     ])
     .spacing(1)
-    .split(columns[1]);
+    .split(action_columns[0]);
     render_button(
         frame,
         actions[0],
@@ -3548,9 +3673,18 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let source_inner = source_block.inner(area);
     frame.render_widget(source_block, area);
+    let recents = app.preferences.recent_images();
+    let recent_lines = if source_inner.height >= 7 {
+        (recents.len().max(1) + 1).min(usize::from(source_inner.height).saturating_sub(4))
+    } else {
+        0
+    } as u16;
+    let source_rows = Layout::vertical([Constraint::Min(3), Constraint::Length(recent_lines)])
+        .split(source_inner);
+    draw_recent_images(frame, app, &recents, source_rows[1]);
     let source_columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(14)])
         .spacing(1)
-        .split(source_inner);
+        .split(source_rows[0]);
     frame.render_widget(
         Paragraph::new(source)
             .style(Style::default().fg(Color::White))
@@ -3573,6 +3707,65 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             true,
         );
         app.hit_regions.open_image = Some(button_area);
+    }
+}
+
+fn draw_recent_images(
+    frame: &mut ratatui::Frame<'_>,
+    app: &mut App,
+    recents: &[bootable_core::RecentImage],
+    area: Rect,
+) {
+    app.hit_regions.recent_rows.clear();
+    if area.height == 0 {
+        return;
+    }
+    if recents.is_empty() {
+        frame.render_widget(
+            Paragraph::new("Images you use appear here for one-click reuse")
+                .style(Style::default().fg(MUTED)),
+            Rect::new(area.x, area.y, area.width, 1),
+        );
+        return;
+    }
+    frame.render_widget(
+        Paragraph::new("RECENT IMAGES · press 1-4").style(Style::default().fg(MUTED)),
+        Rect::new(area.x, area.y, area.width, 1),
+    );
+    for (index, recent) in recents
+        .iter()
+        .enumerate()
+        .take(usize::from(area.height) - 1)
+    {
+        let row = Rect::new(area.x, area.y + 1 + index as u16, area.width, 1);
+        let current = app
+            .image
+            .as_ref()
+            .is_some_and(|image| image.path == recent.path);
+        let size = if current {
+            "In use".to_string()
+        } else {
+            format_bytes(recent.size)
+        };
+        let name_width = usize::from(row.width).saturating_sub(size.chars().count() + 5);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(format!("{} ", index + 1), Style::default().fg(ACCENT)),
+                Span::styled(
+                    format!(
+                        "{:<name_width$}",
+                        truncate_middle(&recent.file_name(), name_width)
+                    ),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(
+                    format!("  {size}"),
+                    Style::default().fg(if current { ACCENT } else { MUTED }),
+                ),
+            ])),
+            row,
+        );
+        app.hit_regions.recent_rows.push((row, index));
     }
 }
 
@@ -4698,12 +4891,36 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let target_inner = target_block.inner(area);
     frame.render_widget(target_block, area);
+    let detail_rows = app
+        .selected
+        .and_then(|index| app.devices.get(index))
+        .map(device_details)
+        .filter(|_| target_inner.height >= 9)
+        .map(|rows| {
+            let join = |labels: &[&str]| {
+                rows.iter()
+                    .filter(|row| labels.contains(&row.label))
+                    .map(|row| format!("{} {}", row.label, row.value))
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            };
+            [join(&["Connection", "Serial"]), join(&["Mounted"])]
+        });
     let target_rows = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
+        Constraint::Length(if detail_rows.is_some() { 2 } else { 0 }),
         Constraint::Length(1),
     ])
     .split(target_inner);
+    if let Some(details) = detail_rows {
+        frame.render_widget(
+            Paragraph::new(details.join("\n"))
+                .style(Style::default().fg(MUTED))
+                .wrap(Wrap { trim: true }),
+            target_rows[2],
+        );
+    }
     frame.render_widget(
         Paragraph::new(removable_media_status(&app.devices)).style(Style::default().fg(ACCENT)),
         target_rows[0],
@@ -4725,7 +4942,7 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(
         Paragraph::new("Confirm the physical drive · erasure starts only after review")
             .style(Style::default().fg(MUTED)),
-        target_rows[2],
+        target_rows[3],
     );
     app.hit_regions.device_rows = (0..app.devices.len())
         .filter_map(|index| {
@@ -4965,7 +5182,7 @@ fn advanced_height(width: u16) -> u16 {
 }
 
 fn workspace_height(width: u16) -> u16 {
-    if width >= 72 { 10 } else { 18 }
+    if width >= 72 { 13 } else { 24 }
 }
 
 fn catalog_min_height(width: u16) -> u16 {
@@ -5120,8 +5337,8 @@ mod layout_tests {
 
     #[test]
     fn compact_cards_do_not_stretch_with_terminal_height() {
-        assert_eq!(workspace_height(120), 10);
-        assert_eq!(workspace_height(70), 18);
+        assert_eq!(workspace_height(120), 13);
+        assert_eq!(workspace_height(70), 24);
         assert_eq!(
             centered_button_area(Rect::new(10, 4, 14, 20)),
             Rect::new(10, 12, 14, 3)
@@ -5219,5 +5436,77 @@ mod layout_tests {
         assert_eq!(value["data"]["phase"], "Writing");
         assert_eq!(value["data"]["completed"], 25);
         assert_eq!(value["data"]["total"], 100);
+    }
+}
+
+#[cfg(test)]
+mod workspace_render_tests {
+    use super::*;
+    use bootable_core::{DeviceId, MountPoint, Preferences};
+    use ratatui::backend::TestBackend;
+
+    fn render(app: &mut App, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
+        terminal.draw(|frame| draw(frame, app)).expect("draw");
+        let buffer = terminal.backend().buffer();
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn app_with_drive() -> App {
+        let mut app = App::load(Bootable::native(), None, Picker::halfblocks());
+        app.preferences = Preferences::default();
+        app.devices = vec![Device {
+            id: DeviceId::new("usb-1"),
+            path: PathBuf::from("/dev/sdz"),
+            vendor: Some("Acme".into()),
+            model: Some("Stick".into()),
+            serial: Some("ABCDEF123456".into()),
+            transport: Some("usb".into()),
+            capacity: 16 * 1024 * 1024 * 1024,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: vec![MountPoint {
+                device: PathBuf::from("/dev/sdz1"),
+                path: PathBuf::from("/run/media/u/STICK"),
+            }],
+        }];
+        app.selected = Some(0);
+        app
+    }
+
+    #[test]
+    fn selected_drive_details_and_empty_recents_are_visible() {
+        let mut app = app_with_drive();
+        let screen = render(&mut app, 130, 40);
+        assert!(screen.contains("Connection usb"), "{screen}");
+        assert!(screen.contains("…3456"), "{screen}");
+        assert!(screen.contains("/run/media/u/STICK"), "{screen}");
+        assert!(screen.contains("Images you use appear here"), "{screen}");
+    }
+
+    #[test]
+    fn unselected_drive_shows_no_details() {
+        let mut app = app_with_drive();
+        app.selected = None;
+        let screen = render(&mut app, 130, 40);
+        assert!(!screen.contains("…3456"), "{screen}");
+    }
+
+    #[test]
+    fn guide_lists_every_shared_action() {
+        let mut app = app_with_drive();
+        app.help_open = true;
+        let screen = render(&mut app, 130, 40);
+        for section in HELP_SECTIONS {
+            assert!(screen.contains(&section.title.to_uppercase()), "{screen}");
+        }
     }
 }

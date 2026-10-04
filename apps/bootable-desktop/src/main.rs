@@ -7,11 +7,11 @@ use bootable_core::{
     BadBlockCheck, Bootable, CacheMode, CatalogFacet, CatalogState, ChecksumAlgorithm, Device,
     DiscoverySession, DiscoverySource, DistributionBundle, DistributionDetails,
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
-    ImageKind, ImageReport, IsoRelease, ManagedDownloadSession, OperationState, PiCatalog, PiImage,
-    Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, WindowsPartitionScheme,
-    WorkspaceStepState, WriteCompletion, WriteOptions, catalog_search_summary,
-    distribution_matches_query, format_bytes, removable_media_status, review_readiness,
-    target_eligibility_label, workspace_progress,
+    HELP_INTRO, HELP_SECTIONS, ImageKind, ImageReport, IsoRelease, ManagedDownloadSession,
+    OperationState, PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness,
+    ReviewedWriteSession, WindowsPartitionScheme, WorkspaceStepState, WriteCompletion,
+    WriteOptions, catalog_search_summary, device_details, distribution_matches_query, format_bytes,
+    removable_media_status, review_readiness, target_eligibility_label, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -29,6 +29,19 @@ use gpui_component::{
 };
 use gpui_http_client::{AsyncBody, HttpClient, Url, http};
 
+actions!(
+    bootable,
+    [
+        OpenImage,
+        ToggleDiscover,
+        RefreshDrives,
+        ReviewPlan,
+        ToggleHelp,
+        CloseOverlay
+    ]
+);
+
+const KEY_CONTEXT: &str = "BootableWorkspace";
 const DEVICE_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const DOWNLOAD_SCAN_INTERVAL: Duration = Duration::from_secs(5);
 const BRAND_MARK_SVG: &[u8] = include_bytes!("../../../assets/bootable-mark.svg");
@@ -245,6 +258,9 @@ struct BootableView {
     download_session: ManagedDownloadSession,
     downloads_open: bool,
     write_session: ReviewedWriteSession,
+    preferences: Preferences,
+    help_open: bool,
+    focus_handle: FocusHandle,
     status: String,
 }
 
@@ -345,16 +361,19 @@ impl BootableView {
         };
         Self::schedule_device_scan(cx);
         Self::schedule_download_scan(cx);
+        let preferences = Preferences::load();
+        let focus_handle = cx.focus_handle();
+        window.focus(&focus_handle);
         let view = Self {
             engine,
             image: None,
             image_loading: false,
             devices,
             selected_device: None,
-            browse_directory: None,
+            browse_directory: preferences.image_directory(),
             options: WriteOptions::default(),
             advanced: false,
-            checksum_algorithm: ChecksumAlgorithm::Sha256,
+            checksum_algorithm: preferences.checksum_algorithm,
             catalog_open: false,
             discovery_session: DiscoverySession::default(),
             distributions: Vec::new(),
@@ -378,6 +397,9 @@ impl BootableView {
             download_session: ManagedDownloadSession::default(),
             downloads_open: false,
             write_session: ReviewedWriteSession::default(),
+            preferences,
+            help_open: false,
+            focus_handle,
             status,
         };
         Self::schedule_initial_catalog_load(cx);
@@ -967,7 +989,9 @@ impl BootableView {
         let destination = job.destination.clone();
         match self.download_session.use_completed(&self.engine, id) {
             Ok(report) => {
-                self.browse_directory = destination.parent().map(std::path::PathBuf::from);
+                self.preferences.remember_image(&report);
+                self.save_preferences();
+                self.browse_directory = self.preferences.image_directory();
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
@@ -1245,42 +1269,73 @@ impl BootableView {
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
-        let selected = dialog.pick_file();
-        if let Some(path) = selected {
-            self.image_loading = true;
-            self.status =
-                "Inspecting image • compressed sources are measured after expansion…".into();
+        if let Some(path) = dialog.pick_file() {
+            self.inspect_image_path(path, cx);
+        }
+    }
+
+    fn inspect_image_path(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        if self.image_loading {
+            self.status = "Image inspection is already running".into();
             cx.notify();
-            let inspected_path = path.clone();
-            let task = cx.background_executor().spawn(async move {
-                Bootable::native()
-                    .inspect_image(&inspected_path)
-                    .map_err(|error| error.to_string())
-            });
-            cx.spawn(async move |view, cx| {
-                let result = task.await;
-                if let Some(view) = view.upgrade() {
-                    view.update(cx, |view, cx| {
-                        view.image_loading = false;
-                        match result {
-                            Ok(report) => {
-                                view.status = format!("Recognized {}", report.kind);
-                                view.browse_directory = path.parent().map(std::path::PathBuf::from);
-                                view.image = Some(report);
-                                view.advanced = false;
-                            }
-                            Err(error) => {
-                                view.image = None;
-                                view.advanced = false;
-                                view.status = error;
-                            }
+            return;
+        }
+        self.image_loading = true;
+        self.status = "Inspecting image • compressed sources are measured after expansion…".into();
+        cx.notify();
+        let inspected_path = path.clone();
+        let task = cx.background_executor().spawn(async move {
+            Bootable::native()
+                .inspect_image(&inspected_path)
+                .map_err(|error| error.to_string())
+        });
+        cx.spawn(async move |view, cx| {
+            let result = task.await;
+            if let Some(view) = view.upgrade() {
+                view.update(cx, |view, cx| {
+                    view.image_loading = false;
+                    match result {
+                        Ok(report) => {
+                            view.status = format!("Recognized {}", report.kind);
+                            view.preferences.remember_image(&report);
+                            view.save_preferences();
+                            view.browse_directory = view.preferences.image_directory();
+                            view.image = Some(report);
+                            view.advanced = false;
                         }
-                        cx.notify();
-                    })
-                    .ok();
-                }
-            })
-            .detach();
+                        Err(error) => {
+                            view.preferences.forget_image(&path);
+                            view.save_preferences();
+                            view.image = None;
+                            view.advanced = false;
+                            view.status = error;
+                        }
+                    }
+                    cx.notify();
+                })
+                .ok();
+            }
+        })
+        .detach();
+    }
+
+    fn save_preferences(&mut self) {
+        if let Err(error) = self.preferences.save() {
+            self.status = format!("Preferences were not saved: {error}");
+        }
+    }
+
+    fn toggle_help(&mut self, cx: &mut Context<Self>) {
+        self.help_open = !self.help_open;
+        cx.notify();
+    }
+
+    fn close_overlay(&mut self, cx: &mut Context<Self>) {
+        if self.help_open {
+            self.help_open = false;
+            cx.notify();
+        } else if self.catalog_open && !self.write_session.confirmation_open() {
+            self.toggle_catalog(cx);
         }
     }
 
@@ -1367,6 +1422,8 @@ impl BootableView {
     fn cycle_checksum_algorithm(&mut self, cx: &mut Context<Self>) {
         self.checksum_algorithm = self.checksum_algorithm.next();
         self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.preferences.checksum_algorithm = self.checksum_algorithm;
+        self.save_preferences();
         cx.notify();
     }
 
@@ -3460,6 +3517,82 @@ impl BootableView {
                             .on_click(cx.listener(|this, _, _, cx| this.choose_image(cx))),
                     ),
             )
+            .child(self.recent_images_row(cx))
+    }
+
+    fn recent_images_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let recents = self.preferences.recent_images();
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .when(recents.is_empty(), |row| {
+                row.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(0x6f8299))
+                        .child("Images you use appear here for one-click reuse"),
+                )
+            })
+            .when(!recents.is_empty(), |row| {
+                row.child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(0x8fa4bd))
+                        .child("RECENT IMAGES"),
+                )
+                .children(
+                    recents
+                        .into_iter()
+                        .take(3)
+                        .enumerate()
+                        .map(|(index, recent)| {
+                            let path = recent.path.clone();
+                            let current = self
+                                .image
+                                .as_ref()
+                                .is_some_and(|image| image.path == recent.path);
+                            div()
+                                .id(("recent-image", index))
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .gap_3()
+                                .px_3()
+                                .py_1()
+                                .rounded_md()
+                                .border_1()
+                                .border_color(rgb(if current { 0x36d3b4 } else { 0x1f2c3c }))
+                                .bg(rgb(0x0d151f))
+                                .when(!self.image_loading, |item| {
+                                    item.cursor_pointer().on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            this.inspect_image_path(path.clone(), cx)
+                                        },
+                                    ))
+                                })
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .overflow_hidden()
+                                        .text_sm()
+                                        .text_color(rgb(0xc4d2e2))
+                                        .child(recent.file_name()),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(if current { 0x5bd7c0 } else { 0x8fa4bd }))
+                                        .child(if current {
+                                            "In use".to_string()
+                                        } else {
+                                            format_bytes(recent.size)
+                                        }),
+                                )
+                        }),
+                )
+            })
     }
 
     fn advanced_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3852,6 +3985,148 @@ impl BootableView {
             .into_any_element()
     }
 
+    fn selected_device_details(&self) -> Option<impl IntoElement> {
+        let device = self.devices.get(self.selected_device?)?;
+        let rows = device_details(device)
+            .into_iter()
+            .map(|row| {
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .w(px(84.))
+                            .flex_shrink_0()
+                            .text_xs()
+                            .text_color(rgb(0x6f8299))
+                            .child(row.label),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(0xc4d2e2))
+                            .child(row.value),
+                    )
+            })
+            .collect::<Vec<_>>();
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .p_3()
+                .rounded_lg()
+                .border_1()
+                .border_color(rgb(0x1f2c3c))
+                .bg(rgb(0x0d151f))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(0x8fa4bd))
+                        .child("SELECTED DRIVE"),
+                )
+                .children(rows),
+        )
+    }
+
+    fn help_overlay(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let sections = HELP_SECTIONS
+            .iter()
+            .map(|section| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(0x5bd7c0))
+                            .child(section.title.to_uppercase()),
+                    )
+                    .children(section.entries.iter().map(|entry| {
+                        div()
+                            .flex()
+                            .items_start()
+                            .justify_between()
+                            .gap_4()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .child(div().text_sm().child(entry.action))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0x8fa4bd))
+                                            .child(entry.detail),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_sm()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(0xe5b95f))
+                                    .child(entry.desktop),
+                            )
+                    }))
+            })
+            .collect::<Vec<_>>();
+        div()
+            .id("help-backdrop")
+            .absolute()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p_6()
+            .bg(rgba(0x000000cc))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.help_open = false;
+                    cx.notify();
+                }),
+            )
+            .child(
+                div()
+                    .id("help-panel")
+                    .w_full()
+                    .max_w(px(640.))
+                    .max_h(relative(0.92))
+                    .overflow_y_scrollbar()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .p_5()
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(rgb(0x243244))
+                    .bg(rgb(0x111923))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_xl().font_weight(FontWeight::BOLD).child("Guide"))
+                            .child(
+                                Button::new("close-help")
+                                    .label("Close")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.help_open = false;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(div().text_sm().text_color(rgb(0xa9b8c9)).child(HELP_INTRO))
+                    .children(sections),
+            )
+    }
+
     fn download_history_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self
             .download_session
@@ -4158,6 +4433,14 @@ impl BootableView {
                         )
                     })
                     .child(
+                        Button::new("guide")
+                            .compact()
+                            .label("?")
+                            .tooltip("Guide and shortcuts (F1)")
+                            .when(self.help_open, |button| button.primary())
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_help(cx))),
+                    )
+                    .child(
                         Button::new("refresh")
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
@@ -4316,6 +4599,7 @@ impl BootableView {
                     .overflow_y_scrollbar()
                     .child(self.target_cards(cx)),
             )
+            .children(self.selected_device_details())
             .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
                 "Confirm the physical drive before continuing · erasure starts only after review",
             ))
@@ -4460,6 +4744,28 @@ impl Render for BootableView {
         div()
             .size_full()
             .relative()
+            .key_context(KEY_CONTEXT)
+            .track_focus(&self.focus_handle)
+            .on_action(cx.listener(|this, _: &OpenImage, _, cx| {
+                if !this.write_session.is_reviewing() {
+                    this.choose_image(cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDiscover, _, cx| {
+                if !this.write_session.is_reviewing() {
+                    this.toggle_catalog(cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &RefreshDrives, _, cx| {
+                this.refresh_devices(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ReviewPlan, _, cx| {
+                if !this.write_session.is_reviewing() {
+                    this.preview_plan(cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &ToggleHelp, _, cx| this.toggle_help(cx)))
+            .on_action(cx.listener(|this, _: &CloseOverlay, _, cx| this.close_overlay(cx)))
             .bg(rgb(0x0b1119))
             .text_color(rgb(0xe8f0f8))
             .flex()
@@ -4587,6 +4893,10 @@ impl Render for BootableView {
             .when(self.write_session.confirmation_open(), |root| {
                 root.child(self.write_confirmation_modal(cx))
             })
+            .when(
+                self.help_open && !self.write_session.confirmation_open(),
+                |root| root.child(self.help_overlay(cx)),
+            )
     }
 }
 
@@ -4681,6 +4991,15 @@ fn main() {
                 cx.set_http_client(Arc::new(client));
             }
             gpui_component::init(cx);
+            cx.bind_keys([
+                KeyBinding::new("secondary-o", OpenImage, Some(KEY_CONTEXT)),
+                KeyBinding::new("secondary-g", ToggleDiscover, Some(KEY_CONTEXT)),
+                KeyBinding::new("secondary-r", RefreshDrives, Some(KEY_CONTEXT)),
+                KeyBinding::new("secondary-p", ReviewPlan, Some(KEY_CONTEXT)),
+                KeyBinding::new("f1", ToggleHelp, Some(KEY_CONTEXT)),
+                KeyBinding::new("secondary-/", ToggleHelp, Some(KEY_CONTEXT)),
+                KeyBinding::new("escape", CloseOverlay, Some(KEY_CONTEXT)),
+            ]);
             gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
             {
                 let theme = gpui_component::Theme::global_mut(cx);

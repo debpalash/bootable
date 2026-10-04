@@ -5,12 +5,14 @@ mod discovery_session;
 mod download;
 mod download_session;
 mod error;
+mod guide;
 mod inspect;
 mod model;
 mod operation;
 mod pi_catalog;
 mod plan;
 mod platform;
+mod preferences;
 #[cfg(target_os = "linux")]
 mod privilege;
 #[cfg(any(target_os = "macos", all(test, unix)))]
@@ -38,6 +40,7 @@ pub use download_session::{
     DownloadCompletion, DownloadLaunch, DownloadRequest, ManagedDownloadSession,
 };
 pub use error::{Error, Result};
+pub use guide::{DetailRow, HELP_INTRO, HELP_SECTIONS, HelpEntry, HelpSection, device_details};
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,
@@ -48,6 +51,7 @@ pub use model::{
 };
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};
+pub use preferences::{Preferences, RecentImage};
 pub use privileged_protocol::serve_privileged_writer;
 pub use windows::{host_regional_options, suggested_account_name};
 pub use write_session::{ReviewedWriteSession, WriteCompletion, WriteLaunch};
