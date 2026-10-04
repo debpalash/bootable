@@ -342,10 +342,33 @@ fn collect_mounts(node: &LsblkNode) -> Vec<MountPoint> {
 }
 
 fn refresh_target(plan: &WritePlan) -> Result<Device> {
-    let target = discover_devices()?
+    select_refreshed_target(discover_devices()?, plan)
+}
+
+/// Picks the device the plan was reviewed for from a fresh scan. The Linux id is
+/// the drive serial, which cheap sticks often share, so the node path must also
+/// match and an id that now matches several devices is refused.
+fn select_refreshed_target(devices: Vec<Device>, plan: &WritePlan) -> Result<Device> {
+    let mut matches = devices
         .into_iter()
-        .find(|device| device.id == plan.target.id)
+        .filter(|device| device.id == plan.target.id)
+        .collect::<Vec<_>>();
+    if matches.len() > 1 {
+        return Err(Error::StalePlan(format!(
+            "{} connected drives report the same identity; unplug the others and review again",
+            matches.len()
+        )));
+    }
+    let target = matches
+        .pop()
         .ok_or_else(|| Error::DeviceNotFound(plan.target.id.to_string()))?;
+    if target.path != plan.target.path {
+        return Err(Error::StalePlan(format!(
+            "the drive moved from {} to {}; review the plan again",
+            plan.target.path.display(),
+            target.path.display()
+        )));
+    }
     if target.capacity != plan.target.capacity {
         return Err(Error::StalePlan(format!(
             "capacity changed from {} to {} bytes",
@@ -1053,6 +1076,55 @@ mod tests {
 
     use super::*;
     use crate::model::{CompressedImageKind, ImageCompression, ImageKind, ImageReport};
+
+    fn reviewed_plan(target: Device) -> WritePlan {
+        WritePlan {
+            image: ImageReport {
+                path: PathBuf::from("image.iso"),
+                size: 1,
+                kind: ImageKind::HybridIso,
+                volume_label: None,
+                warnings: Vec::new(),
+            },
+            target,
+            strategy: crate::model::WriteStrategy::RawVerified,
+            options: Default::default(),
+            steps: Vec::new(),
+            required_tools: Vec::new(),
+            confirmation_phrase: String::new(),
+        }
+    }
+
+    fn stick(path: &str) -> Device {
+        Device {
+            id: crate::model::DeviceId::new("serial:SAMESERIAL"),
+            path: PathBuf::from(path),
+            vendor: None,
+            model: None,
+            serial: Some("SAMESERIAL".into()),
+            transport: Some("usb".into()),
+            capacity: 16 * 1024 * 1024 * 1024,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn refresh_refuses_a_different_stick_that_shares_the_serial() {
+        let plan = reviewed_plan(stick("/dev/sdc"));
+        // The reviewed node vanished; a look-alike stick sits at another node.
+        let error = select_refreshed_target(vec![stick("/dev/sdb")], &plan).expect_err("moved");
+        assert!(matches!(error, Error::StalePlan(_)), "{error}");
+        // Both look-alikes are connected: never guess which one was reviewed.
+        let error = select_refreshed_target(vec![stick("/dev/sdb"), stick("/dev/sdc")], &plan)
+            .expect_err("ambiguous");
+        assert!(matches!(error, Error::StalePlan(_)), "{error}");
+        // The reviewed stick alone still passes.
+        let target = select_refreshed_target(vec![stick("/dev/sdc")], &plan).expect("same");
+        assert_eq!(target.path, PathBuf::from("/dev/sdc"));
+    }
 
     #[test]
     fn partition_names_handle_sd_and_nvme_devices() {
