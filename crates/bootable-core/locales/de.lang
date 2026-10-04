@@ -30,6 +30,9 @@ help.review.plan.detail = Öffnet den Plan; es wird noch nichts geschrieben
 help.review.stop.action = Schreibvorgang stoppen
 help.review.stop.detail = Hält an der nächsten sicheren Stelle an
 help.review.stop.desktop = Schaltfläche „Stopp“
+help.review.firmware.action = Boot-Firmware (Windows-Medium)
+help.review.firmware.detail = Experimentell: fügt Legacy-BIOS-Start hinzu; erfordert das MBR-Schema
+help.review.firmware.desktop = Auswahl der Boot-Firmware
 
 help.general.toggle.action = Diese Anleitung ein- oder ausblenden
 help.general.toggle.detail = Jederzeit erneut öffnen

@@ -39,6 +39,9 @@ help.review.plan.detail = Open the plan; nothing is written yet
 help.review.stop.action = Stop a write
 help.review.stop.detail = Stops at the next safe boundary
 help.review.stop.desktop = Stop button
+help.review.firmware.action = Boot firmware (Windows media)
+help.review.firmware.detail = Experimental: add legacy BIOS boot; needs the MBR scheme
+help.review.firmware.desktop = Boot firmware select
 
 # Guide: General
 help.general.toggle.action = Show or hide this guide

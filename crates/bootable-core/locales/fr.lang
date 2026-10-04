@@ -32,6 +32,9 @@ help.review.plan.detail = Ouvre le plan ; rien n'est encore écrit
 help.review.stop.action = Arrêter une écriture
 help.review.stop.detail = S'arrête au prochain point sûr
 help.review.stop.desktop = Bouton Arrêter
+help.review.firmware.action = Firmware de démarrage (média Windows)
+help.review.firmware.detail = Expérimental : ajoute le démarrage BIOS hérité ; exige le schéma MBR
+help.review.firmware.desktop = Sélecteur de firmware de démarrage
 
 help.general.toggle.action = Afficher ou masquer ce guide
 help.general.toggle.detail = Rouvrez-le à tout moment

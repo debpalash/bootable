@@ -31,6 +31,9 @@ help.review.plan.detail = プランを開きます。まだ何も書き込まれ
 help.review.stop.action = 書き込みを停止
 help.review.stop.detail = 次の安全な区切りで停止します
 help.review.stop.desktop = 「停止」ボタン
+help.review.firmware.action = ブートファームウェア（Windowsメディア）
+help.review.firmware.detail = 実験的：レガシーBIOS起動を追加します。MBR方式が必要です
+help.review.firmware.desktop = ブートファームウェアの選択
 
 help.general.toggle.action = このガイドを表示または非表示
 help.general.toggle.detail = いつでも再度開けます

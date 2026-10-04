@@ -31,6 +31,9 @@ help.review.plan.detail = 打开计划；目前尚未写入任何内容
 help.review.stop.action = 停止写入
 help.review.stop.detail = 在下一个安全点停止
 help.review.stop.desktop = “停止”按钮
+help.review.firmware.action = 引导固件（Windows 介质）
+help.review.firmware.detail = 实验性：添加传统 BIOS 引导；需要 MBR 方案
+help.review.firmware.desktop = 引导固件选择
 
 help.general.toggle.action = 显示或隐藏本指南
 help.general.toggle.detail = 可随时重新打开

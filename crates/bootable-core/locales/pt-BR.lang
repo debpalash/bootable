@@ -30,6 +30,9 @@ help.review.plan.detail = Abre o plano; nada foi gravado ainda
 help.review.stop.action = Interromper uma gravação
 help.review.stop.detail = Para no próximo ponto seguro
 help.review.stop.desktop = Botão Parar
+help.review.firmware.action = Firmware de inicialização (mídia Windows)
+help.review.firmware.detail = Experimental: adiciona boot BIOS legado; exige o esquema MBR
+help.review.firmware.desktop = Seletor de firmware de inicialização
 
 help.general.toggle.action = Mostrar ou ocultar este guia
 help.general.toggle.detail = Reabra a qualquer momento

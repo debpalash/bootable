@@ -31,6 +31,13 @@ All notable changes to Bootable are documented here.
   step.
 - Fixed the Linux release job so the packaged GUI is smoke-tested under a software Vulkan device.
 - Published to the AUR as `bootable-tui` and `bootable-gui` (source builds from this release).
+- Added localization: a shared message catalog with English, Spanish, French, German, Brazilian
+  Portuguese, Russian, Japanese, and Simplified Chinese (machine-quality drafts that need native
+  review), a saved language setting, a header language select (GUI) and the `L` key (TUI). Only
+  text produced by the shared core is translated so far; most app-owned UI text is still English.
+- Added an experimental "BIOS + UEFI (CSM)" boot-firmware option for MBR Windows installer media on
+  Linux (GUI select, TUI `f` key, `--windows-boot-firmware` CLI flag). It is tested against a stub
+  `bootmgr` in QEMU only and has not been verified with a real Windows installer or real hardware.
 
 ## 0.1.1 — 2026-08-27
 

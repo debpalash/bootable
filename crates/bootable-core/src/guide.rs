@@ -173,6 +173,12 @@ pub const HELP_SECTIONS: &[HelpSection] = &[
                 "Stop button",
                 "x",
             ),
+            entry(
+                "Boot firmware (Windows media)",
+                "Experimental: add legacy BIOS boot; needs the MBR scheme",
+                "Boot firmware select",
+                "f",
+            ),
         ],
     },
     HelpSection {
@@ -296,6 +302,12 @@ const REVIEW_ENTRIES: &[EntrySpec] = &[
         Message::HelpReviewStopDetail,
         Text(Message::HelpReviewStopDesktop),
         Keys("x"),
+    ),
+    spec(
+        Message::HelpReviewFirmwareAction,
+        Message::HelpReviewFirmwareDetail,
+        Text(Message::HelpReviewFirmwareDesktop),
+        Keys("f"),
     ),
 ];
 

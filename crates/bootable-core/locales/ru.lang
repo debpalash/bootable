@@ -31,6 +31,9 @@ help.review.plan.detail = Открывает план; пока ничего н�
 help.review.stop.action = Остановить запись
 help.review.stop.detail = Останавливается в ближайшей безопасной точке
 help.review.stop.desktop = Кнопка «Остановить»
+help.review.firmware.action = Прошивка загрузки (носитель Windows)
+help.review.firmware.detail = Экспериментально: добавляет загрузку через устаревший BIOS; нужна схема MBR
+help.review.firmware.desktop = Выбор прошивки загрузки
 
 help.general.toggle.action = Показать или скрыть это руководство
 help.general.toggle.detail = Его можно открыть снова в любой момент
