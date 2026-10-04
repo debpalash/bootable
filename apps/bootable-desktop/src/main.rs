@@ -9,7 +9,7 @@ use bootable_core::{
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
     ImageKind, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message, OperationState,
     PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
+    Strings, WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
     WriteCompletion, WriteOptions, catalog_search_summary, device_details_in,
     distribution_matches_query, format_bytes, help_intro, help_sections, removable_media_status_in,
     review_readiness, target_eligibility_label_in, workspace_progress,
@@ -348,6 +348,23 @@ fn choose_partition_scheme(options: &mut WriteOptions, scheme: WindowsPartitionS
 }
 
 impl BootableView {
+    /// The catalog bound to the active language. Cheap (`Copy`); take it at the
+    /// top of every render function and thread it into helpers.
+    fn t(&self) -> Strings {
+        self.locale.strings()
+    }
+
+    /// The setup-options toggle caption (`compact` for the narrow header).
+    fn advanced_label(&self, compact: bool) -> &'static str {
+        let t = self.t();
+        t.text(match (self.advanced, compact) {
+            (true, false) => Message::ActionHideOptions,
+            (false, false) => Message::ActionSetupOptions,
+            (true, true) => Message::ActionHideOptionsCompact,
+            (false, true) => Message::ActionSetupOptionsCompact,
+        })
+    }
+
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let engine = Bootable::native();
         let catalog_search = cx.new(|cx| {
@@ -1367,7 +1384,7 @@ impl BootableView {
             return;
         }
         let mut dialog = rfd::FileDialog::new().add_filter(
-            "Boot images",
+            self.t().text(Message::SourceDialogTitle),
             &[
                 "iso", "img", "raw", "xz", "gz", "gzip", "zst", "zstd", "bz2", "bzip2",
             ],
@@ -1531,7 +1548,10 @@ impl BootableView {
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Raw drive image", &["img", "raw", "dd"])
+            .add_filter(
+                self.t().text(Message::SourceDialogFilterBackup),
+                &["img", "raw", "dd"],
+            )
             .set_file_name("bootable-backup.img");
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
@@ -3587,6 +3607,7 @@ impl BootableView {
     }
 
     fn source_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let details = self
             .image
             .as_ref()
@@ -3598,7 +3619,7 @@ impl BootableView {
                     format_bytes(image.size)
                 )
             })
-            .unwrap_or_else(|| "ISO, IMG, RAW, or compressed disk image".into());
+            .unwrap_or_else(|| t.text(Message::SourceFormats).into());
         div()
             .flex()
             .flex_1()
@@ -3636,7 +3657,7 @@ impl BootableView {
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(0xe8f0f8))
                             .child(Icon::empty().path("ui/image.svg"))
-                            .child("Choose an image"),
+                            .child(t.text(Message::SourceTitle)),
                     ),
             )
             .child(
@@ -3655,6 +3676,8 @@ impl BootableView {
                         div()
                             .flex()
                             .flex_col()
+                            .flex_1()
+                            .min_w(px(0.))
                             .gap_2()
                             .child(div().text_sm().text_color(rgb(0xa9b8c9)).child(details))
                             .when(self.image.is_some(), |details| {
@@ -3663,14 +3686,14 @@ impl BootableView {
                                         .text_xs()
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .text_color(rgb(0x5bd7c0))
-                                        .child("✓ Inspected"),
+                                        .child(format!("✓ {}", t.text(Message::SourceInspected))),
                                 )
                             })
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x6f8299))
-                                    .child("The image is inspected before any write is allowed"),
+                                    .child(t.text(Message::SourceHint)),
                             ),
                     )
                     .child(
@@ -3678,13 +3701,13 @@ impl BootableView {
                             .primary()
                             .disabled(self.image_loading)
                             .icon(Icon::empty().path("ui/image.svg"))
-                            .label(if self.image_loading {
-                                "Inspecting…"
+                            .label(t.text(if self.image_loading {
+                                Message::ActionInspecting
                             } else if self.image.is_some() {
-                                "Change"
+                                Message::ActionChange
                             } else {
-                                "Browse"
-                            })
+                                Message::ActionBrowse
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.choose_image(cx))),
                     ),
             )
@@ -3692,6 +3715,7 @@ impl BootableView {
     }
 
     fn recent_images_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let recents = self.preferences.recent_images();
         div()
             .flex()
@@ -3702,7 +3726,7 @@ impl BootableView {
                     div()
                         .text_xs()
                         .text_color(rgb(0x6f8299))
-                        .child("Images you use appear here for one-click reuse"),
+                        .child(t.text(Message::SourceRecentEmpty)),
                 )
             })
             .when(!recents.is_empty(), |row| {
@@ -3711,7 +3735,7 @@ impl BootableView {
                         .text_xs()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(rgb(0x8fa4bd))
-                        .child("RECENT IMAGES"),
+                        .child(t.heading(Message::SourceRecentTitle)),
                 )
                 .children(
                     recents
@@ -3756,7 +3780,7 @@ impl BootableView {
                                         .text_xs()
                                         .text_color(rgb(if current { 0x5bd7c0 } else { 0x8fa4bd }))
                                         .child(if current {
-                                            "In use".to_string()
+                                            t.text(Message::SourceRecentInUse).to_string()
                                         } else {
                                             format_bytes(recent.size)
                                         }),
@@ -4078,6 +4102,7 @@ impl BootableView {
     }
 
     fn target_cards(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         if self.devices.is_empty() {
             return div()
                 .p_4()
@@ -4087,7 +4112,7 @@ impl BootableView {
                 .bg(rgb(0x0d151f))
                 .text_sm()
                 .text_color(rgb(0x8fa4bd))
-                .child("Connect a removable USB or SD drive, then refresh")
+                .child(t.text(Message::TargetEmpty))
                 .into_any_element();
         }
         let cards = self
@@ -4114,7 +4139,7 @@ impl BootableView {
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected_device = Some(index);
-                                this.status = "Target selected · confirm the physical drive before reviewing the erase plan".into();
+                                this.status = this.t().text(Message::StatusTargetSelected).into();
                                 cx.notify();
                             }))
                     })
@@ -4160,11 +4185,11 @@ impl BootableView {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(if blocked { 0xf29a9a } else { 0x8fc7ff }))
                                     .child(if blocked {
-                                        "Blocked"
+                                        t.text(Message::ActionBlocked).to_string()
                                     } else if selected {
-                                        "Selected"
+                                        t.text(Message::ActionSelected).to_string()
                                     } else {
-                                        "Select →"
+                                        format!("{} →", t.text(Message::ActionSelect))
                                     }),
                             ),
                     )
@@ -4182,6 +4207,7 @@ impl BootableView {
     fn selected_device_details(&self) -> Option<impl IntoElement> {
         let device = self.devices.get(self.selected_device?)?;
         let locale = self.locale;
+        let t = self.t();
         // Translated labels (German, Russian) run longer than the English ones.
         let label_width = if locale.is_source() { 84. } else { 112. };
         let rows = device_details_in(locale, device)
@@ -4222,13 +4248,14 @@ impl BootableView {
                         .text_xs()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(rgb(0x8fa4bd))
-                        .child("SELECTED DRIVE"),
+                        .child(t.heading(Message::TargetSelectedDrive)),
                 )
                 .children(rows),
         )
     }
 
     fn help_overlay(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let sections = help_sections(self.locale)
             .iter()
             .map(|section| {
@@ -4311,10 +4338,15 @@ impl BootableView {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_xl().font_weight(FontWeight::BOLD).child("Guide"))
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(t.text(Message::GuideTitle)),
+                            )
                             .child(
                                 Button::new("close-help")
-                                    .label("Close")
+                                    .label(t.text(Message::ActionClose))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.help_open = false;
                                         cx.notify();
@@ -4525,11 +4557,9 @@ impl BootableView {
     }
 
     fn header_bar(&self, cx: &mut Context<Self>, compact: bool) -> impl IntoElement {
-        let advanced_label = if self.advanced {
-            "Hide options"
-        } else {
-            "Setup options"
-        };
+        let t = self.t();
+        let advanced_label = self.advanced_label(compact);
+        let job_count = self.download_session.jobs().len();
         div()
             .flex()
             .items_center()
@@ -4579,7 +4609,7 @@ impl BootableView {
                                     div()
                                         .text_xs()
                                         .text_color(rgb(0x7890a8))
-                                        .child("Boot media, written deliberately."),
+                                        .child(t.text(Message::HeaderTagline)),
                                 )
                             }),
                     )
@@ -4592,18 +4622,18 @@ impl BootableView {
                                     .flex_col()
                                     .gap_1()
                                     .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(
-                                        if self.write_session.is_reviewing() {
-                                            "Review write plan"
+                                        t.text(if self.write_session.is_reviewing() {
+                                            Message::ReviewTitle
                                         } else {
-                                            "Create boot media"
-                                        },
+                                            Message::HeaderTitleCreate
+                                        }),
                                     ))
                                     .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                                        if self.write_session.is_reviewing() {
-                                            "Inspect every operation before confirmation."
+                                        t.text(if self.write_session.is_reviewing() {
+                                            Message::HeaderSubtitleReview
                                         } else {
-                                            "Image → removable drive → verified result"
-                                        },
+                                            Message::HeaderSubtitleCreate
+                                        }),
                                     )),
                             )
                     }),
@@ -4621,9 +4651,9 @@ impl BootableView {
                         Button::new("downloads")
                             .icon(Icon::empty().path("ui/download.svg"))
                             .label(if compact {
-                                format!("Jobs · {}", self.download_session.jobs().len())
+                                format!("{} · {job_count}", t.text(Message::ActionDownloadsCompact))
                             } else {
-                                format!("Downloads · {}", self.download_session.jobs().len())
+                                t.format(Message::ActionDownloadsCount, &[("count", &job_count)])
                             })
                             .when(self.downloads_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_downloads(cx))),
@@ -4631,16 +4661,12 @@ impl BootableView {
                     .child(
                         Button::new("catalog")
                             .icon(Icon::empty().path("ui/discover.svg"))
-                            .label(if compact {
-                                if self.catalog_open {
-                                    "Catalog ×"
-                                } else {
-                                    "Discover images"
-                                }
+                            .label(if self.catalog_open && compact {
+                                format!("{} ×", t.text(Message::ActionCatalogCloseCompact))
                             } else if self.catalog_open {
-                                "Close catalog"
+                                t.text(Message::ActionCatalogClose).to_string()
                             } else {
-                                "Discover images"
+                                t.text(Message::ActionDiscover).to_string()
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_catalog(cx))),
                     )
@@ -4648,7 +4674,7 @@ impl BootableView {
                         actions.child(
                             Button::new("advanced")
                                 .icon(Icon::empty().path("ui/settings.svg"))
-                                .label(if compact { "Options" } else { advanced_label })
+                                .label(advanced_label)
                                 .on_click(cx.listener(|this, _, _, cx| this.toggle_advanced(cx))),
                         )
                     })
@@ -4656,7 +4682,7 @@ impl BootableView {
                         Button::new("guide")
                             .compact()
                             .label("?")
-                            .tooltip("Guide and shortcuts (F1)")
+                            .tooltip(t.format(Message::TooltipGuide, &[("shortcut", &"F1")]))
                             .when(self.help_open, |button| button.primary())
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_help(cx))),
                     )
@@ -4665,7 +4691,7 @@ impl BootableView {
                         Button::new("refresh")
                             .compact()
                             .icon(Icon::empty().path("ui/refresh.svg"))
-                            .tooltip("Refresh removable drives")
+                            .tooltip(t.text(Message::TooltipRefreshDrives))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_devices(cx))),
                     ),
             )
@@ -4695,10 +4721,8 @@ impl BootableView {
     }
 
     fn setup_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let bad_blocks = match self.options.bad_block_check.passes() {
-            0 => "Bad blocks off".into(),
-            passes => format!("Bad blocks {passes}x"),
-        };
+        let t = self.t();
+        let bad_blocks = self.options.bad_block_check.label_in(self.locale);
         div()
             .id("setup-summary")
             .flex()
@@ -4719,18 +4743,26 @@ impl BootableView {
                     .items_center()
                     .gap_2()
                     .font_weight(FontWeight::SEMIBOLD)
+                    .flex_shrink_0()
                     .child(Icon::empty().path("ui/settings.svg"))
-                    .child("Setup options"),
+                    .child(t.text(Message::ActionSetupOptions)),
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_right()
                     .text_sm()
                     .text_color(rgb(0x8fa4bd))
-                    .child(format!("Verification on · {bad_blocks}")),
+                    .child(t.format(
+                        Message::OptionsSummaryVerification,
+                        &[("bad_blocks", &bad_blocks)],
+                    )),
             )
     }
 
     fn discovery_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         div()
             .id("discovery-summary")
             .flex()
@@ -4751,18 +4783,23 @@ impl BootableView {
                     .items_center()
                     .gap_2()
                     .font_weight(FontWeight::SEMIBOLD)
+                    .flex_shrink_0()
                     .child(Icon::empty().path("ui/discover.svg"))
-                    .child("Discover images"),
+                    .child(t.text(Message::ActionDiscover)),
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_right()
                     .text_sm()
                     .text_color(rgb(0x8fa4bd))
-                    .child("Browse trusted catalogs · Open →"),
+                    .child(format!("{} →", t.text(Message::DiscoverCollapsedHint))),
             )
     }
 
     fn target_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         div()
             .flex()
             .flex_1()
@@ -4776,8 +4813,11 @@ impl BootableView {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .justify_between()
+                    .gap_x_3()
+                    .gap_y_1()
                     .child(
                         div()
                             .flex()
@@ -4788,6 +4828,7 @@ impl BootableView {
                                     .flex()
                                     .items_center()
                                     .justify_center()
+                                    .flex_shrink_0()
                                     .size(px(28.))
                                     .rounded_full()
                                     .bg(rgb(0x183932))
@@ -4804,7 +4845,7 @@ impl BootableView {
                                     .text_base()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(Icon::empty().path("ui/usb.svg"))
-                                    .child("Choose a drive"),
+                                    .child(t.text(Message::TargetTitle)),
                             ),
                     )
                     .child(
@@ -4822,9 +4863,12 @@ impl BootableView {
                     .child(self.target_cards(cx)),
             )
             .children(self.selected_device_details())
-            .child(div().text_xs().text_color(rgb(0x8fa4bd)).child(
-                "Confirm the physical drive before continuing · erasure starts only after review",
-            ))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x8fa4bd))
+                    .child(t.text(Message::TargetConfirmPhysical)),
+            )
     }
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
