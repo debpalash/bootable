@@ -6,6 +6,7 @@ mod download;
 mod download_session;
 mod error;
 mod inspect;
+mod integrity;
 mod model;
 mod operation;
 mod pi_catalog;
@@ -20,6 +21,7 @@ mod privilege_macos;
 #[cfg_attr(test, allow(dead_code))]
 mod privilege_windows;
 mod privileged_protocol;
+mod signature;
 mod windows;
 mod windows_media;
 mod write_session;
@@ -38,6 +40,7 @@ pub use download_session::{
     DownloadCompletion, DownloadLaunch, DownloadRequest, ManagedDownloadSession,
 };
 pub use error::{Error, Result};
+pub use integrity::IntegrityState;
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,
@@ -49,6 +52,7 @@ pub use model::{
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};
 pub use privileged_protocol::serve_privileged_writer;
+pub use signature::{SignatureProtocol, SignerIdentity};
 pub use windows::{host_regional_options, suggested_account_name};
 pub use write_session::{ReviewedWriteSession, WriteCompletion, WriteLaunch};
 
@@ -209,9 +213,8 @@ impl Bootable {
         destination: &Path,
         control: &OperationControl,
         mut progress: impl FnMut(Progress),
-    ) -> Result<ImageReport> {
-        catalog::download_iso(release, destination, control, &mut progress)?;
-        let publisher_checksum = release.checksum.is_some() || release.checksum_url.is_some();
+    ) -> Result<(ImageReport, IntegrityState)> {
+        let integrity = catalog::download_iso(release, destination, control, &mut progress)?;
         control.checkpoint()?;
         progress(Progress {
             phase: ProgressPhase::Verifying,
@@ -224,19 +227,9 @@ impl Bootable {
             phase: ProgressPhase::Finished,
             completed: report.size,
             total: Some(report.size),
-            message: if publisher_checksum {
-                format!(
-                    "Ready · publisher checksum verified · {}",
-                    report.path.display()
-                )
-            } else {
-                format!(
-                    "Ready · HTTPS transfer and boot structure checked · publisher checksum unavailable · {}",
-                    report.path.display()
-                )
-            },
+            message: integrity.ready_message(&report.path),
         });
-        Ok(report)
+        Ok((report, integrity))
     }
 
     pub fn raspberry_pi_catalog(&self) -> Result<PiCatalog> {
@@ -360,20 +353,28 @@ impl Bootable {
         let (payload, destination) = ledger.begin(id)?;
         let mut recorder = download::ProgressRecorder::new(ledger.clone(), id.to_owned());
         let result = match payload {
-            download::DownloadPayload::Iso(release) => {
-                self.download_iso_payload(&release, &destination, control, |update| {
+            download::DownloadPayload::Iso(release) => self
+                .download_iso_payload(&release, &destination, control, |update| {
                     recorder.record(&update);
                     progress(update);
                 })
-            }
-            download::DownloadPayload::RaspberryPi(image) => {
-                self.download_pi_payload(&image, &destination, control, |update| {
+                .map(|(report, integrity)| (report, Some(integrity.completion_message()))),
+            download::DownloadPayload::RaspberryPi(image) => self
+                .download_pi_payload(&image, &destination, control, |update| {
                     recorder.record(&update);
                     progress(update);
                 })
-            }
+                .map(|report| (report, None)),
         };
-        let ledger_result = ledger.finish(id, result.as_ref().map(|_| ()));
+        let ledger_result = ledger.finish_with_message(
+            id,
+            result.as_ref().map(|_| ()),
+            result
+                .as_ref()
+                .ok()
+                .and_then(|(_, message)| message.as_deref()),
+        );
+        let result = result.map(|(report, _)| report);
         match (result, ledger_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
