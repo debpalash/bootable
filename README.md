@@ -3,9 +3,9 @@
 <p align="center"><strong>Create and verify bootable USB and SD drives.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64.AppImage"><strong>Linux AppImage</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-x86_64-setup.exe"><strong>Windows installer</strong></a> ·
-  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.1/bootable-0.1.1-aarch64.dmg"><strong>macOS DMG</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.4/bootable-0.1.4-x86_64.AppImage"><strong>Linux AppImage</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.4/bootable-0.1.4-x86_64-setup.exe"><strong>Windows installer</strong></a> ·
+  <a href="https://github.com/debpalash/bootable/releases/download/v0.1.4/bootable-0.1.4-aarch64.dmg"><strong>macOS DMG</strong></a> ·
   <a href="https://bootable.palash.dev/download.html">All downloads and checksums</a>
 </p>
 

@@ -9,7 +9,7 @@ export function bootableApp() {
     url: SITE + '/',
     applicationCategory: 'UtilitiesApplication',
     operatingSystem: 'Linux, Windows 10+, macOS (Apple Silicon)',
-    softwareVersion: '0.1.1',
+    softwareVersion: '0.1.4',
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
     isAccessibleForFree: true,
     downloadUrl: SITE + '/download',

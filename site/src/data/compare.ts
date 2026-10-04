@@ -80,7 +80,7 @@ export const bootableGaps = [
   'No general formatting (FAT, NTFS, UDF, exFAT, ext), Windows To Go, or DOS media.',
   'Backup is raw IMG/RAW/DD only; VHD, VHDX, and FFU are planned. Windows RAW backup is unavailable.',
   'Unsigned builds today, and no localization.',
-  'Early-stage software: v0.1.1, with only the latest release supported.',
+  'Early-stage software: v0.1.4, with only the latest release supported.',
 ];
 
 const NA = { text: 'Not checked for this page.' };
