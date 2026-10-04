@@ -8,8 +8,8 @@ use bootable_core::{
     DiscoverySource, DistributionBundle, DistributionDetails, DistributionSummary,
     DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus, ImageKind, ImageReport,
     IsoRelease, Locale, ManagedDownloadSession, Message, OperationState, PiCatalog, PiImage,
-    Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession, Strings,
-    WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
+    Preferences, Progress, ProgressPhase, QuickAccess, ReviewReadiness, ReviewedWriteSession,
+    Strings, WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
     WriteCompletion, WriteOptions, catalog_search_summary, device_details_in,
     distribution_matches_query, format_bytes, help_intro, help_sections, removable_media_status_in,
     review_readiness, target_eligibility_label_in, workspace_progress,
@@ -4572,6 +4572,12 @@ impl BootableView {
     }
 
     fn download_history_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
+        let any_interrupted = self
+            .download_session
+            .jobs()
+            .iter()
+            .any(|job| job.status == DownloadStatus::Interrupted);
         let rows = self
             .download_session
             .jobs()
@@ -4608,6 +4614,7 @@ impl BootableView {
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
                                     .min_w(px(0.))
                                     .child(
                                         div()
@@ -4625,6 +4632,8 @@ impl BootableView {
                             .child(
                                 div()
                                     .flex()
+                                    .flex_wrap()
+                                    .justify_end()
                                     .items_center()
                                     .gap_2()
                                     .child(
@@ -4632,13 +4641,13 @@ impl BootableView {
                                             .text_xs()
                                             .font_weight(FontWeight::BOLD)
                                             .text_color(rgb(status_color))
-                                            .child(job.status.to_string()),
+                                            .child(job.status.label_in(self.locale)),
                                     )
                                     .when(job.status.can_retry(), |actions| {
                                         actions.child(
                                             Button::new(("retry-download", index))
                                                 .compact()
-                                                .label("Retry")
+                                                .label(t.text(Message::DownloadsActionRetryResume))
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.retry_managed_download(
                                                         retry_id.clone(),
@@ -4652,7 +4661,7 @@ impl BootableView {
                                             Button::new(("use-download", index))
                                                 .compact()
                                                 .primary()
-                                                .label("Use")
+                                                .label(t.text(Message::DownloadsActionUseImage))
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.use_managed_download(&use_id, cx)
                                                 })),
@@ -4667,7 +4676,7 @@ impl BootableView {
                                             actions.child(
                                                 Button::new(("remove-download", index))
                                                     .compact()
-                                                    .label("Remove")
+                                                    .label(t.text(Message::DownloadsActionRemove))
                                                     .on_click(cx.listener(
                                                         move |this, _, _, cx| {
                                                             this.remove_managed_download(
@@ -4700,7 +4709,12 @@ impl BootableView {
                         div()
                             .text_xs()
                             .text_color(rgb(0x8fa4bd))
-                            .child(job.error.clone().unwrap_or_else(|| job.message.clone())),
+                            // The job message and error are core text, shown as received.
+                            .child(format!(
+                                "{} · {}",
+                                job.kind.label_in(self.locale),
+                                job.error.clone().unwrap_or_else(|| job.message.clone())
+                            )),
                     )
             })
             .collect::<Vec<_>>();
@@ -4724,14 +4738,18 @@ impl BootableView {
                             .items_center()
                             .gap_2()
                             .font_weight(FontWeight::SEMIBOLD)
+                            .flex_shrink_0()
                             .child(Icon::empty().path("ui/download.svg"))
-                            .child("Downloads"),
+                            .child(t.text(Message::ActionDownloads)),
                     )
                     .child(
                         div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .text_right()
                             .text_xs()
                             .text_color(rgb(0x7890a8))
-                            .child("Persistent history · interrupted transfers can resume"),
+                            .child(t.text(Message::DownloadsSubtitle)),
                     ),
             )
             .child(
@@ -4747,11 +4765,19 @@ impl BootableView {
                                 .p_3()
                                 .text_sm()
                                 .text_color(rgb(0x7890a8))
-                                .child("No managed downloads yet"),
+                                .child(t.text(Message::DownloadsEmpty)),
                         )
                     })
                     .children(rows),
             )
+            .when(any_interrupted, |card| {
+                card.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(0x7890a8))
+                        .child(t.text(Message::DownloadsInterruptedNote)),
+                )
+            })
     }
 
     /// The header language picker: "Language: <name>" or "Language: System
@@ -5080,6 +5106,7 @@ impl BootableView {
     }
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = self.t();
         let readiness = self.review_readiness();
         let download_state = self
             .download_session
@@ -5172,11 +5199,11 @@ impl BootableView {
                         actions
                             .child(
                                 Button::new("pause-download")
-                                    .label(if state == OperationState::Paused {
-                                        "Resume"
+                                    .label(t.text(if state == OperationState::Paused {
+                                        Message::ActionResume
                                     } else {
-                                        "Pause"
-                                    })
+                                        Message::ActionPause
+                                    }))
                                     .disabled(state == OperationState::Cancelled)
                                     .on_click(
                                         cx.listener(|this, _, _, cx| {
@@ -5186,11 +5213,11 @@ impl BootableView {
                             )
                             .child(
                                 Button::new("cancel-download")
-                                    .label(if state == OperationState::Cancelled {
-                                        "Cancelling…"
+                                    .label(t.text(if state == OperationState::Cancelled {
+                                        Message::ActionCancelling
                                     } else {
-                                        "Cancel"
-                                    })
+                                        Message::DownloadsActionCancel
+                                    }))
                                     .disabled(state == OperationState::Cancelled)
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.cancel_download(cx)),
