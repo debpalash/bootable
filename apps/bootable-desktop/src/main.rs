@@ -9,10 +9,10 @@ use bootable_core::{
     DistributionSummary, DownloadCompletion, DownloadLaunch, DownloadRequest, DownloadStatus,
     ImageKind, ImageReport, IsoRelease, Locale, ManagedDownloadSession, Message, OperationState,
     PiCatalog, PiImage, Preferences, Progress, QuickAccess, ReviewReadiness, ReviewedWriteSession,
-    WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState, WriteCompletion, WriteOptions,
-    catalog_search_summary, device_details_in, distribution_matches_query, format_bytes,
-    help_intro, help_sections, removable_media_status_in, review_readiness,
-    target_eligibility_label_in, workspace_progress,
+    WindowsBootFirmware, WindowsPartitionScheme, WorkspaceProgress, WorkspaceStepState,
+    WriteCompletion, WriteOptions, catalog_search_summary, device_details_in,
+    distribution_matches_query, format_bytes, help_intro, help_sections, removable_media_status_in,
+    review_readiness, target_eligibility_label_in, workspace_progress,
 };
 use futures::{
     AsyncReadExt, FutureExt, StreamExt,
@@ -252,12 +252,17 @@ struct BootableView {
     selected_pi_image: Option<usize>,
     catalog_search: Entity<InputState>,
     windows_partition_scheme: Entity<SelectState<Vec<&'static str>>>,
+    windows_boot_firmware: Entity<SelectState<Vec<String>>>,
+    /// Set when the firmware option was reset without a window at hand (a new
+    /// image arrived from a background task); render re-syncs the select.
+    firmware_select_stale: bool,
     language_select: Entity<SelectState<Vec<LanguageChoice>>>,
     locale: Locale,
     catalog_visible: usize,
     pi_visible: usize,
     _catalog_search_subscription: Subscription,
     _windows_partition_subscription: Subscription,
+    _windows_firmware_subscription: Subscription,
     _language_subscription: Subscription,
     download_session: ManagedDownloadSession,
     downloads_open: bool,
@@ -314,6 +319,34 @@ enum WriteUpdate {
     Finished(WriteCompletion),
 }
 
+const BOOT_FIRMWARE_HINT: &str = "Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware.";
+
+/// Applies a firmware choice; BIOS + UEFI forces MBR. Returns whether the
+/// partition scheme changed. Core remains the final validator.
+fn choose_boot_firmware(options: &mut WriteOptions, firmware: WindowsBootFirmware) -> bool {
+    options.windows_boot_firmware = firmware;
+    if firmware.includes_legacy_bios()
+        && options.windows_partition_scheme != WindowsPartitionScheme::Mbr
+    {
+        options.windows_partition_scheme = WindowsPartitionScheme::Mbr;
+        return true;
+    }
+    false
+}
+
+/// Applies a scheme choice; GPT forces UEFI-only. Returns whether the firmware
+/// changed.
+fn choose_partition_scheme(options: &mut WriteOptions, scheme: WindowsPartitionScheme) -> bool {
+    options.windows_partition_scheme = scheme;
+    if scheme == WindowsPartitionScheme::Gpt
+        && options.windows_boot_firmware != WindowsBootFirmware::Uefi
+    {
+        options.windows_boot_firmware = WindowsBootFirmware::Uefi;
+        return true;
+    }
+    false
+}
+
 impl BootableView {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let engine = Bootable::native();
@@ -338,21 +371,60 @@ impl BootableView {
                 cx,
             )
         });
-        let windows_partition_subscription =
-            cx.subscribe(&windows_partition_scheme, |view, _, event, cx| {
+        let windows_boot_firmware = cx.new(|cx| {
+            SelectState::new(
+                WindowsBootFirmware::ALL
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                Some(gpui_component::IndexPath::default().row(0)),
+                window,
+                cx,
+            )
+        });
+        let windows_partition_subscription = cx.subscribe_in(
+            &windows_partition_scheme,
+            window,
+            |view, _, event, window, cx| {
                 if let SelectEvent::Confirm(Some(value)) = event {
-                    view.options.windows_partition_scheme = if value.starts_with("MBR") {
+                    let scheme = if value.starts_with("MBR") {
                         WindowsPartitionScheme::Mbr
                     } else {
                         WindowsPartitionScheme::Gpt
                     };
+                    if choose_partition_scheme(&mut view.options, scheme) {
+                        view.sync_firmware_select(window, cx);
+                    }
                     view.status = format!(
-                        "Windows partition scheme: {} · target firmware: UEFI",
-                        view.options.windows_partition_scheme
+                        "Windows partition scheme: {} · target firmware: {}",
+                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
                     );
                     cx.notify();
                 }
-            });
+            },
+        );
+        let windows_firmware_subscription = cx.subscribe_in(
+            &windows_boot_firmware,
+            window,
+            |view, _, event, window, cx| {
+                if let SelectEvent::Confirm(Some(value)) = event {
+                    let Some(firmware) = WindowsBootFirmware::ALL
+                        .into_iter()
+                        .find(|firmware| firmware.to_string() == *value)
+                    else {
+                        return;
+                    };
+                    if choose_boot_firmware(&mut view.options, firmware) {
+                        view.sync_partition_select(window, cx);
+                    }
+                    view.status = format!(
+                        "Windows partition scheme: {} · target firmware: {} (experimental)",
+                        view.options.windows_partition_scheme, view.options.windows_boot_firmware
+                    );
+                    cx.notify();
+                }
+            },
+        );
         let preferences = Preferences::load();
         let locale = preferences.locale();
         let language_select = cx.new(|cx| {
@@ -409,12 +481,15 @@ impl BootableView {
             selected_pi_image: None,
             catalog_search,
             windows_partition_scheme,
+            windows_boot_firmware,
+            firmware_select_stale: false,
             language_select,
             locale,
             catalog_visible: 20,
             pi_visible: 20,
             _catalog_search_subscription: search_subscription,
             _windows_partition_subscription: windows_partition_subscription,
+            _windows_firmware_subscription: windows_firmware_subscription,
             _language_subscription: language_subscription,
             download_session: ManagedDownloadSession::default(),
             downloads_open: false,
@@ -889,6 +964,7 @@ impl BootableView {
                                     }
                                     view.image = Some(report.clone());
                                     view.advanced = false;
+                                    view.reset_boot_firmware();
                                 }
                                 DownloadCompletion::Cancelled => {
                                     view.status =
@@ -1023,6 +1099,7 @@ impl BootableView {
                 self.browse_directory = self.preferences.image_directory();
                 self.image = Some(report);
                 self.advanced = false;
+                self.reset_boot_firmware();
                 self.downloads_open = false;
                 self.status = format!("Using completed download {}", destination.display());
             }
@@ -1331,12 +1408,14 @@ impl BootableView {
                             view.browse_directory = view.preferences.image_directory();
                             view.image = Some(report);
                             view.advanced = false;
+                            view.reset_boot_firmware();
                         }
                         Err(error) => {
                             view.preferences.forget_image(&path);
                             view.save_preferences();
                             view.image = None;
                             view.advanced = false;
+                            view.reset_boot_firmware();
                             view.status = error;
                         }
                     }
@@ -1376,6 +1455,41 @@ impl BootableView {
             select.set_selected_index(language_index(language), window, cx);
         });
         cx.notify();
+    }
+
+    /// Legacy BIOS output is experimental and never remembered: any newly
+    /// chosen image starts back at UEFI-only. The select is re-synced on render.
+    fn reset_boot_firmware(&mut self) {
+        self.options.windows_boot_firmware = WindowsBootFirmware::default();
+        self.firmware_select_stale = true;
+    }
+
+    fn sync_firmware_select(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let index = WindowsBootFirmware::ALL
+            .iter()
+            .position(|firmware| *firmware == self.options.windows_boot_firmware)
+            .unwrap_or(0);
+        self.windows_boot_firmware.update(cx, |select, cx| {
+            select.set_selected_index(
+                Some(gpui_component::IndexPath::default().row(index)),
+                window,
+                cx,
+            );
+        });
+    }
+
+    fn sync_partition_select(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let index = match self.options.windows_partition_scheme {
+            WindowsPartitionScheme::Gpt => 0,
+            WindowsPartitionScheme::Mbr => 1,
+        };
+        self.windows_partition_scheme.update(cx, |select, cx| {
+            select.set_selected_index(
+                Some(gpui_component::IndexPath::default().row(index)),
+                window,
+                cx,
+            );
+        });
     }
 
     fn toggle_help(&mut self, cx: &mut Context<Self>) {
@@ -3715,9 +3829,28 @@ impl BootableView {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(0x7890a8))
-                                    .child("Partition scheme · target firmware"),
+                                    .child("Partition scheme"),
                             )
                             .child(Select::new(&self.windows_partition_scheme).w_full()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x7890a8))
+                                    .child("Boot firmware · experimental"),
+                            )
+                            .child(Select::new(&self.windows_boot_firmware).w_full())
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(0x7890a8))
+                                    .child(BOOT_FIRMWARE_HINT),
+                            ),
                     )
                     .child(
                         div()
@@ -4828,6 +4961,9 @@ impl BootableView {
 
 impl Render for BootableView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.firmware_select_stale) {
+            self.sync_firmware_select(window, cx);
+        }
         let viewport = window.viewport_size();
         let layout = ViewportLayout::new(viewport.width, viewport.height);
         div()
@@ -5219,8 +5355,44 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{BootableAssets, ViewportLayout};
+    use super::{BootableAssets, ViewportLayout, choose_boot_firmware, choose_partition_scheme};
+    use bootable_core::{WindowsBootFirmware, WindowsPartitionScheme, WriteOptions};
     use gpui::{AssetSource, px};
+
+    #[test]
+    fn firmware_and_scheme_choices_stay_coupled() {
+        let mut options = WriteOptions::default();
+        assert_eq!(options.windows_boot_firmware, WindowsBootFirmware::Uefi);
+        assert!(choose_boot_firmware(
+            &mut options,
+            WindowsBootFirmware::BiosAndUefi
+        ));
+        assert_eq!(
+            options.windows_partition_scheme,
+            WindowsPartitionScheme::Mbr
+        );
+        assert!(!choose_boot_firmware(
+            &mut options,
+            WindowsBootFirmware::BiosAndUefi
+        ));
+        assert!(!choose_partition_scheme(
+            &mut options,
+            WindowsPartitionScheme::Mbr
+        ));
+        assert_eq!(
+            options.windows_boot_firmware,
+            WindowsBootFirmware::BiosAndUefi
+        );
+        assert!(choose_partition_scheme(
+            &mut options,
+            WindowsPartitionScheme::Gpt
+        ));
+        assert_eq!(options.windows_boot_firmware, WindowsBootFirmware::Uefi);
+        assert!(!choose_partition_scheme(
+            &mut options,
+            WindowsPartitionScheme::Gpt
+        ));
+    }
 
     #[test]
     fn embeds_every_svg_asset() {
