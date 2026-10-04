@@ -4448,6 +4448,8 @@ fn draw_recent_images(
 }
 
 fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     let rows = Layout::vertical([
         Constraint::Min(5),
         Constraint::Length(4),
@@ -4456,11 +4458,16 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     .spacing(1)
     .split(area);
     let items = if app.download_session.jobs().is_empty() {
-        vec![
-            ListItem::new("No managed downloads yet · choose an image from Discover to begin")
-                .style(Style::default().fg(MUTED)),
-        ]
+        vec![ListItem::new(t.text(Message::DownloadsEmpty)).style(Style::default().fg(MUTED))]
     } else {
+        let status_width = app
+            .download_session
+            .jobs()
+            .iter()
+            .map(|job| display_width(job.status.label_in(locale)))
+            .max()
+            .unwrap_or(0)
+            .max(11);
         app.download_session
             .jobs()
             .iter()
@@ -4470,8 +4477,8 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
                     .map(|ratio| format!(" · {:>5.1}%", ratio * 100.))
                     .unwrap_or_default();
                 ListItem::new(format!(
-                    "{:<11} {} {}{}",
-                    job.status,
+                    "{} {} {}{}",
+                    pad_display(job.status.label_in(locale), status_width),
                     pad_display(&truncate_middle(&job.label, 28), 28),
                     job.destination.display(),
                     progress
@@ -4487,11 +4494,17 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     };
     let mut state = ListState::default()
         .with_selected((!app.download_session.jobs().is_empty()).then_some(app.download_selected));
+    let downloads_title = format!(
+        " {} · {} ",
+        t.text(Message::ActionDownloads),
+        t.text(Message::DownloadsSubtitle)
+    );
     frame.render_stateful_widget(
         List::new(items)
-            .block(panel_block(
-                " Downloads · persistent history · ↑/↓ select · m closes ",
-            ))
+            .block(
+                panel_block(&downloads_title)
+                    .title_bottom(Line::from(" ↑/↓ select · m closes ").right_aligned()),
+            )
             .highlight_symbol("› ")
             .highlight_style(
                 Style::default()
@@ -4507,21 +4520,22 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
         .jobs()
         .get(app.download_selected)
         .map_or_else(
-        || "Interrupted transfers retain only owned partial files; explicit cancellation removes them.".into(),
-        |job| {
-            format!(
-                "{} · {}\n{}",
-                job.kind,
-                job.error.as_deref().unwrap_or(&job.message),
-                job.destination.display()
-            )
-        },
-    );
+            || t.text(Message::DownloadsInterruptedNote).to_string(),
+            |job| {
+                format!(
+                    "{} · {}\n{}",
+                    job.kind.label_in(locale),
+                    job.error.as_deref().unwrap_or(&job.message),
+                    job.destination.display()
+                )
+            },
+        );
+    let selected_download_title = format!(" {} ", t.text(Message::DownloadsSelected));
     frame.render_widget(
         Paragraph::new(details)
             .style(Style::default().fg(MUTED))
             .wrap(Wrap { trim: true })
-            .block(panel_block(" Selected download ")),
+            .block(panel_block(&selected_download_title)),
         rows[1],
     );
     let actions = Layout::horizontal([
@@ -4536,20 +4550,23 @@ fn draw_download_manager(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Re
     let can_use = selected.is_some_and(|job| job.status == DownloadStatus::Completed);
     let can_remove = selected
         .is_some_and(|job| !matches!(job.status, DownloadStatus::Running | DownloadStatus::Paused));
+    let retry_label = format!("↻  {}", t.text(Message::DownloadsActionRetryResume));
+    let use_label = format!("✓  {}", t.text(Message::DownloadsActionUseImage));
+    let remove_label = format!("×  {}", t.text(Message::DownloadsActionRemove));
     if can_retry {
-        render_button(frame, actions[0], "↻  Retry / resume", true);
+        render_button(frame, actions[0], &retry_label, true);
     } else {
-        render_disabled_button(frame, actions[0], "↻  Retry / resume");
+        render_disabled_button(frame, actions[0], &retry_label);
     }
     if can_use {
-        render_button(frame, actions[1], "✓  Use image", true);
+        render_button(frame, actions[1], &use_label, true);
     } else {
-        render_disabled_button(frame, actions[1], "✓  Use image");
+        render_disabled_button(frame, actions[1], &use_label);
     }
     if can_remove {
-        render_button(frame, actions[2], "×  Remove entry", false);
+        render_button(frame, actions[2], &remove_label, false);
     } else {
-        render_disabled_button(frame, actions[2], "×  Remove entry");
+        render_disabled_button(frame, actions[2], &remove_label);
     }
     app.hit_regions.download_rows = catalog_row_regions(rows[0], app.download_session.jobs().len());
     app.hit_regions.download_retry = can_retry.then_some(actions[0]);
@@ -4777,8 +4794,10 @@ fn plain_panel_heading(t: Strings, step: usize) -> String {
 }
 
 fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
     frame.render_widget(Clear, area);
-    let block = panel_block(" Discover bootable images ");
+    let discover_title = format!(" {} ", t.text(Message::DiscoverTitle));
+    let block = panel_block(&discover_title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let compact_tabs = inner.width < 86;
@@ -4823,7 +4842,7 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         sources[0],
-        "1  All",
+        &format!("1  {}", t.text(Message::DiscoverQuickAll)),
         app.discovery_session.quick_access() == QuickAccess::All
             && app.discovery_session.source() == DiscoverySource::DistroWatch,
     );
@@ -4870,9 +4889,9 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         Style::default().fg(MUTED)
     };
     let search_value = if app.discovery_session.quick_access() == QuickAccess::Windows {
-        "Windows installer workflow · select an ISO to unlock every setup checkbox".into()
+        t.text(Message::DiscoverWindowsHint).to_string()
     } else if app.catalog_query.is_empty() {
-        "Search by name, slug, or base family…  / to type".into()
+        format!("/ {}", t.text(Message::DiscoverSearchPlaceholder))
     } else {
         format!(
             "{}{}",
@@ -4880,10 +4899,11 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             if app.catalog_searching { "▏" } else { "" }
         )
     };
+    let search_title = format!(" {} ", t.text(Message::DiscoverSearchTitle));
     frame.render_widget(
         Paragraph::new(search_value)
             .style(search_style)
-            .block(panel_block(" Search ")),
+            .block(panel_block(&search_title)),
         search_area,
     );
     app.hit_regions.catalog_search = Some(search_area);
@@ -4911,17 +4931,22 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
             _ => app.discovery_session.state(CatalogFacet::Popular),
         },
     };
-    let refresh_label = if active_state.is_failed()
-        || app
-            .discovery_session
-            .state(CatalogFacet::Details)
-            .is_failed()
-    {
-        "↻  Retry"
-    } else {
-        "↻  Refresh"
-    };
-    render_button(frame, actions[0], refresh_label, false);
+    let refresh_label = format!(
+        "↻  {}",
+        t.text(
+            if active_state.is_failed()
+                || app
+                    .discovery_session
+                    .state(CatalogFacet::Details)
+                    .is_failed()
+            {
+                Message::ActionRetry
+            } else {
+                Message::ActionRefresh
+            }
+        )
+    );
+    render_button(frame, actions[0], &refresh_label, false);
     let open_page_fallback = app.discovery_session.source() == DiscoverySource::DistroWatch
         && app.discovery_session.quick_access() != QuickAccess::Windows
         && app.catalog_releases.is_empty()
@@ -4941,14 +4966,27 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     render_button(
         frame,
         actions[1],
-        if app.discovery_session.quick_access() == QuickAccess::Windows {
-            "▣  Choose Windows ISO"
+        &if app.discovery_session.quick_access() == QuickAccess::Windows {
+            let windows_ready = app.image.as_ref().is_some_and(|image| {
+                matches!(
+                    image.kind,
+                    bootable_core::ImageKind::WindowsInstaller { .. }
+                )
+            });
+            format!(
+                "▣  {}",
+                t.text(if windows_ready {
+                    Message::OptionsWindowsReplaceIso
+                } else {
+                    Message::OptionsWindowsChooseIso
+                })
+            )
         } else if app.discovery_session.source() == DiscoverySource::RaspberryPi {
-            "⇩  Download, verify & use"
+            format!("⇩  {}", t.text(Message::PiDownloadUse))
         } else if open_page_fallback {
-            "↗  Open DistroWatch download page  [b]"
+            format!("↗  {}  [b]", t.text(Message::DiscoverDetailOpenPage))
         } else {
-            "⇩  Download & use ISO"
+            format!("⇩  {}", t.text(Message::DiscoverDetailDownloadUse))
         },
         can_download || open_page_fallback,
     );
@@ -5188,6 +5226,8 @@ fn draw_windows_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rec
 }
 
 fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     app.hit_regions.pi_device_rows.clear();
     app.hit_regions.pi_image_rows.clear();
     let columns = if area.width >= 72 {
@@ -5214,9 +5254,10 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         } else if !app.catalog_query.is_empty() {
             app.discovery_session
                 .state(CatalogFacet::Directory)
-                .short_label("search catalog")
+                .short_label_in(locale, t.text(Message::CatalogSubjectSearchCatalog))
         } else {
-            current_distribution_state(app).short_label("distributions")
+            current_distribution_state(app)
+                .short_label_in(locale, t.text(Message::CatalogSubjectDistributions))
         };
         vec![ListItem::new(message).style(Style::default().fg(MUTED))]
     } else {
@@ -5229,9 +5270,9 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
             })
             .map(|(index, distribution)| {
                 let action = if app.catalog_selected == index {
-                    "Selected"
+                    t.text(Message::ActionSelected).to_string()
                 } else {
-                    "Select →"
+                    format!("{} →", t.text(Message::ActionSelect))
                 };
                 ListItem::new(if !app.catalog_query.is_empty() {
                     let rank = if distribution.rank == 0 {
@@ -5240,17 +5281,29 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
                         distribution.rank.to_string()
                     };
                     format!(
-                        "{:>2}  {:<18} {:<12} {action}",
+                        "{:>2}  {} {} {action}",
                         rank,
-                        distribution.name,
-                        distribution.based_on.as_deref().unwrap_or("Independent")
+                        pad_display(&distribution.name, 18),
+                        pad_display(
+                            distribution
+                                .based_on
+                                .as_deref()
+                                .unwrap_or(t.text(Message::DiscoverItemIndependent)),
+                            12
+                        )
                     )
                 } else if distribution.rank == 0 {
-                    format!(" ·  {:<22} {action}", distribution.name)
+                    format!(" ·  {} {action}", pad_display(&distribution.name, 22))
                 } else {
+                    let hits = t.format(
+                        Message::DiscoverItemHitsPerDay,
+                        &[("hits", &distribution.hits_per_day)],
+                    );
                     format!(
-                        "{:>2}  {:<16} {:>5}/day  {action}",
-                        distribution.rank, distribution.name, distribution.hits_per_day
+                        "{:>2}  {} {}  {action}",
+                        distribution.rank,
+                        pad_display(&distribution.name, 16),
+                        " ".repeat(9usize.saturating_sub(display_width(&hits))) + &hits
                     )
                 })
             })
@@ -5261,7 +5314,7 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
             ListItem::new(
                 app.discovery_session
                     .state(CatalogFacet::Details)
-                    .short_label("ISO releases"),
+                    .short_label_in(locale, t.text(Message::CatalogSubjectIsoReleases)),
             )
             .style(Style::default().fg(MUTED)),
         ]
@@ -5273,7 +5326,7 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
                     .checksum_algorithm
                     .filter(|_| release.checksum.is_some() || release.checksum_url.is_some())
                     .map(|algorithm| format!("✓ {algorithm}"))
-                    .unwrap_or_else(|| "HTTPS only".into());
+                    .unwrap_or_else(|| t.text(Message::DiscoverItemHttpsOnly).to_string());
                 ListItem::new(format!(
                     "{}  {}  {}",
                     release.name,
@@ -5291,19 +5344,22 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         .with_selected((!matching_indices.is_empty()).then_some(selected_position));
     let mut release_state = ListState::default()
         .with_selected((!app.catalog_releases.is_empty()).then_some(app.release_selected));
-    let distribution_title = if !app.catalog_query.is_empty() {
-        " Search results "
-    } else {
-        match app.discovery_session.quick_access() {
-            QuickAccess::Arch => " Arch-based ",
-            QuickAccess::Debian => " Debian-based ",
-            QuickAccess::Omarchy => " Omarchy ",
-            _ => " Popular · six months ",
+    let distribution_title = format!(
+        " {} ",
+        if !app.catalog_query.is_empty() {
+            t.text(Message::DiscoverSectionSearch)
+        } else {
+            match app.discovery_session.quick_access() {
+                QuickAccess::Arch => t.text(Message::DiscoverSectionArch),
+                QuickAccess::Debian => t.text(Message::DiscoverSectionDebian),
+                QuickAccess::Omarchy => "Omarchy",
+                _ => t.text(Message::DiscoverSectionPopular),
+            }
         }
-    };
+    );
     frame.render_stateful_widget(
         List::new(distributions)
-            .block(panel_block(distribution_title))
+            .block(panel_block(&distribution_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5323,24 +5379,64 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         ) {
         app.discovery_session
             .state(CatalogFacet::Details)
-            .short_label("distribution profile")
+            .short_label_in(locale, t.text(Message::CatalogSubjectDistributionProfile))
     } else {
         app.selected_details.as_ref().map_or_else(
-            || "Choose a distribution to load its profile and ISO files".into(),
+            || t.text(Message::DiscoverDetailEmpty).to_string(),
             |details| {
-            format!(
-                "{}  ·  {}  ·  {}\nBased on: {}  ·  Origin: {}\nArchitecture: {}\nDesktop: {}\n{}\nLogo: {}\nScreenshot: {}",
-                details.name,
-                details.os_type.as_deref().unwrap_or("Unknown OS"),
-                details.status.as_deref().unwrap_or("Unknown status"),
-                details.based_on.as_deref().unwrap_or("Independent"),
-                details.origin.as_deref().unwrap_or("Unknown"),
-                compact_text_list(&details.architectures, 4),
-                compact_text_list(&details.desktops, 4),
-                details.description.as_deref().unwrap_or("No description"),
-                details.logo_url.as_deref().unwrap_or("Not listed"),
-                details.screenshot_url.as_deref().unwrap_or("Not listed")
-            )
+                let labeled = |label: Message, value: &dyn std::fmt::Display| {
+                    t.format(
+                        Message::CommonLabeled,
+                        &[("label", &t.text(label)), ("value", value)],
+                    )
+                };
+                let not_listed = t.text(Message::DiscoverDetailNotListed);
+                format!(
+                    "{}  ·  {}  ·  {}\n{}  ·  {}\n{}\n{}\n{}\n{}\n{}",
+                    details.name,
+                    details
+                        .os_type
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailUnknownOs)),
+                    details
+                        .status
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailUnknownStatus)),
+                    labeled(
+                        Message::DiscoverDetailBasedOn,
+                        &details
+                            .based_on
+                            .as_deref()
+                            .unwrap_or(t.text(Message::DiscoverItemIndependent))
+                    ),
+                    labeled(
+                        Message::DiscoverDetailOrigin,
+                        &details
+                            .origin
+                            .as_deref()
+                            .unwrap_or(t.text(Message::DiscoverDetailUnknownOrigin))
+                    ),
+                    labeled(
+                        Message::DiscoverDetailArchitecture,
+                        &compact_text_list(t, &details.architectures, 4)
+                    ),
+                    labeled(
+                        Message::DiscoverDetailDesktop,
+                        &compact_text_list(t, &details.desktops, 4)
+                    ),
+                    details
+                        .description
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverDetailNoDescription)),
+                    labeled(
+                        Message::DiscoverDetailLogo,
+                        &details.logo_url.as_deref().unwrap_or(not_listed)
+                    ),
+                    labeled(
+                        Message::DiscoverDetailScreenshot,
+                        &details.screenshot_url.as_deref().unwrap_or(not_listed)
+                    ),
+                )
             },
         )
     };
@@ -5351,9 +5447,10 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
         " Distribution profile · artwork ",
         profile,
     );
+    let releases_title = format!(" {} ", t.text(Message::DiscoverDetailDirectIsos));
     frame.render_stateful_widget(
         List::new(releases)
-            .block(panel_block(" Direct ISO files "))
+            .block(panel_block(&releases_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5368,6 +5465,8 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
 }
 
 fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
+    let t = app.t();
+    let locale = app.locale;
     app.hit_regions.distribution_rows.clear();
     app.hit_regions.release_rows.clear();
     let columns = if area.width >= 72 {
@@ -5385,7 +5484,7 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
                 ListItem::new(
                     app.discovery_session
                         .state(CatalogFacet::RaspberryPi)
-                        .short_label("Raspberry Pi boards"),
+                        .short_label_in(locale, t.text(Message::CatalogSubjectPiBoards)),
                 )
                 .style(Style::default().fg(MUTED)),
             ]
@@ -5421,16 +5520,16 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .unwrap_or_default();
     let image_items = if visible_images.is_empty() {
         let message = if app.pi_catalog.is_some() && !app.catalog_query.is_empty() {
-            format!(
-                "No Raspberry Pi images match “{}”",
-                app.catalog_query.trim()
+            t.format(
+                Message::PiEmptyQuery,
+                &[("query", &app.catalog_query.trim())],
             )
         } else if app.pi_catalog.is_some() {
-            "No compatible Raspberry Pi images found".into()
+            t.text(Message::PiEmpty).to_string()
         } else {
             app.discovery_session
                 .state(CatalogFacet::RaspberryPi)
-                .short_label("Raspberry Pi images")
+                .short_label_in(locale, t.text(Message::CatalogSubjectPiImages))
         };
         vec![ListItem::new(message).style(Style::default().fg(MUTED))]
     } else {
@@ -5451,9 +5550,10 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .is_some_and(|catalog| !catalog.devices.is_empty());
     let mut device_state =
         ListState::default().with_selected(has_devices.then_some(app.pi_device_selected));
+    let board_title = format!(" {} ", t.text(Message::PiBoardFilter));
     frame.render_stateful_widget(
         List::new(devices)
-            .block(panel_block(" Raspberry Pi board "))
+            .block(panel_block(&board_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5471,33 +5571,68 @@ fn draw_pi_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
         .as_ref()
         .and_then(|catalog| catalog.images.get(app.pi_image_selected));
     let details = selected.map_or_else(
-        || "Choose a board and image. Official checksums are verified before the image is used.".into(),
+        || t.text(Message::PiHint).to_string(),
         |image| {
+            let sha = t.format(
+                Message::CommonLabeled,
+                &[
+                    ("label", &"SHA-256"),
+                    (
+                        "value",
+                        &if image.extracted_sha256.is_some() {
+                            "✓"
+                        } else {
+                            t.text(Message::DiscoverDetailNotListed)
+                        },
+                    ),
+                ],
+            );
             format!(
-                "{}\n{}\nReleased {}  ·  Download {}  ·  Expanded {}\nCategory: {}\nArchive: {}  ·  SHA-256: {}",
+                "{}\n{}\n{}  ·  {}  ·  {sha}",
                 image.name,
-                image.description.as_deref().unwrap_or("No description"),
-                image.release_date.as_deref().unwrap_or("unknown"),
-                image.download_size.map(format_bytes).unwrap_or_default(),
-                image.extracted_size.map(format_bytes).unwrap_or_default(),
-                image.category.as_deref().unwrap_or("Raspberry Pi image"),
+                t.format(
+                    Message::PiDetails,
+                    &[
+                        (
+                            "download",
+                            &image.download_size.map(format_bytes).unwrap_or_default()
+                        ),
+                        (
+                            "expanded",
+                            &image.extracted_size.map(format_bytes).unwrap_or_default()
+                        ),
+                        (
+                            "date",
+                            &image
+                                .release_date
+                                .as_deref()
+                                .unwrap_or(t.text(Message::PiDateUnknown))
+                        ),
+                        (
+                            "description",
+                            &image
+                                .description
+                                .as_deref()
+                                .unwrap_or(t.text(Message::DiscoverDetailNoDescription))
+                        ),
+                    ],
+                ),
+                image
+                    .category
+                    .as_deref()
+                    .unwrap_or(t.text(Message::PiDefaultCategory)),
                 image.archive_name,
-                if image.extracted_sha256.is_some() { "available" } else { "not listed" }
             )
         },
     );
-    draw_catalog_artwork_panel(
-        frame,
-        app,
-        right[0],
-        " Image details · official Imager feed ",
-        details,
-    );
+    let image_details_title = format!(" {} ", t.text(Message::PiTitle));
+    draw_catalog_artwork_panel(frame, app, right[0], &image_details_title, details);
     let mut image_state =
         ListState::default().with_selected((!visible_images.is_empty()).then_some(image_position));
+    let images_title = format!(" {} ", t.text(Message::PiCompatibleImages));
     frame.render_stateful_widget(
         List::new(image_items)
-            .block(panel_block(" Compatible boot images "))
+            .block(panel_block(&images_title))
             .style(Style::default().fg(Color::White))
             .highlight_symbol("› ")
             .highlight_style(catalog_highlight(
@@ -5520,9 +5655,10 @@ fn draw_catalog_artwork_panel(
     frame: &mut ratatui::Frame<'_>,
     app: &mut App,
     area: Rect,
-    title: &'static str,
+    title: &str,
     text: String,
 ) {
+    let t = app.t();
     let block = panel_block(title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -5550,13 +5686,13 @@ fn draw_catalog_artwork_panel(
     } else {
         let artwork_status = app.artwork_error.as_deref().map_or_else(
             || {
-                if app.artwork_key.is_some() {
-                    "Loading artwork…"
+                t.text(if app.artwork_key.is_some() {
+                    Message::DiscoverArtworkLoading
                 } else {
-                    "No artwork"
-                }
+                    Message::DiscoverArtworkNone
+                })
             },
-            |_| "Artwork unavailable",
+            |_| t.text(Message::DiscoverArtworkUnavailable),
         );
         frame.render_widget(
             Paragraph::new(artwork_status)
@@ -5574,9 +5710,9 @@ fn draw_catalog_artwork_panel(
     );
 }
 
-fn compact_text_list(values: &[String], limit: usize) -> String {
+fn compact_text_list(t: Strings, values: &[String], limit: usize) -> String {
     if values.is_empty() {
-        return "Not listed".into();
+        return t.text(Message::DiscoverDetailNotListed).into();
     }
     let mut value = values
         .iter()
