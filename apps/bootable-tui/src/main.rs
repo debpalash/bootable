@@ -3700,6 +3700,13 @@ fn draw_screen(frame: &mut ratatui::Frame<'_>, app: &mut App) {
         return;
     }
 
+    if show_options && content.height < workspace_height.saturating_add(options_height + 1) {
+        // Too short for the workspace and the options together: the options
+        // the user asked for take the whole content area.
+        draw_advanced(frame, app, content);
+        return;
+    }
+
     let show_setup_toggle = setup_available && content.height >= workspace_height.saturating_add(4);
     let show_discovery_toggle = content.height
         >= workspace_height
@@ -4242,13 +4249,35 @@ fn draw_header(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     .unwrap_or(0) as u16
         + 5;
     let needed = caption * action_count as u16 + (action_count as u16 - 1);
+    // With room to spare the buttons grow to show the full wording, as long
+    // as the brand lockup keeps its width.
+    let full_caption = [
+        Message::ActionDownloads,
+        Message::ActionCatalogClose,
+        Message::ActionDiscover,
+        Message::ActionSetupOptions,
+        Message::ActionHideOptions,
+        Message::ActionRefreshDrives,
+    ]
+    .iter()
+    .map(|message| display_width(t.text(*message)))
+    .max()
+    .unwrap_or(0) as u16
+        + 5;
+    // The lockup needs its title line and its subtitle line.
+    let brand_need = (display_width(t.text(Message::HeaderSubtitleCreate)) + 6).max(
+        4 + display_width(&format!("  BOOTABLE v{}", env!("CARGO_PKG_VERSION")))
+            + display_width(&format!("  ·  {}", t.text(Message::HeaderTitleCreate))),
+    ) as u16;
+    let preferred = (full_caption * action_count as u16 + (action_count as u16 - 1))
+        .min(area.width.saturating_sub(7 + brand_need));
     let action_width = if wide {
-        if action_count == 4 { 64 } else { 48 }
+        if action_count == 4 { 64 } else { 48 }.max(preferred)
     } else {
         area.width.saturating_sub(13)
     }
     .max(needed)
-    .min(area.width.saturating_sub(13 + 24));
+    .min(area.width.saturating_sub(if wide { 13 + 24 } else { 13 }));
     let columns = Layout::horizontal([
         Constraint::Min(if wide { 24 } else { 12 }),
         Constraint::Length(action_width + if wide { 6 } else { 0 }),
@@ -4499,10 +4528,21 @@ fn draw_source(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     .max()
     .unwrap_or(14)
     .clamp(14, usize::from(source_rows[0].width / 2).max(14)) as u16;
-    let source_columns =
-        Layout::horizontal([Constraint::Min(16), Constraint::Length(button_columns)])
+    // Narrow panels stack the button under the text instead of squeezing the
+    // text into a few columns.
+    let stacked = source_rows[0].width < 50 && source_rows[0].height >= 6;
+    let source_columns = if stacked {
+        let stack =
+            Layout::vertical([Constraint::Min(2), Constraint::Length(3)]).split(source_rows[0]);
+        let button = Layout::horizontal([Constraint::Min(0), Constraint::Length(button_columns)])
+            .split(stack[1]);
+        [stack[0], button[1]]
+    } else {
+        let columns = Layout::horizontal([Constraint::Min(16), Constraint::Length(button_columns)])
             .spacing(1)
             .split(source_rows[0]);
+        [columns[0], columns[1]]
+    };
     frame.render_widget(
         Paragraph::new(source)
             .style(Style::default().fg(Color::White))
@@ -4787,6 +4827,28 @@ fn take_columns(value: impl Iterator<Item = char>, columns: usize) -> String {
     taken
 }
 
+/// One list row: `prefix`, then `name` padded or ellipsized to whatever the
+/// row has left, then `suffix`. The suffix (the action) is never clipped.
+fn fit_row(room: usize, prefix: &str, name: &str, suffix: &str) -> String {
+    let name_room = room
+        .saturating_sub(display_width(prefix) + display_width(suffix))
+        .max(6);
+    format!(
+        "{prefix}{}{suffix}",
+        pad_display(&truncate_end(name, name_room), name_room)
+    )
+}
+
+/// `value` with its first character upper-cased (a no-op for scripts without
+/// case).
+fn capitalize_first(value: &str) -> String {
+    let mut characters = value.chars();
+    characters
+        .next()
+        .map(|first| first.to_uppercase().chain(characters).collect())
+        .unwrap_or_default()
+}
+
 /// `value` cut to `limit` terminal columns with a trailing ellipsis.
 fn truncate_end(value: &str, limit: usize) -> String {
     if display_width(value) <= limit {
@@ -5044,10 +5106,14 @@ fn draw_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     } else {
         Style::default().fg(MUTED)
     };
+    let search_room = usize::from(search_area.width.saturating_sub(2));
     let search_value = if app.discovery_session.quick_access() == QuickAccess::Windows {
-        t.text(Message::DiscoverWindowsHint).to_string()
+        truncate_end(t.text(Message::DiscoverWindowsHint), search_room)
     } else if app.catalog_query.is_empty() {
-        format!("/ {}", t.text(Message::DiscoverSearchPlaceholder))
+        truncate_end(
+            &format!("/ {}", t.text(Message::DiscoverSearchPlaceholder)),
+            search_room,
+        )
     } else {
         format!(
             "{}{}",
@@ -5430,36 +5496,39 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
                 } else {
                     format!("{} →", t.text(Message::ActionSelect))
                 };
+                // The name gives way so the action always stays visible.
+                let room = usize::from(columns[0].width.saturating_sub(4));
                 ListItem::new(if !app.catalog_query.is_empty() {
                     let rank = if distribution.rank == 0 {
                         "·".into()
                     } else {
                         distribution.rank.to_string()
                     };
-                    format!(
-                        "{:>2}  {} {} {action}",
-                        rank,
-                        pad_display(&distribution.name, 18),
-                        pad_display(
-                            distribution
-                                .based_on
-                                .as_deref()
-                                .unwrap_or(t.text(Message::DiscoverItemIndependent)),
-                            12
-                        )
+                    let based = distribution
+                        .based_on
+                        .as_deref()
+                        .unwrap_or(t.text(Message::DiscoverItemIndependent));
+                    fit_row(
+                        room,
+                        &format!("{rank:>2}  "),
+                        &distribution.name,
+                        &format!(" {} {action}", pad_display(&truncate_end(based, 12), 12)),
                     )
                 } else if distribution.rank == 0 {
-                    format!(" ·  {} {action}", pad_display(&distribution.name, 22))
+                    fit_row(room, " ·  ", &distribution.name, &format!(" {action}"))
                 } else {
                     let hits = t.format(
                         Message::DiscoverItemHitsPerDay,
                         &[("hits", &distribution.hits_per_day)],
                     );
-                    format!(
-                        "{:>2}  {} {}  {action}",
-                        distribution.rank,
-                        pad_display(&distribution.name, 16),
-                        " ".repeat(9usize.saturating_sub(display_width(&hits))) + &hits
+                    fit_row(
+                        room,
+                        &format!("{:>2}  ", distribution.rank),
+                        &distribution.name,
+                        &format!(
+                            " {}{hits}  {action}",
+                            " ".repeat(9usize.saturating_sub(display_width(&hits)))
+                        ),
                     )
                 })
             })
@@ -5596,13 +5665,11 @@ fn draw_distrowatch_catalog(frame: &mut ratatui::Frame<'_>, app: &mut App, area:
             },
         )
     };
-    draw_catalog_artwork_panel(
-        frame,
-        app,
-        right[0],
-        " Distribution profile · artwork ",
-        profile,
+    let profile_title = format!(
+        " {} ",
+        capitalize_first(t.text(Message::CatalogSubjectDistributionProfile))
     );
+    draw_catalog_artwork_panel(frame, app, right[0], &profile_title, profile);
     let releases_title = format!(" {} ", t.text(Message::DiscoverDetailDirectIsos));
     frame.render_stateful_widget(
         List::new(releases)
@@ -5991,6 +6058,11 @@ fn draw_advanced(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     );
     let windows = grid_areas(rows[1], if compact { 2 } else { 4 }, 4);
     let tools = grid_areas(rows[2], if compact { 3 } else { 5 }, 5);
+    if windows.len() < 4 || tools.len() < 5 {
+        // Not enough room for the controls (a very short terminal): leave
+        // the framed panel empty rather than index past the grid.
+        return;
+    }
 
     if windows_image {
         render_option_checkbox(
@@ -6101,7 +6173,11 @@ fn draw_targets(frame: &mut ratatui::Frame<'_>, app: &mut App, area: Rect) {
     // highlight symbol.
     let row_room = usize::from(area.width.saturating_sub(2)).saturating_sub(2);
     let items = if app.devices.is_empty() {
-        vec![ListItem::new(t.text(Message::TargetEmpty)).style(Style::default().fg(MUTED))]
+        vec![ListItem::new(ratatui::text::Text::from(wrapped_lines(
+            t.text(Message::TargetEmpty),
+            Style::default().fg(MUTED),
+            row_room,
+        )))]
     } else {
         app.devices
             .iter()
@@ -7470,6 +7546,39 @@ mod workspace_render_tests {
             device_change_message(Locale::En.strings(), 2, 1),
             "Drive list changed: 2 added, 1 removed • updated automatically"
         );
+    }
+
+    #[test]
+    fn setup_options_survive_a_short_terminal_in_every_language() {
+        for locale in Locale::available() {
+            for kind in [windows_kind(), bootable_core::ImageKind::HybridIso] {
+                let mut app = localized_app(locale);
+                app.image = Some(image_report(kind));
+                app.advanced = true;
+                // 80x30 has room for the options panel but not for it and
+                // the workspace together; it must not panic or overflow.
+                let screen = render_text(&mut app, 80, 30);
+                assert_shows(&screen, locale, &[Message::ActionSetupOptions]);
+                assert!(screen.lines().all(|line| display_width(line) <= 80));
+            }
+        }
+    }
+
+    #[test]
+    fn english_wording_follows_the_unified_catalog() {
+        let mut app = app_with_drive();
+        let screen = render(&mut app, 130, 40);
+        for text in [
+            "Create boot media",
+            "One deliberate path from image to removable drive.",
+            "ISO, IMG, RAW, or compressed disk image",
+            "The image is inspected",
+            "Images you use appear here for one-click reuse",
+            "Confirm the physical drive before continuing",
+            "Discover images \u{b7} Browse trusted catalogs \u{b7} Open",
+        ] {
+            assert!(screen.contains(text), "{text}\n{screen}");
+        }
     }
 
     fn image_report(kind: bootable_core::ImageKind) -> bootable_core::ImageReport {
