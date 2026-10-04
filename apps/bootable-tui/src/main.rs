@@ -1034,6 +1034,10 @@ struct App {
     preferences: Preferences,
     locale: Locale,
     help_open: bool,
+    /// True once core's final (`Finished`) download progress message has been
+    /// shown as the status. Replaces comparing the status text, which breaks
+    /// as soon as any part of it is localized.
+    download_final_message: bool,
 }
 
 enum DownloadUpdate {
@@ -1178,9 +1182,9 @@ impl App {
         let devices_result = engine.discover_devices();
         let (devices, status) = match devices_result {
             Ok(devices) => {
-                let status = format!(
-                    "{} · choose an image to begin",
-                    removable_media_status_in(locale, &devices)
+                let status = locale.strings().format(
+                    Message::StatusStartup,
+                    &[("media", &removable_media_status_in(locale, &devices))],
                 );
                 (devices, status)
             }
@@ -1238,12 +1242,15 @@ impl App {
             preferences,
             locale,
             help_open: false,
+            download_final_message: false,
         }
     }
 
     fn save_preferences(&mut self) {
         if let Err(error) = self.preferences.save() {
-            self.status = format!("Preferences were not saved: {error}");
+            self.status = self
+                .t()
+                .format(Message::StatusPrefsSaveFailed, &[("error", &error)]);
         }
     }
 
@@ -1256,7 +1263,7 @@ impl App {
     fn use_recent_image(&mut self, index: usize) {
         match self.preferences.recent_images().get(index) {
             Some(recent) => self.inspect_image_path(recent.path.clone()),
-            None => self.status = "No recent image in that position".into(),
+            None => self.status = self.t().text(Message::StatusImageNoRecent).into(),
         }
     }
 
@@ -1284,9 +1291,9 @@ impl App {
         self.catalog_focus = CatalogFocus::Distributions;
         if !self.popular_distributions.is_empty() && mode == CacheMode::PreferCache {
             self.distributions = self.popular_distributions.clone();
-            self.status = "DistroWatch discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPopularity).into();
         } else if self.discovery_session.begin(CatalogFacet::Popular) {
-            self.status = "Loading distributions…".into();
+            self.status = self.t().text(Message::StatusCatalogLoading).into();
             let sender = self.catalog_sender.clone();
             std::thread::spawn(move || {
                 let result = Bootable::native()
@@ -1326,13 +1333,13 @@ impl App {
         self.discovery_session.show_raspberry_pi();
         self.catalog_focus = CatalogFocus::Distributions;
         if self.pi_catalog.is_some() && mode == CacheMode::PreferCache {
-            self.status = "Raspberry Pi image discovery selected".into();
+            self.status = self.t().text(Message::StatusCatalogPiSelected).into();
             return;
         }
         if !self.discovery_session.begin(CatalogFacet::RaspberryPi) {
             return;
         }
-        self.status = "Loading Raspberry Pi images…".into();
+        self.status = self.t().text(Message::StatusCatalogPiLoading).into();
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
             let result = Bootable::native()
@@ -1354,7 +1361,7 @@ impl App {
         match preset {
             QuickAccess::All => {
                 self.distributions = self.popular_distributions.clone();
-                self.status = "Showing DistroWatch six-month popularity".into();
+                self.status = self.t().text(Message::StatusCatalogPopularity).into();
             }
             QuickAccess::Arch | QuickAccess::Debian => {
                 let cached = if preset == QuickAccess::Arch {
@@ -1378,15 +1385,14 @@ impl App {
                     .cloned()
                 {
                     self.distributions = vec![omarchy];
-                    self.status = "Omarchy quick access · press Enter to resolve ISOs".into();
+                    self.status = self.t().text(Message::StatusCatalogOmarchy).into();
                 } else {
-                    self.status =
-                        "Omarchy is missing from the current DistroWatch directory".into();
+                    self.status = self.t().text(Message::StatusCatalogOmarchyMissing).into();
                 }
             }
             QuickAccess::Windows => {
                 self.distributions.clear();
-                self.status = "Windows media tools · press o to choose a Windows ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsTools).into();
             }
         }
         self.catalog_selected = 0;
@@ -1406,7 +1412,9 @@ impl App {
         if !self.discovery_session.begin(facet) {
             return;
         }
-        self.status = format!("Loading {base}-based distributions…");
+        self.status = self
+            .t()
+            .format(Message::StatusCatalogLoadingBase, &[("base", &base)]);
         let sender = self.catalog_sender.clone();
         std::thread::spawn(move || {
             let result = Bootable::native()
@@ -1420,12 +1428,31 @@ impl App {
         });
     }
 
+    /// The status after an ISO release is picked: whether the publisher's
+    /// checksum can be verified or only HTTPS length and boot structure.
+    fn iso_selected_status(&self) -> String {
+        let has_checksum = self
+            .catalog_releases
+            .get(self.release_selected)
+            .is_some_and(|release| release.checksum.is_some() || release.checksum_url.is_some());
+        self.t()
+            .text(if has_checksum {
+                Message::StatusCatalogIsoSelectedChecksum
+            } else {
+                Message::StatusCatalogIsoSelectedHttps
+            })
+            .into()
+    }
+
     fn toggle_catalog(&mut self) {
         if self.catalog_open {
             self.catalog_open = false;
-            self.status = format!(
-                "Catalog closed • {}",
-                self.review_readiness().guidance_in(self.locale)
+            self.status = self.t().format(
+                Message::StatusCatalogClosed,
+                &[(
+                    "guidance",
+                    &self.review_readiness().guidance_in(self.locale),
+                )],
             );
             return;
         }
@@ -1450,7 +1477,10 @@ impl App {
         self.catalog_releases.clear();
         self.discovery_session
             .expect_details(distribution.slug.clone());
-        self.status = format!("Loading {} releases…", distribution.name);
+        self.status = self.t().format(
+            Message::StatusCatalogLoadingReleases,
+            &[("name", &distribution.name)],
+        );
         let slug = distribution.slug;
         let request_slug = slug.clone();
         let sender = self.catalog_sender.clone();
@@ -1489,7 +1519,7 @@ impl App {
                 self.load_quick_base(self.discovery_session.quick_access(), CacheMode::Refresh);
             }
             QuickAccess::Windows => {
-                self.status = "Windows tools use the selected local ISO".into();
+                self.status = self.t().text(Message::StatusCatalogWindowsUsesIso).into();
             }
         }
     }
@@ -1551,16 +1581,18 @@ impl App {
     }
 
     fn poll_catalog(&mut self) {
+        let locale = self.locale;
+        let t = self.t();
         while let Ok(update) = self.catalog_receiver.try_recv() {
             match update {
                 CatalogUpdate::Popular(result) => match result {
                     Ok(fetch) => {
+                        let source = fetch.source_label_in(locale);
                         self.discovery_session.complete(
                             CatalogFacet::Popular,
                             &fetch,
                             fetch.value.is_empty(),
                         );
-                        let source = fetch.status_suffix();
                         let distributions = fetch.value;
                         let count = distributions.len();
                         self.popular_distributions = distributions.clone();
@@ -1570,7 +1602,11 @@ impl App {
                         {
                             self.distributions = distributions;
                             self.catalog_selected = 0;
-                            self.status = format!("{count} distributions · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogDistributionsLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             if count > 0 {
                                 self.select_catalog_distribution(0);
                             }
@@ -1582,7 +1618,7 @@ impl App {
                         self.status = self
                             .discovery_session
                             .state(CatalogFacet::Popular)
-                            .short_label("distributions");
+                            .short_label_in(locale, t.text(Message::CatalogSubjectDistributions));
                     }
                 },
                 CatalogUpdate::Directory(result) => match result {
@@ -1610,7 +1646,10 @@ impl App {
                             self.status = self
                                 .discovery_session
                                 .state(CatalogFacet::Directory)
-                                .short_label("search catalog");
+                                .short_label_in(
+                                    locale,
+                                    t.text(Message::CatalogSubjectSearchCatalog),
+                                );
                         }
                     }
                 },
@@ -1621,14 +1660,18 @@ impl App {
                             &fetch,
                             fetch.value.images.is_empty(),
                         );
-                        let source = fetch.status_suffix();
+                        let source = fetch.source_label_in(locale);
                         let catalog = fetch.value;
                         let count = catalog.images.len();
                         self.pi_catalog = Some(catalog);
                         self.pi_device_selected = 0;
                         self.pi_image_selected = 0;
                         if self.discovery_session.source() == DiscoverySource::RaspberryPi {
-                            self.status = format!("{count} Raspberry Pi images · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogPiImagesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                         }
                     }
                     Err(error)
@@ -1639,7 +1682,7 @@ impl App {
                         self.status = self
                             .discovery_session
                             .state(CatalogFacet::RaspberryPi)
-                            .short_label("Raspberry Pi images");
+                            .short_label_in(locale, t.text(Message::CatalogSubjectPiImages));
                     }
                     Err(error) => self
                         .discovery_session
@@ -1658,7 +1701,7 @@ impl App {
                         };
                         self.discovery_session
                             .complete(facet, &fetch, fetch.value.is_empty());
-                        let source = fetch.status_suffix();
+                        let source = fetch.source_label_in(locale);
                         let distributions = fetch.value;
                         let count = distributions.len();
                         if preset == QuickAccess::Arch {
@@ -1669,7 +1712,11 @@ impl App {
                         if self.discovery_session.quick_access() == preset {
                             self.distributions = distributions;
                             self.catalog_selected = 0;
-                            self.status = format!("{count} {base}-based distributions · {source}");
+                            self.status = t.plural(
+                                Message::StatusCatalogBaseLoaded,
+                                count as u64,
+                                &[("base", &base), ("source", &source)],
+                            );
                         }
                     }
                     Err(error) => {
@@ -1680,10 +1727,13 @@ impl App {
                         };
                         self.discovery_session.fail(facet, error);
                         if self.discovery_session.quick_access() == preset {
-                            self.status = self
-                                .discovery_session
-                                .state(facet)
-                                .short_label(&format!("{base}-based distributions"));
+                            self.status = self.discovery_session.state(facet).short_label_in(
+                                locale,
+                                &t.format(
+                                    Message::CatalogSubjectBaseDistributions,
+                                    &[("base", &base)],
+                                ),
+                            );
                         }
                     }
                 },
@@ -1698,7 +1748,7 @@ impl App {
                                 &fetch,
                                 fetch.value.releases.is_empty(),
                             );
-                            let source = fetch.status_suffix();
+                            let source = fetch.source_label_in(locale);
                             let DistributionBundle {
                                 details,
                                 releases,
@@ -1709,20 +1759,36 @@ impl App {
                             self.catalog_releases = releases;
                             self.release_selected = 0;
                             self.catalog_focus = CatalogFocus::Releases;
+                            let releases_summary = t.plural(
+                                Message::StatusCatalogReleasesLoaded,
+                                count as u64,
+                                &[("source", &source)],
+                            );
                             self.status = if count == 0 && !warnings.is_empty() {
-                                format!(
-                                    "Profile ready · no direct ISO found · {} source error(s)",
-                                    warnings.len()
+                                t.plural(
+                                    Message::StatusCatalogProfileReadyErrors,
+                                    warnings.len() as u64,
+                                    &[],
                                 )
                             } else if count == 0 {
-                                "Profile ready · no direct ISO found".into()
+                                t.text(Message::StatusCatalogProfileReadyNoIso).into()
                             } else if !warnings.is_empty() {
-                                format!(
-                                    "{count} ISO release(s) · {source} · {} source warning(s)",
-                                    warnings.len()
+                                t.format(
+                                    Message::StatusCatalogWithWarnings,
+                                    &[
+                                        ("summary", &releases_summary),
+                                        (
+                                            "warnings",
+                                            &t.plural(
+                                                Message::StatusCatalogSourceWarnings,
+                                                warnings.len() as u64,
+                                                &[],
+                                            ),
+                                        ),
+                                    ],
                                 )
                             } else {
-                                format!("{count} ISO release(s) · {source}")
+                                releases_summary
                             };
                         }
                         Err(error) => {
@@ -1730,7 +1796,7 @@ impl App {
                             self.status = self
                                 .discovery_session
                                 .state(CatalogFacet::Details)
-                                .short_label("ISO releases");
+                                .short_label_in(locale, t.text(Message::CatalogSubjectIsoReleases));
                         }
                     }
                 }
@@ -1746,8 +1812,10 @@ impl App {
                                 self.artwork_error = None;
                             }
                             Err(error) => {
-                                self.artwork_error =
-                                    Some(format!("Could not decode catalog artwork: {error}"));
+                                self.artwork_error = Some(t.format(
+                                    Message::StatusCatalogArtworkError,
+                                    &[("error", &error)],
+                                ));
                             }
                         },
                         Err(error) => self.artwork_error = Some(error),
@@ -1762,7 +1830,12 @@ impl App {
             Ok(jobs) => {
                 self.download_selected = self.download_selected.min(jobs.len().saturating_sub(1));
             }
-            Err(error) => self.status = format!("Download history unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadHistoryUnavailable,
+                    &[("error", &error)],
+                );
+            }
         }
     }
 
@@ -1770,9 +1843,10 @@ impl App {
         self.downloads_open = !self.downloads_open;
         if self.downloads_open {
             self.refresh_download_jobs();
-            self.status = format!(
-                "{} managed download job(s)",
-                self.download_session.jobs().len()
+            self.status = self.t().plural(
+                Message::DownloadsJobsInHistory,
+                self.download_session.jobs().len() as u64,
+                &[],
             );
         }
     }
@@ -1780,7 +1854,7 @@ impl App {
     fn launch_download_job(&mut self, id: String, destination: PathBuf, retry: bool) {
         let DownloadRequest::Launch(launch) = self.download_session.request(id, destination, retry)
         else {
-            self.status = "Download queued · it starts when the active job finishes".into();
+            self.status = self.t().text(Message::StatusDownloadQueued).into();
             self.refresh_download_jobs();
             return;
         };
@@ -1788,11 +1862,15 @@ impl App {
     }
 
     fn launch_download_worker(&mut self, launch: DownloadLaunch) {
-        self.status = if launch.retry {
-            "Retrying download · preserved bytes resume when supported".into()
-        } else {
-            "Starting managed download…".into()
-        };
+        self.download_final_message = false;
+        self.status = self
+            .t()
+            .text(if launch.retry {
+                Message::StatusDownloadRetrying
+            } else {
+                Message::StatusDownloadStarting
+            })
+            .into();
         let DownloadLaunch {
             id,
             destination,
@@ -1823,14 +1901,14 @@ impl App {
 
     fn retry_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
         match self.download_session.retry(&self.engine, &id) {
             Ok(DownloadRequest::Launch(launch)) => self.launch_download_worker(launch),
             Ok(DownloadRequest::Queued) => {
-                self.status = "Retry queued · it starts after the active download".into()
+                self.status = self.t().text(Message::StatusDownloadRetryQueued).into()
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -1840,13 +1918,17 @@ impl App {
         match self.download_session.next_queued(&self.engine) {
             Ok(Some(launch)) => self.launch_download_worker(launch),
             Ok(None) => {}
-            Err(error) => self.status = format!("Could not start queued download · {error}"),
+            Err(error) => {
+                self.status = self
+                    .t()
+                    .format(Message::StatusDownloadStartFailed, &[("error", &error)]);
+            }
         }
     }
 
     fn use_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
@@ -1858,21 +1940,29 @@ impl App {
                 self.image = Some(report);
                 self.advanced = false;
                 self.downloads_open = false;
-                self.status = format!("Using completed download {}", destination.display());
+                self.status = self.t().format(
+                    Message::StatusDownloadUsingCompleted,
+                    &[("path", &destination.display())],
+                );
             }
-            Err(error) => self.status = format!("Downloaded image is unavailable · {error}"),
+            Err(error) => {
+                self.status = self.t().format(
+                    Message::StatusDownloadCompletedUnavailable,
+                    &[("error", &error)],
+                );
+            }
         }
     }
 
     fn remove_selected_download(&mut self) {
         let Some(job) = self.download_session.jobs().get(self.download_selected) else {
-            self.status = "Choose a download job first".into();
+            self.status = self.t().text(Message::StatusDownloadChooseJob).into();
             return;
         };
         let id = job.id.clone();
         match self.download_session.remove(&self.engine, &id) {
             Ok(()) => {
-                self.status = "History entry removed · completed image kept".into();
+                self.status = self.t().text(Message::StatusDownloadHistoryRemoved).into();
                 self.refresh_download_jobs();
             }
             Err(error) => self.status = error.to_string(),
@@ -1898,17 +1988,17 @@ impl App {
 
     fn download_catalog_release(&mut self) {
         let Some(release) = self.catalog_releases.get(self.release_selected).cloned() else {
-            self.status = "Choose an ISO release first".into();
+            self.status = self.t().text(Message::StatusCatalogChooseRelease).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("ISO images", &["iso"])
+            .add_filter(self.t().text(Message::SourceDialogFilterIso), &["iso"])
             .set_file_name(&release.name);
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "ISO download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadIsoCancelled).into();
             return;
         };
         match self.engine.enqueue_iso_download(&release, &destination) {
@@ -1923,11 +2013,14 @@ impl App {
             .get(self.catalog_selected)
             .map(|distribution| distribution.page_url.clone())
         else {
-            self.status = "Choose a distribution first".into();
+            self.status = self
+                .t()
+                .text(Message::StatusCatalogChooseDistribution)
+                .into();
             return;
         };
         self.status = match self.engine.open_distrowatch_page(&page_url) {
-            Ok(()) => "Opened the DistroWatch distribution page in your browser".into(),
+            Ok(()) => self.t().text(Message::StatusCatalogBrowserOpened).into(),
             Err(error) => error.to_string(),
         };
     }
@@ -1939,7 +2032,7 @@ impl App {
             .and_then(|catalog| catalog.images.get(self.pi_image_selected))
             .cloned()
         else {
-            self.status = "Choose a Raspberry Pi image first".into();
+            self.status = self.t().text(Message::StatusCatalogPiChoose).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new().set_file_name(&image.suggested_filename);
@@ -1947,7 +2040,7 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Raspberry Pi image download cancelled".into();
+            self.status = self.t().text(Message::StatusDownloadPiCancelled).into();
             return;
         };
         match self.engine.enqueue_pi_download(&image, &destination) {
@@ -1964,6 +2057,10 @@ impl App {
         while let Ok(update) = receiver.try_recv() {
             match update {
                 DownloadUpdate::Progress(progress) => {
+                    // Core's last message names the integrity result (for
+                    // example a verified signature); remember that it is
+                    // showing so the generic line below does not replace it.
+                    self.download_final_message = progress.phase == ProgressPhase::Finished;
                     self.status = progress.message.clone();
                     self.download_session.apply_progress(progress);
                 }
@@ -1977,21 +2074,29 @@ impl App {
                             self.browse_directory = destination.parent().map(PathBuf::from);
                             // Core's final progress message already names the integrity result
                             // (for example a verified signature); keep it instead of a generic line.
-                            if !self.status.starts_with("Ready ·") {
-                                self.status = format!(
-                                    "Ready · downloaded, verified, and inspected {} · discovery remains open",
-                                    report.path.display()
+                            if !self.download_final_message {
+                                self.status = self.t().format(
+                                    Message::StatusDownloadReady,
+                                    &[("name", &report.path.display())],
                                 );
                             }
+                            self.download_final_message = false;
                             self.reset_image_scoped_options();
                             self.image = Some(report.clone());
                             self.advanced = false;
                         }
                         DownloadCompletion::Cancelled => {
-                            self.status = "Download cancelled • temporary data cleaned up".into();
+                            self.download_final_message = false;
+                            self.status = self
+                                .t()
+                                .text(Message::StatusDownloadCancelledCleaned)
+                                .into();
                         }
                         DownloadCompletion::Failed(error) => {
-                            self.status = format!("Download stopped · {error}")
+                            self.download_final_message = false;
+                            self.status = self
+                                .t()
+                                .format(Message::StatusDownloadStopped, &[("error", error)]);
                         }
                     }
                     self.download_session.finish(completion);
@@ -2008,9 +2113,12 @@ impl App {
     fn toggle_download_pause(&mut self) {
         match self.download_session.toggle_pause(&self.engine) {
             Ok(Some(OperationState::Paused)) => {
-                self.status = "Download paused • press p to resume or x to cancel".into();
+                // The shared line has no key legend; the TUI appends its own.
+                self.status = format!("{} (p / x)", self.t().text(Message::StatusDownloadPaused));
             }
-            Ok(Some(OperationState::Running)) => self.status = "Download resumed".into(),
+            Ok(Some(OperationState::Running)) => {
+                self.status = self.t().text(Message::StatusDownloadResumed).into();
+            }
             Ok(Some(OperationState::Cancelled) | None) => {}
             Err(error) => self.status = error.to_string(),
         }
@@ -2018,7 +2126,7 @@ impl App {
 
     fn cancel_download(&mut self) {
         if self.download_session.cancel() {
-            self.status = "Cancelling download safely • cleaning temporary data…".into();
+            self.status = self.t().text(Message::StatusDownloadCancelling).into();
         }
     }
 
@@ -2053,7 +2161,7 @@ impl App {
                 KeyCode::Esc | KeyCode::Enter => {
                     self.catalog_searching = false;
                     self.status = if self.catalog_query.is_empty() {
-                        "Search closed · showing DistroWatch six-month popularity".into()
+                        self.t().text(Message::StatusCatalogSearchClosed).into()
                     } else {
                         catalog_search_summary(
                             &self.catalog_query,
@@ -2079,7 +2187,10 @@ impl App {
         }
         if code == KeyCode::Char('/') {
             self.catalog_searching = true;
-            self.status = "Type to search · results update live · Esc leaves search".into();
+            self.status = format!(
+                "{} · Esc",
+                self.t().text(Message::DiscoverSearchPlaceholder)
+            );
             return;
         }
         if code == KeyCode::Char('r') {
@@ -2201,7 +2312,10 @@ impl App {
                 .as_ref()
                 .and_then(|catalog| catalog.devices.get(self.pi_device_selected))
             {
-                self.status = format!("Showing images compatible with {}", device.name);
+                self.status = self.t().format(
+                    Message::StatusCatalogPiCompatible,
+                    &[("board", &device.name)],
+                );
             }
         }
     }
@@ -2327,11 +2441,11 @@ impl App {
 
     fn choose_image(&mut self) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             return;
         }
         let mut dialog = rfd::FileDialog::new().add_filter(
-            "Boot images",
+            self.t().text(Message::SourceDialogTitle),
             &[
                 "iso", "img", "raw", "xz", "gz", "gzip", "zst", "zstd", "bz2", "bzip2",
             ],
@@ -2340,7 +2454,7 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         let Some(path) = dialog.pick_file() else {
-            self.status = "Image selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageCancelled).into();
             return;
         };
         self.inspect_image_path(path);
@@ -2348,11 +2462,11 @@ impl App {
 
     fn inspect_image_path(&mut self, path: PathBuf) {
         if self.image_loading {
-            self.status = "Image inspection is already running".into();
+            self.status = self.t().text(Message::StatusImageBusy).into();
             return;
         }
         self.image_loading = true;
-        self.status = "Inspecting image • compressed sources are measured after expansion…".into();
+        self.status = self.t().text(Message::StatusImageInspecting).into();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             let result = match Bootable::native().inspect_image(&path) {
@@ -2371,7 +2485,9 @@ impl App {
         match receiver.try_recv() {
             Ok(Ok((image, _))) => {
                 self.image_loading = false;
-                self.status = format!("Recognized {}", image.kind);
+                self.status = self
+                    .t()
+                    .format(Message::StatusImageRecognized, &[("kind", &image.kind)]);
                 self.remember_image(&image);
                 self.reset_image_scoped_options();
                 self.image = Some(image);
@@ -2389,7 +2505,7 @@ impl App {
             Err(mpsc::TryRecvError::Empty) => self.image_receiver = Some(receiver),
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.image_loading = false;
-                self.status = "Image inspection stopped unexpectedly".into();
+                self.status = self.t().text(Message::StatusImageStopped).into();
             }
         }
     }
@@ -2400,10 +2516,13 @@ impl App {
             dialog = dialog.set_directory(directory);
         }
         if let Some(directory) = dialog.pick_folder() {
-            self.status = format!("Image browser folder: {}", directory.display());
+            self.status = self.t().format(
+                Message::StatusImageFolder,
+                &[("path", &directory.display())],
+            );
             self.browse_directory = Some(directory);
         } else {
-            self.status = "Folder selection cancelled".into();
+            self.status = self.t().text(Message::StatusImageFolderCancelled).into();
         }
     }
 
@@ -2416,7 +2535,7 @@ impl App {
             .collect::<Vec<_>>();
         if eligible.is_empty() {
             self.selected = None;
-            self.status = "No eligible removable drive is available".into();
+            self.status = self.t().text(Message::StatusTargetNoneEligible).into();
             return;
         }
         let position = self
@@ -2429,8 +2548,7 @@ impl App {
         };
         self.selected = eligible.get(next).copied();
         self.workspace_focus = WorkspaceFocus::Target;
-        self.status =
-            "Target selected · confirm the physical drive before reviewing the erase plan".into();
+        self.status = self.t().text(Message::StatusTargetSelected).into();
     }
 
     fn move_workspace_focus(&mut self, backwards: bool) {
@@ -2439,15 +2557,17 @@ impl App {
         } else {
             self.workspace_focus.next(self.image.is_some())
         };
-        self.status = match self.workspace_focus {
-            WorkspaceFocus::Source => "Source · choose or change the image",
-            WorkspaceFocus::Target => "Target · choose an eligible removable drive",
-            WorkspaceFocus::Setup => "Setup options · configure image-specific choices",
-            WorkspaceFocus::Review => "Review & write · inspect the plan before erasure",
-            WorkspaceFocus::Discover => "Discover images · browse trusted catalogs",
-            WorkspaceFocus::Refresh => "Refresh drives · rescan removable media",
-        }
-        .into();
+        self.status = self
+            .t()
+            .text(match self.workspace_focus {
+                WorkspaceFocus::Source => Message::FocusSource,
+                WorkspaceFocus::Target => Message::FocusTarget,
+                WorkspaceFocus::Setup => Message::FocusSetup,
+                WorkspaceFocus::Review => Message::FocusReview,
+                WorkspaceFocus::Discover => Message::FocusDiscover,
+                WorkspaceFocus::Refresh => Message::FocusRefresh,
+            })
+            .into();
     }
 
     fn activate_workspace_focus(&mut self) {
@@ -2464,8 +2584,7 @@ impl App {
     fn refresh(&mut self, manual: bool) {
         if self.write_session.active() {
             if manual {
-                self.status =
-                    "Drive refresh is paused while writing • do not unplug the target".into();
+                self.status = self.t().text(Message::StatusDrivesRefreshPaused).into();
             }
             return;
         }
@@ -2473,7 +2592,7 @@ impl App {
             Ok(devices) => {
                 if devices == self.devices {
                     if manual {
-                        self.status = "Drive list is up to date • automatic detection is on".into();
+                        self.status = self.t().text(Message::StatusDrivesUpToDate).into();
                     }
                     return;
                 }
@@ -2493,7 +2612,7 @@ impl App {
                 self.selected =
                     selected_id.and_then(|id| devices.iter().position(|device| device.id == id));
                 self.devices = devices;
-                self.status = device_change_message(added, removed);
+                self.status = device_change_message(self.t(), added, removed);
             }
             Err(error) => self.status = error.to_string(),
         }
@@ -2501,7 +2620,7 @@ impl App {
 
     fn preview(&mut self) {
         let Some(image) = self.image.clone() else {
-            self.status = "Start with --image /path/to/image.iso to create a plan".into();
+            self.status = self.t().text(Message::StatusImageChooseFirst).into();
             return;
         };
         let Some(target) = self
@@ -2509,7 +2628,7 @@ impl App {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "No target device is selected".into();
+            self.status = self.t().text(Message::StatusTargetChooseFirst).into();
             return;
         };
         match self
@@ -2518,7 +2637,7 @@ impl App {
         {
             Ok(plan) => {
                 self.catalog_open = false;
-                self.status = "Reviewing the write plan • nothing has been written".into();
+                self.status = self.t().text(Message::StatusReviewOpen).into();
                 self.write_session.open(plan);
                 self.write_receiver = None;
             }
@@ -2538,7 +2657,7 @@ impl App {
 
     fn close_review(&mut self) {
         if !self.write_session.close() {
-            self.status = "Writing is active • do not close the app or unplug the target".into();
+            self.status = self.t().text(Message::StatusWriteActive).into();
             return;
         }
         self.status = self.review_readiness().guidance_in(self.locale).into();
@@ -2546,13 +2665,13 @@ impl App {
 
     fn open_write_confirmation(&mut self) {
         if self.write_session.open_confirmation() {
-            self.status = "Review the target changes and consequences before writing".into();
+            self.status = self.t().text(Message::StatusReviewConsequences).into();
         }
     }
 
     fn close_write_confirmation(&mut self) {
         self.write_session.close_confirmation();
-        self.status = "Write cancelled before erasure • the target is unchanged".into();
+        self.status = self.t().text(Message::StatusWriteCancelled).into();
     }
 
     fn start_write(&mut self) {
@@ -2563,7 +2682,7 @@ impl App {
                 return;
             }
         };
-        self.status = "Write started • do not unplug the target".into();
+        self.status = self.t().text(Message::StatusWriteStarted).into();
 
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
@@ -2594,7 +2713,9 @@ impl App {
                 }
                 WriteUpdate::Finished(completion) => {
                     finished = true;
-                    self.status = self.write_session.finish(completion);
+                    let status = completion.status_in(self.locale);
+                    self.write_session.finish(completion);
+                    self.status = status;
                 }
             }
         }
@@ -2605,8 +2726,7 @@ impl App {
 
     fn cancel_write(&mut self) {
         if self.write_session.cancel() {
-            self.status =
-                "Stopping safely • flushing completed writes; media will remain incomplete".into();
+            self.status = self.t().text(Message::StatusWriteStopping).into();
         }
     }
 
@@ -2830,38 +2950,38 @@ impl App {
     fn toggle_advanced(&mut self) {
         if self.image.is_none() {
             self.advanced = false;
-            self.status = "Choose or download an image before opening media options".into();
+            self.status = self.t().text(Message::StatusOptionsOpenNeedsImage).into();
             return;
         }
         self.advanced = !self.advanced;
-        self.status = if self.advanced {
-            "Advanced options expanded • every option is included in the reviewed plan".into()
-        } else {
-            "Advanced options collapsed • configured values remain active".into()
-        };
+        self.status = self
+            .t()
+            .text(if self.advanced {
+                Message::StatusOptionsExpanded
+            } else {
+                Message::StatusOptionsCollapsed
+            })
+            .into();
     }
 
     fn cycle_checksum_algorithm(&mut self) {
         self.checksum_algorithm = self.checksum_algorithm.next();
-        self.status = format!("Checksum algorithm: {}", self.checksum_algorithm);
+        self.status = self.t().format(
+            Message::StatusChecksumAlgorithm,
+            &[("algorithm", &self.checksum_algorithm)],
+        );
         self.preferences.checksum_algorithm = self.checksum_algorithm;
         self.save_preferences();
     }
 
     fn cycle_bad_blocks(&mut self) {
         self.options.bad_block_check = self.options.bad_block_check.next();
-        self.status = match self.options.bad_block_check {
-            BadBlockCheck::Disabled => "Destructive bad-block check disabled".into(),
-            mode => format!(
-                "Bad-block check: {} destructive pattern(s) before writing",
-                mode.passes()
-            ),
-        };
+        self.status = self.options.bad_block_check.status_in(self.locale);
     }
 
     fn checksum(&mut self) {
         let Some(image) = &self.image else {
-            self.status = "Choose an image before computing its checksum".into();
+            self.status = self.t().text(Message::StatusChecksumChooseImage).into();
             return;
         };
         self.status = match self
@@ -2879,20 +2999,26 @@ impl App {
             .and_then(|index| self.devices.get(index))
             .cloned()
         else {
-            self.status = "Choose a removable drive to back up".into();
+            self.status = self.t().text(Message::StatusBackupChooseDrive).into();
             return;
         };
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Raw drive image", &["img", "raw", "dd"])
+            .add_filter(
+                self.t().text(Message::SourceDialogFilterBackup),
+                &["img", "raw", "dd"],
+            )
             .set_file_name("bootable-backup.img");
         if let Some(directory) = &self.browse_directory {
             dialog = dialog.set_directory(directory);
         }
         let Some(destination) = dialog.save_file() else {
-            self.status = "Drive backup cancelled".into();
+            self.status = self.t().text(Message::StatusBackupCancelled).into();
             return;
         };
-        self.status = format!("Backing up {}…", device.display_name());
+        self.status = self.t().format(
+            Message::StatusBackupRunning,
+            &[("drive", &device.display_name())],
+        );
         let mut latest = self.status.clone();
         let result = self
             .engine
@@ -2900,8 +3026,14 @@ impl App {
                 latest = progress.message;
             });
         self.status = match result {
-            Ok(()) => format!("Drive image saved to {}", destination.display()),
-            Err(error) => format!("{error} • last step: {latest}"),
+            Ok(()) => self.t().format(
+                Message::StatusBackupDone,
+                &[("path", &destination.display())],
+            ),
+            Err(error) => self.t().format(
+                Message::StatusBackupFailed,
+                &[("error", &error), ("step", &latest)],
+            ),
         };
     }
 
@@ -2974,11 +3106,9 @@ impl App {
             {
                 self.selected = Some(index);
                 self.workspace_focus = WorkspaceFocus::Target;
-                self.status =
-                    "Target selected · confirm the physical drive before reviewing the erase plan"
-                        .into();
+                self.status = self.t().text(Message::StatusTargetSelected).into();
             } else {
-                self.status = "That drive is blocked and cannot be selected".into();
+                self.status = self.t().text(Message::StatusTargetBlocked).into();
             }
         }
         Some(false)
@@ -3019,8 +3149,7 @@ impl App {
                     }
                 } else if contains(self.hit_regions.quit, point) {
                     if self.write_session.active() {
-                        self.status =
-                            "Writing is active • do not close the app or unplug the target".into();
+                        self.status = self.t().text(Message::StatusWriteActive).into();
                     } else {
                         return true;
                     }
@@ -3130,8 +3259,10 @@ impl App {
                         && contains(self.hit_regions.catalog_search, point)
                     {
                         self.catalog_searching = true;
-                        self.status =
-                            "Type to search · results update live · Esc leaves search".into();
+                        self.status = format!(
+                            "{} · Esc",
+                            self.t().text(Message::DiscoverSearchPlaceholder)
+                        );
                     } else if contains(self.hit_regions.source_distrowatch, point) {
                         self.show_quick_access(QuickAccess::All);
                     } else if contains(self.hit_regions.source_arch, point) {
@@ -3175,8 +3306,7 @@ impl App {
                     {
                         self.pi_image_selected = *index;
                         self.catalog_focus = CatalogFocus::Releases;
-                        self.status =
-                            "Raspberry Pi image selected • download will be verified".into();
+                        self.status = self.t().text(Message::StatusCatalogPiSelectedVerify).into();
                     } else if let Some((_, index)) = self
                         .hit_regions
                         .distribution_rows
@@ -3194,7 +3324,7 @@ impl App {
                     {
                         self.catalog_focus = CatalogFocus::Releases;
                         self.release_selected = *index;
-                        self.status = "ISO selected • choose Download & use ISO".into();
+                        self.status = self.iso_selected_status();
                     }
                 }
                 _ => {}
@@ -3316,8 +3446,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                                 }
                                 KeyCode::Enter => {
                                     app.status =
-                                        "Acknowledge the consequences before confirming the write"
-                                            .into();
+                                        app.t().text(Message::StatusReviewAckRequired).into();
                                 }
                                 _ => {}
                             }
@@ -3341,7 +3470,9 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut A
                                 app.open_write_confirmation();
                             }
                             _ if app.write_session.active() => {
-                                app.status = "Writing is active • press x to stop safely; do not unplug the target".into();
+                                // The shared line has no key legend; the TUI appends its own.
+                                app.status =
+                                    format!("{} (x)", app.t().text(Message::StatusWriteActive));
                             }
                             _ => {}
                         }
@@ -6454,14 +6585,15 @@ fn device_flags(device: &Device) -> String {
     }
 }
 
-fn device_change_message(added: usize, removed: usize) -> String {
+fn device_change_message(t: Strings, added: usize, removed: usize) -> String {
     match (added, removed) {
-        (0, 0) => "Drive details changed • list updated automatically".into(),
-        (added, 0) => format!("Detected {added} new drive(s) • list updated automatically"),
-        (0, removed) => format!("Removed {removed} drive(s) • list updated automatically"),
-        (added, removed) => {
-            format!("Drive list changed: {added} added, {removed} removed • updated automatically")
-        }
+        (0, 0) => t.text(Message::StatusDrivesChanged).into(),
+        (added, 0) => t.plural(Message::StatusDrivesAdded, added as u64, &[]),
+        (0, removed) => t.plural(Message::StatusDrivesRemoved, removed as u64, &[]),
+        (added, removed) => t.format(
+            Message::StatusDrivesAddedRemoved,
+            &[("added", &added), ("removed", &removed)],
+        ),
     }
 }
 
