@@ -533,3 +533,11 @@ status.write.complete = Completado • imagen escrita y verificada • el destin
 status.write.auth_denied = Escritura cancelada antes del borrado • la autenticación de administrador se canceló o se denegó
 status.write.stopped = Escritura detenida de forma segura • el medio está incompleto y debe reescribirse antes de usarlo
 status.write.failed = La escritura falló • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribución · {source}
+status.catalog.distributions_loaded.other = {count} distribuciones · {source}
+status.catalog.pi_images_loaded.one = {count} imagen de Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} imágenes de Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} distribución activa basada en {base} · {source}
+status.catalog.base_loaded.other = {count} distribuciones activas basadas en {base} · {source}

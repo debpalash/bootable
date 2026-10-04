@@ -522,3 +522,8 @@ status.write.complete = 完了 • イメージを書き込み、検証しまし
 status.write.auth_denied = 消去の前に書き込みをキャンセルしました • 管理者の認証がキャンセルまたは拒否されました
 status.write.stopped = 書き込みを安全に停止しました • メディアは不完全です。使用前に書き直す必要があります
 status.write.failed = 書き込みに失敗しました • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.other = ディストリビューション{count}件 · {source}
+status.catalog.pi_images_loaded.other = Raspberry Piイメージ{count}件 · {source}
+status.catalog.base_loaded.other = {base}ベースのアクティブなディストリビューション{count}件 · {source}

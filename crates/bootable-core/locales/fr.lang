@@ -535,3 +535,11 @@ status.write.complete = Terminé • image écrite et vérifiée • la cible pe
 status.write.auth_denied = Écriture annulée avant l'effacement • l'authentification administrateur a été annulée ou refusée
 status.write.stopped = Écriture arrêtée en toute sécurité • le support est incomplet et doit être réécrit avant utilisation
 status.write.failed = Échec de l'écriture • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribution · {source}
+status.catalog.distributions_loaded.other = {count} distributions · {source}
+status.catalog.pi_images_loaded.one = {count} image Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} images Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} distribution active basée sur {base} · {source}
+status.catalog.base_loaded.other = {count} distributions actives basées sur {base} · {source}

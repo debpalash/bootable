@@ -493,6 +493,9 @@ messages! {
     StatusWriteAuthDenied => "status.write.auth_denied",
     StatusWriteStopped => "status.write.stopped",
     StatusWriteFailed => "status.write.failed",
+    StatusCatalogDistributionsLoaded => "status.catalog.distributions_loaded",
+    StatusCatalogPiImagesLoaded => "status.catalog.pi_images_loaded",
+    StatusCatalogBaseLoaded => "status.catalog.base_loaded",
 }
 
 /// A named value substituted for `{name}` in a message.

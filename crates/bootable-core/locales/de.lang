@@ -533,3 +533,11 @@ status.write.complete = Abgeschlossen • Abbild geschrieben und verifiziert •
 status.write.auth_denied = Schreiben vor dem Löschen abgebrochen • die Administratorauthentifizierung wurde abgebrochen oder verweigert
 status.write.stopped = Schreiben sicher gestoppt • das Medium ist unvollständig und muss vor der Verwendung neu geschrieben werden
 status.write.failed = Schreiben fehlgeschlagen • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} Distribution · {source}
+status.catalog.distributions_loaded.other = {count} Distributionen · {source}
+status.catalog.pi_images_loaded.one = {count} Raspberry-Pi-Abbild · {source}
+status.catalog.pi_images_loaded.other = {count} Raspberry-Pi-Abbilder · {source}
+status.catalog.base_loaded.one = {count} aktive {base}-basierte Distribution · {source}
+status.catalog.base_loaded.other = {count} aktive {base}-basierte Distributionen · {source}

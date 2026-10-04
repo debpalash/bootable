@@ -551,3 +551,11 @@ status.write.complete = Complete • image written and verified • target can b
 status.write.auth_denied = Write cancelled before erasure • administrator authentication was cancelled or denied
 status.write.stopped = Write stopped safely • media is incomplete and must be rewritten before use
 status.write.failed = Write failed • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribution · {source}
+status.catalog.distributions_loaded.other = {count} distributions · {source}
+status.catalog.pi_images_loaded.one = {count} Raspberry Pi image · {source}
+status.catalog.pi_images_loaded.other = {count} Raspberry Pi images · {source}
+status.catalog.base_loaded.one = {count} active {base}-based distribution · {source}
+status.catalog.base_loaded.other = {count} active {base}-based distributions · {source}

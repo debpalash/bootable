@@ -558,3 +558,17 @@ status.write.complete = Готово • образ записан и прове
 status.write.auth_denied = Запись отменена до стирания • аутентификация администратора отменена или отклонена
 status.write.stopped = Запись безопасно остановлена • носитель неполный, его нужно записать заново перед использованием
 status.write.failed = Ошибка записи • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} дистрибутив · {source}
+status.catalog.distributions_loaded.few = {count} дистрибутива · {source}
+status.catalog.distributions_loaded.many = {count} дистрибутивов · {source}
+status.catalog.distributions_loaded.other = {count} дистрибутива · {source}
+status.catalog.pi_images_loaded.one = {count} образ Raspberry Pi · {source}
+status.catalog.pi_images_loaded.few = {count} образа Raspberry Pi · {source}
+status.catalog.pi_images_loaded.many = {count} образов Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} образа Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} активный дистрибутив на основе {base} · {source}
+status.catalog.base_loaded.few = {count} активных дистрибутива на основе {base} · {source}
+status.catalog.base_loaded.many = {count} активных дистрибутивов на основе {base} · {source}
+status.catalog.base_loaded.other = {count} активного дистрибутива на основе {base} · {source}

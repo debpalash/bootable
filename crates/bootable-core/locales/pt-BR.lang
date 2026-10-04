@@ -533,3 +533,11 @@ status.write.complete = Concluído • imagem gravada e verificada • o destino
 status.write.auth_denied = Gravação cancelada antes do apagamento • a autenticação de administrador foi cancelada ou negada
 status.write.stopped = Gravação interrompida com segurança • a mídia está incompleta e precisa ser regravada antes do uso
 status.write.failed = Falha na gravação • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribuição · {source}
+status.catalog.distributions_loaded.other = {count} distribuições · {source}
+status.catalog.pi_images_loaded.one = {count} imagem do Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} imagens do Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} distribuição ativa baseada em {base} · {source}
+status.catalog.base_loaded.other = {count} distribuições ativas baseadas em {base} · {source}
