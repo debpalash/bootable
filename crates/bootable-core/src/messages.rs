@@ -481,6 +481,18 @@ messages! {
     StatusBackupRunning => "status.backup.running",
     StatusBackupDone => "status.backup.done",
     StatusBackupFailed => "status.backup.failed",
+    CatalogFailureNetwork => "catalog.failure.network",
+    CatalogFailureRefresh => "catalog.failure.refresh",
+    CatalogFailureCache => "catalog.failure.cache",
+    CatalogFailureUnsupported => "catalog.failure.unsupported",
+    CatalogFailureService => "catalog.failure.service",
+    CatalogSourceNetwork => "catalog.source.network",
+    CatalogSourceCache => "catalog.source.cache",
+    CatalogSourceStaleCache => "catalog.source.stale_cache",
+    StatusWriteComplete => "status.write.complete",
+    StatusWriteAuthDenied => "status.write.auth_denied",
+    StatusWriteStopped => "status.write.stopped",
+    StatusWriteFailed => "status.write.failed",
 }
 
 /// A named value substituted for `{name}` in a message.
@@ -1008,6 +1020,181 @@ mod tests {
         assert_eq!(
             Message::TargetEligible.text(Locale::Hi),
             "Removable · eligible"
+        );
+    }
+
+    #[test]
+    fn strings_helper_is_a_thin_binding_of_the_locale() {
+        let t = Locale::De.strings();
+        assert_eq!(t.locale(), Locale::De);
+        assert_eq!(t.text(Message::ActionCancel), "Abbrechen");
+        assert_eq!(
+            t.format(Message::StatusBackupDone, &[("path", &"/tmp/x.img")]),
+            Message::StatusBackupDone.format(Locale::De, &[("path", &"/tmp/x.img")])
+        );
+        assert_eq!(
+            t.plural(Message::StatusDrivesAdded, 2, &[]),
+            Message::StatusDrivesAdded.plural(Locale::De, 2, &[])
+        );
+        assert_eq!(
+            Locale::En.strings().heading(Message::ReviewStepErases),
+            "ERASES DATA"
+        );
+        // Scripts without case are unchanged.
+        assert_eq!(
+            Locale::Ja.strings().heading(Message::ReviewStepErases),
+            Message::ReviewStepErases.text(Locale::Ja)
+        );
+    }
+
+    #[test]
+    fn app_strings_never_carry_the_erase_phrase_or_ask_for_typed_text() {
+        for locale in Locale::ALL {
+            for message in Message::ALL {
+                let text = message.text(*locale);
+                assert!(
+                    !text.contains("ERASE "),
+                    "{locale} {message:?} embeds an erase phrase: {text}"
+                );
+            }
+        }
+        for message in Message::ALL {
+            let placeholders =
+                placeholders(message.text(Locale::SOURCE)).expect("validated at parse time");
+            assert!(
+                !placeholders.contains("phrase") && !placeholders.contains("confirmation"),
+                "{message:?} takes a confirmation phrase; that text must stay out of the catalog"
+            );
+        }
+    }
+
+    #[test]
+    fn technical_tokens_survive_translation_verbatim() {
+        const TOKENS: &[&str] = &[
+            "SHA-256",
+            "SkuSiPolicy.p7b",
+            "autounattend.xml",
+            "BitLocker",
+            "DistroWatch",
+            "Raspberry Pi",
+            "HTTPS",
+            "UEFI",
+            "MBR",
+            "TPM",
+            "Copilot",
+            "OneDrive",
+            "Teams",
+            "CA 2023",
+        ];
+        for locale in Locale::ALL.iter().filter(|locale| !locale.is_source()) {
+            for (key, translated) in &table(*locale).entries {
+                let (base, suffix) = split_plural(key);
+                let english_key = if suffix.is_some() {
+                    format!("{base}.other")
+                } else {
+                    (*key).to_owned()
+                };
+                // `.few`/`.many` have no English counterpart text of their own,
+                // but share the `.other` tokens.
+                let english = &table(Locale::En).entries[english_key.as_str()];
+                // German joins brand names into compounds with hyphens
+                // (`Raspberry-Pi-Katalog`); compare with hyphens as spaces.
+                let normalized = translated.replace('-', " ");
+                for token in TOKENS.iter().filter(|token| english.contains(**token)) {
+                    assert!(
+                        normalized.contains(&token.replace('-', " ")),
+                        "{locale}: `{key}` lost the verbatim token `{token}`: {translated}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn english_helpers_match_the_legacy_display_text() {
+        use crate::{CatalogOrigin, CatalogState, DownloadKind, DownloadStatus, WriteCompletion};
+
+        for status in [
+            DownloadStatus::Queued,
+            DownloadStatus::Running,
+            DownloadStatus::Paused,
+            DownloadStatus::Interrupted,
+            DownloadStatus::Completed,
+            DownloadStatus::Failed,
+            DownloadStatus::Cancelled,
+        ] {
+            assert_eq!(status.label_in(Locale::En), status.to_string());
+        }
+        for kind in [DownloadKind::Iso, DownloadKind::RaspberryPi] {
+            assert_eq!(kind.label_in(Locale::En), kind.to_string());
+        }
+        assert_ne!(
+            DownloadStatus::Running.label_in(Locale::Ru),
+            DownloadStatus::Running.label_in(Locale::En)
+        );
+
+        let ready = |origin| CatalogState::Ready {
+            origin,
+            warning: None,
+        };
+        assert_eq!(CatalogState::Idle.short_label("x"), "x not loaded");
+        assert_eq!(CatalogState::Loading.short_label("x"), "Loading x…");
+        assert_eq!(ready(CatalogOrigin::Network).short_label("x"), "x ready");
+        assert_eq!(
+            ready(CatalogOrigin::FreshCache).short_label("x"),
+            "x ready · cached"
+        );
+        assert_eq!(CatalogState::Empty.short_label("x"), "No x found");
+        assert_eq!(
+            CatalogState::Failed("connection reset".into()).short_label("x"),
+            "Could not load x · network unavailable · retry"
+        );
+        assert_eq!(
+            CatalogState::Ready {
+                origin: CatalogOrigin::StaleCache,
+                warning: Some("refresh failed".into()),
+            }
+            .short_label("x"),
+            "x ready · cached · refresh unavailable"
+        );
+
+        assert_eq!(
+            WriteCompletion::Succeeded.status(),
+            "Complete • image written and verified • target can be safely removed"
+        );
+        assert_eq!(
+            WriteCompletion::Failed("boom".into()).status(),
+            "Write failed • boom"
+        );
+        let failed = WriteCompletion::Failed("boom".into());
+        assert_eq!(failed.title_in(Locale::En), "Write failed");
+        assert_eq!(failed.detail_in(Locale::Ru), "boom");
+    }
+
+    #[test]
+    fn bad_block_helpers_pluralize_per_locale() {
+        use crate::BadBlockCheck;
+
+        assert_eq!(
+            BadBlockCheck::Disabled.label_in(Locale::En),
+            "Bad blocks off"
+        );
+        assert_eq!(
+            BadBlockCheck::TwoPasses.label_in(Locale::En),
+            "Bad blocks 2x"
+        );
+        assert_eq!(
+            BadBlockCheck::OnePass.status_in(Locale::En),
+            "Bad-block check: 1 destructive pattern before writing"
+        );
+        assert_eq!(
+            BadBlockCheck::FourPasses.status_in(Locale::En),
+            "Bad-block check: 4 destructive patterns before writing"
+        );
+        assert!(
+            BadBlockCheck::TwoPasses
+                .status_in(Locale::Ru)
+                .contains("2 деструктивных шаблона")
         );
     }
 }

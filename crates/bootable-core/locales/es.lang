@@ -517,3 +517,19 @@ status.backup.cancelled = Copia de seguridad de la unidad cancelada
 status.backup.running = Respaldando {drive}…
 status.backup.done = Imagen de la unidad guardada en {path}
 status.backup.failed = {error} • último paso: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = red no disponible
+catalog.failure.refresh = actualización no disponible
+catalog.failure.cache = caché no disponible
+catalog.failure.unsupported = respuesta del catálogo no compatible
+catalog.failure.service = servicio no disponible
+catalog.source.network = actualizado ahora
+catalog.source.cache = en caché
+catalog.source.stale_cache = en caché · falló la actualización
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Completado • imagen escrita y verificada • el destino se puede retirar de forma segura
+status.write.auth_denied = Escritura cancelada antes del borrado • la autenticación de administrador se canceló o se denegó
+status.write.stopped = Escritura detenida de forma segura • el medio está incompleto y debe reescribirse antes de usarlo
+status.write.failed = La escritura falló • {error}

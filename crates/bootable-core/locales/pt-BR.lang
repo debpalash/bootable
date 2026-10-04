@@ -517,3 +517,19 @@ status.backup.cancelled = Backup da unidade cancelado
 status.backup.running = Fazendo backup de {drive}…
 status.backup.done = Imagem da unidade salva em {path}
 status.backup.failed = {error} • última etapa: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = rede indisponível
+catalog.failure.refresh = atualização indisponível
+catalog.failure.cache = cache indisponível
+catalog.failure.unsupported = resposta do catálogo não compatível
+catalog.failure.service = serviço indisponível
+catalog.source.network = atualizado agora
+catalog.source.cache = em cache
+catalog.source.stale_cache = em cache · falha na atualização
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Concluído • imagem gravada e verificada • o destino pode ser removido com segurança
+status.write.auth_denied = Gravação cancelada antes do apagamento • a autenticação de administrador foi cancelada ou negada
+status.write.stopped = Gravação interrompida com segurança • a mídia está incompleta e precisa ser regravada antes do uso
+status.write.failed = Falha na gravação • {error}

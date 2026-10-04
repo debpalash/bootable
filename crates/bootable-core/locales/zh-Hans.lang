@@ -506,3 +506,19 @@ status.backup.cancelled = 已取消驱动器备份
 status.backup.running = 正在备份 {drive}…
 status.backup.done = 驱动器镜像已保存到 {path}
 status.backup.failed = {error} • 最后一步：{step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = 网络不可用
+catalog.failure.refresh = 无法刷新
+catalog.failure.cache = 缓存不可用
+catalog.failure.unsupported = 不支持该目录响应
+catalog.failure.service = 服务不可用
+catalog.source.network = 刚刚更新
+catalog.source.cache = 来自缓存
+catalog.source.stale_cache = 来自缓存 · 刷新失败
+
+# Write completion status lines (core-owned write session)
+status.write.complete = 完成 • 镜像已写入并验证 • 可以安全移除目标驱动器
+status.write.auth_denied = 擦除前已取消写入 • 管理员身份验证已被取消或拒绝
+status.write.stopped = 写入已安全停止 • 介质不完整，使用前必须重新写入
+status.write.failed = 写入失败 • {error}

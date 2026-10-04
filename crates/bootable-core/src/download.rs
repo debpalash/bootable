@@ -12,6 +12,8 @@ use url::Url;
 
 use crate::catalog::IsoRelease;
 use crate::error::{Error, Result, io_error};
+use crate::locale::Locale;
+use crate::messages::Message;
 use crate::pi_catalog::PiImage;
 use crate::{OperationControl, Progress};
 
@@ -26,6 +28,17 @@ const ACTIVE_LEASE_MILLIS: u64 = 15_000;
 pub enum DownloadKind {
     Iso,
     RaspberryPi,
+}
+
+impl DownloadKind {
+    /// The kind of download, in `locale`. English matches `Display`.
+    pub fn label_in(self, locale: Locale) -> &'static str {
+        match self {
+            Self::Iso => Message::DownloadsKindIso,
+            Self::RaspberryPi => Message::DownloadsKindRaspberryPi,
+        }
+        .text(locale)
+    }
 }
 
 impl std::fmt::Display for DownloadKind {
@@ -55,6 +68,21 @@ impl DownloadStatus {
 
     pub fn can_retry(self) -> bool {
         matches!(self, Self::Interrupted | Self::Failed | Self::Cancelled)
+    }
+
+    /// The status as shown in download rows, in `locale`. English matches
+    /// `Display`.
+    pub fn label_in(self, locale: Locale) -> &'static str {
+        match self {
+            Self::Queued => Message::DownloadsStatusQueued,
+            Self::Running => Message::DownloadsStatusRunning,
+            Self::Paused => Message::DownloadsStatusPaused,
+            Self::Interrupted => Message::DownloadsStatusInterrupted,
+            Self::Completed => Message::DownloadsStatusCompleted,
+            Self::Failed => Message::DownloadsStatusFailed,
+            Self::Cancelled => Message::DownloadsStatusCancelled,
+        }
+        .text(locale)
     }
 }
 

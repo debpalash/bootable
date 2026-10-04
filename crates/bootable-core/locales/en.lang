@@ -535,3 +535,19 @@ status.backup.cancelled = Drive backup cancelled
 status.backup.running = Backing up {drive}…
 status.backup.done = Drive image saved to {path}
 status.backup.failed = {error} • last step: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = network unavailable
+catalog.failure.refresh = refresh unavailable
+catalog.failure.cache = cache unavailable
+catalog.failure.unsupported = catalog response unsupported
+catalog.failure.service = service unavailable
+catalog.source.network = updated now
+catalog.source.cache = cached
+catalog.source.stale_cache = cached · refresh failed
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Complete • image written and verified • target can be safely removed
+status.write.auth_denied = Write cancelled before erasure • administrator authentication was cancelled or denied
+status.write.stopped = Write stopped safely • media is incomplete and must be rewritten before use
+status.write.failed = Write failed • {error}

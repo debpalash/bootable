@@ -1,6 +1,8 @@
 use std::time::Instant;
 
 use crate::error::{Error, Result};
+use crate::locale::Locale;
+use crate::messages::Message;
 use crate::model::{Progress, ProgressPhase, WritePlan};
 use crate::operation::OperationControl;
 
@@ -27,19 +29,40 @@ impl WriteCompletion {
     }
 
     pub fn status(&self) -> String {
+        self.status_in(Locale::SOURCE)
+    }
+
+    /// The one-line status for the status bar, in `locale`.
+    pub fn status_in(&self, locale: Locale) -> String {
         match self {
-            Self::Succeeded => {
-                "Complete • image written and verified • target can be safely removed".into()
-            }
+            Self::Succeeded => Message::StatusWriteComplete.text(locale).into(),
+            Self::AuthenticationDenied => Message::StatusWriteAuthDenied.text(locale).into(),
+            Self::Cancelled => Message::StatusWriteStopped.text(locale).into(),
+            Self::Failed(error) => Message::StatusWriteFailed.format(locale, &[("error", error)]),
+        }
+    }
+
+    /// The result panel heading, in `locale`.
+    pub fn title_in(&self, locale: Locale) -> &'static str {
+        match self {
+            Self::Succeeded => Message::ResultSuccessTitle,
+            Self::AuthenticationDenied => Message::ResultAuthenticationDeniedTitle,
+            Self::Cancelled => Message::ResultStoppedTitle,
+            Self::Failed(_) => Message::ResultFailedTitle,
+        }
+        .text(locale)
+    }
+
+    /// The result panel body, in `locale`. For a failure this is the error
+    /// text exactly as reported by core.
+    pub fn detail_in(&self, locale: Locale) -> String {
+        match self {
+            Self::Succeeded => Message::ResultSuccessBody.text(locale).into(),
             Self::AuthenticationDenied => {
-                "Write cancelled before erasure • administrator authentication was cancelled or denied"
-                    .into()
+                Message::ResultAuthenticationDeniedBody.text(locale).into()
             }
-            Self::Cancelled => {
-                "Write stopped safely • media is incomplete and must be rewritten before use"
-                    .into()
-            }
-            Self::Failed(error) => format!("Write failed • {error}"),
+            Self::Cancelled => Message::ResultStoppedBody.text(locale).into(),
+            Self::Failed(error) => error.clone(),
         }
     }
 }

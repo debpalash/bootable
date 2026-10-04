@@ -510,6 +510,24 @@ impl BadBlockCheck {
         }
     }
 
+    /// The control label ("Bad blocks off", "Bad blocks 2x"), in `locale`.
+    pub fn label_in(self, locale: Locale) -> String {
+        match self {
+            Self::Disabled => Message::OptionsToolsBadBlocksOff.text(locale).into(),
+            mode => {
+                Message::OptionsToolsBadBlocksPasses.format(locale, &[("passes", &mode.passes())])
+            }
+        }
+    }
+
+    /// The status line announcing the setting, in `locale`.
+    pub fn status_in(self, locale: Locale) -> String {
+        match self {
+            Self::Disabled => Message::StatusBadblocksOff.text(locale).into(),
+            mode => Message::StatusBadblocksPasses.plural(locale, mode.passes() as u64, &[]),
+        }
+    }
+
     pub fn next(self) -> Self {
         match self {
             Self::Disabled => Self::OnePass,

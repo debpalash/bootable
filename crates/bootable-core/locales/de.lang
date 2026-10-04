@@ -517,3 +517,19 @@ status.backup.cancelled = Laufwerkssicherung abgebrochen
 status.backup.running = {drive} wird gesichert…
 status.backup.done = Laufwerksabbild gespeichert unter {path}
 status.backup.failed = {error} • letzter Schritt: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = Netzwerk nicht verfügbar
+catalog.failure.refresh = Aktualisierung nicht verfügbar
+catalog.failure.cache = Cache nicht verfügbar
+catalog.failure.unsupported = Katalogantwort wird nicht unterstützt
+catalog.failure.service = Dienst nicht verfügbar
+catalog.source.network = gerade aktualisiert
+catalog.source.cache = aus dem Cache
+catalog.source.stale_cache = aus dem Cache · Aktualisierung fehlgeschlagen
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Abgeschlossen • Abbild geschrieben und verifiziert • das Ziel kann sicher entfernt werden
+status.write.auth_denied = Schreiben vor dem Löschen abgebrochen • die Administratorauthentifizierung wurde abgebrochen oder verweigert
+status.write.stopped = Schreiben sicher gestoppt • das Medium ist unvollständig und muss vor der Verwendung neu geschrieben werden
+status.write.failed = Schreiben fehlgeschlagen • {error}

@@ -542,3 +542,19 @@ status.backup.cancelled = Резервное копирование накопи
 status.backup.running = Резервное копирование {drive}…
 status.backup.done = Образ накопителя сохранён в {path}
 status.backup.failed = {error} • последний шаг: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = сеть недоступна
+catalog.failure.refresh = обновление недоступно
+catalog.failure.cache = кэш недоступен
+catalog.failure.unsupported = ответ каталога не поддерживается
+catalog.failure.service = служба недоступна
+catalog.source.network = только что обновлено
+catalog.source.cache = из кэша
+catalog.source.stale_cache = из кэша · обновление не удалось
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Готово • образ записан и проверен • накопитель можно безопасно извлечь
+status.write.auth_denied = Запись отменена до стирания • аутентификация администратора отменена или отклонена
+status.write.stopped = Запись безопасно остановлена • носитель неполный, его нужно записать заново перед использованием
+status.write.failed = Ошибка записи • {error}

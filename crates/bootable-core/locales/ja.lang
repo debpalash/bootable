@@ -506,3 +506,19 @@ status.backup.cancelled = ドライブのバックアップをキャンセルし
 status.backup.running = {drive}をバックアップ中…
 status.backup.done = ドライブイメージを {path} に保存しました
 status.backup.failed = {error} • 最後の手順: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = ネットワークに接続できません
+catalog.failure.refresh = 更新できません
+catalog.failure.cache = キャッシュを利用できません
+catalog.failure.unsupported = カタログの応答に対応していません
+catalog.failure.service = サービスを利用できません
+catalog.source.network = たった今更新
+catalog.source.cache = キャッシュ
+catalog.source.stale_cache = キャッシュ · 更新に失敗
+
+# Write completion status lines (core-owned write session)
+status.write.complete = 完了 • イメージを書き込み、検証しました • ターゲットを安全に取り外せます
+status.write.auth_denied = 消去の前に書き込みをキャンセルしました • 管理者の認証がキャンセルまたは拒否されました
+status.write.stopped = 書き込みを安全に停止しました • メディアは不完全です。使用前に書き直す必要があります
+status.write.failed = 書き込みに失敗しました • {error}

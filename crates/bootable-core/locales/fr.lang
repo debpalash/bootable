@@ -519,3 +519,19 @@ status.backup.cancelled = Sauvegarde du lecteur annulée
 status.backup.running = Sauvegarde de {drive}…
 status.backup.done = Image du lecteur enregistrée dans {path}
 status.backup.failed = {error} • dernière étape : {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = réseau indisponible
+catalog.failure.refresh = actualisation indisponible
+catalog.failure.cache = cache indisponible
+catalog.failure.unsupported = réponse du catalogue non prise en charge
+catalog.failure.service = service indisponible
+catalog.source.network = mis à jour à l'instant
+catalog.source.cache = en cache
+catalog.source.stale_cache = en cache · échec de l'actualisation
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Terminé • image écrite et vérifiée • la cible peut être retirée en toute sécurité
+status.write.auth_denied = Écriture annulée avant l'effacement • l'authentification administrateur a été annulée ou refusée
+status.write.stopped = Écriture arrêtée en toute sécurité • le support est incomplet et doit être réécrit avant utilisation
+status.write.failed = Échec de l'écriture • {error}
