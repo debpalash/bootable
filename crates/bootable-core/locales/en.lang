@@ -120,3 +120,48 @@ integrity.finalized.transfer = Stage 4/5 · HTTPS transfer length verified · pu
 integrity.finalized.checksum = Stage 4/5 · Publisher {algorithm} verified · finalized at {path}
 integrity.finalized.checksum_unsigned = Stage 4/5 · Publisher {algorithm} verified · signature not verified ({note}) · finalized at {path}
 integrity.finalized.signature = Stage 4/5 · {label} · finalized at {path}
+
+# Header and brand
+header.tagline = Boot media, written deliberately.
+header.title.create = Create boot media
+header.subtitle.create = One deliberate path from image to removable drive.
+header.subtitle.review = Inspect every operation before confirmation.
+guide.title = Guide
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Downloads
+action.downloads_count = Downloads · {count}
+action.downloads_compact = Jobs
+action.discover = Discover images
+action.discover_compact = Find
+action.catalog_close = Close catalog
+action.catalog_close_compact = Catalog
+action.setup_options = Setup options
+action.setup_options_compact = Setup
+action.hide_options = Hide options
+action.hide_options_compact = Hide
+action.refresh_drives = Refresh drives
+action.refresh = Refresh
+action.retry = Retry
+action.browse = Browse
+action.change = Change
+action.inspecting = Inspecting…
+action.select = Select
+action.selected = Selected
+action.blocked = Blocked
+action.close = Close
+action.cancel = Cancel
+action.cancelling = Cancelling…
+action.back = Back
+action.pause = Pause
+action.resume = Resume
+action.stop = Stop
+action.review = Review
+action.quit = Quit
+
+# Tooltips
+tooltip.guide = Guide and shortcuts ({shortcut})
+tooltip.refresh_drives = Refresh removable drives
+tooltip.refresh_distrowatch = Refresh DistroWatch data
+tooltip.refresh_pi = Refresh Raspberry Pi catalog

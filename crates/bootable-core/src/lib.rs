@@ -51,7 +51,7 @@ pub use guide::{
 };
 pub use integrity::IntegrityState;
 pub use locale::{Locale, PluralCategory, TextDirection, UnsupportedLocale};
-pub use messages::{Arg, Coverage, Message};
+pub use messages::{Arg, Coverage, Message, Strings};
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,

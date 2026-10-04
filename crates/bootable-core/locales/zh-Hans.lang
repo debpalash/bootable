@@ -100,3 +100,48 @@ integrity.finalized.transfer = 阶段 4/5 · HTTPS 传输长度已验证 · 发�
 integrity.finalized.checksum = 阶段 4/5 · 发布者 {algorithm} 已验证 · 已在 {path} 完成
 integrity.finalized.checksum_unsigned = 阶段 4/5 · 发布者 {algorithm} 已验证 · 签名未验证（{note}）· 已在 {path} 完成
 integrity.finalized.signature = 阶段 4/5 · {label} · 已在 {path} 完成
+
+# Header and brand
+header.tagline = 有意识地写入启动介质。
+header.title.create = 创建启动介质
+header.subtitle.create = 从镜像到可移动驱动器的一条明确路径。
+header.subtitle.review = 确认之前请检查每一项操作。
+guide.title = 指南
+common.labeled = {label}：{value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = 下载
+action.downloads_count = 下载 · {count}
+action.downloads_compact = 任务
+action.discover = 发现镜像
+action.discover_compact = 查找
+action.catalog_close = 关闭目录
+action.catalog_close_compact = 目录
+action.setup_options = 设置选项
+action.setup_options_compact = 设置
+action.hide_options = 隐藏选项
+action.hide_options_compact = 隐藏
+action.refresh_drives = 刷新驱动器
+action.refresh = 刷新
+action.retry = 重试
+action.browse = 浏览
+action.change = 更改
+action.inspecting = 正在检查…
+action.select = 选择
+action.selected = 已选择
+action.blocked = 已阻止
+action.close = 关闭
+action.cancel = 取消
+action.cancelling = 正在取消…
+action.back = 返回
+action.pause = 暂停
+action.resume = 继续
+action.stop = 停止
+action.review = 检查
+action.quit = 退出
+
+# Tooltips
+tooltip.guide = 指南和快捷键（{shortcut}）
+tooltip.refresh_drives = 刷新可移动驱动器
+tooltip.refresh_distrowatch = 刷新 DistroWatch 数据
+tooltip.refresh_pi = 刷新 Raspberry Pi 目录

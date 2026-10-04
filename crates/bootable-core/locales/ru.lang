@@ -109,3 +109,48 @@ integrity.finalized.transfer = Этап 4/5 · Размер HTTPS-передач
 integrity.finalized.checksum = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · завершено в {path}
 integrity.finalized.checksum_unsigned = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · подпись не проверена ({note}) · завершено в {path}
 integrity.finalized.signature = Этап 4/5 · {label} · завершено в {path}
+
+# Header and brand
+header.tagline = Загрузочные носители, записанные осознанно.
+header.title.create = Создать загрузочный носитель
+header.subtitle.create = Один осознанный путь от образа до съёмного накопителя.
+header.subtitle.review = Проверьте каждую операцию перед подтверждением.
+guide.title = Руководство
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Загрузки
+action.downloads_count = Загрузки · {count}
+action.downloads_compact = Задачи
+action.discover = Найти образы
+action.discover_compact = Найти
+action.catalog_close = Закрыть каталог
+action.catalog_close_compact = Каталог
+action.setup_options = Параметры настройки
+action.setup_options_compact = Настройка
+action.hide_options = Скрыть параметры
+action.hide_options_compact = Скрыть
+action.refresh_drives = Обновить накопители
+action.refresh = Обновить
+action.retry = Повторить
+action.browse = Обзор
+action.change = Изменить
+action.inspecting = Проверка…
+action.select = Выбрать
+action.selected = Выбрано
+action.blocked = Заблокировано
+action.close = Закрыть
+action.cancel = Отмена
+action.cancelling = Отмена…
+action.back = Назад
+action.pause = Пауза
+action.resume = Продолжить
+action.stop = Остановить
+action.review = Проверить
+action.quit = Выход
+
+# Tooltips
+tooltip.guide = Руководство и сочетания клавиш ({shortcut})
+tooltip.refresh_drives = Обновить съёмные накопители
+tooltip.refresh_distrowatch = Обновить данные DistroWatch
+tooltip.refresh_pi = Обновить каталог Raspberry Pi

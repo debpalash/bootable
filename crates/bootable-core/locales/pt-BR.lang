@@ -102,3 +102,48 @@ integrity.finalized.transfer = Etapa 4/5 · Tamanho da transferência HTTPS veri
 integrity.finalized.checksum = Etapa 4/5 · {algorithm} do editor verificado · finalizado em {path}
 integrity.finalized.checksum_unsigned = Etapa 4/5 · {algorithm} do editor verificado · assinatura não verificada ({note}) · finalizado em {path}
 integrity.finalized.signature = Etapa 4/5 · {label} · finalizado em {path}
+
+# Header and brand
+header.tagline = Mídia de inicialização, gravada com intenção.
+header.title.create = Criar mídia de inicialização
+header.subtitle.create = Um caminho deliberado da imagem à unidade removível.
+header.subtitle.review = Inspecione cada operação antes de confirmar.
+guide.title = Guia
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Downloads
+action.downloads_count = Downloads · {count}
+action.downloads_compact = Tarefas
+action.discover = Descobrir imagens
+action.discover_compact = Buscar
+action.catalog_close = Fechar catálogo
+action.catalog_close_compact = Catálogo
+action.setup_options = Opções de configuração
+action.setup_options_compact = Configurar
+action.hide_options = Ocultar opções
+action.hide_options_compact = Ocultar
+action.refresh_drives = Atualizar unidades
+action.refresh = Atualizar
+action.retry = Tentar novamente
+action.browse = Procurar
+action.change = Alterar
+action.inspecting = Inspecionando…
+action.select = Selecionar
+action.selected = Selecionada
+action.blocked = Bloqueada
+action.close = Fechar
+action.cancel = Cancelar
+action.cancelling = Cancelando…
+action.back = Voltar
+action.pause = Pausar
+action.resume = Retomar
+action.stop = Parar
+action.review = Revisar
+action.quit = Sair
+
+# Tooltips
+tooltip.guide = Guia e atalhos ({shortcut})
+tooltip.refresh_drives = Atualizar unidades removíveis
+tooltip.refresh_distrowatch = Atualizar os dados do DistroWatch
+tooltip.refresh_pi = Atualizar o catálogo do Raspberry Pi

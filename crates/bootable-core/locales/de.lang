@@ -102,3 +102,48 @@ integrity.finalized.transfer = Schritt 4/5 · Länge der HTTPS-Übertragung veri
 integrity.finalized.checksum = Schritt 4/5 · {algorithm} des Herausgebers verifiziert · abgeschlossen unter {path}
 integrity.finalized.checksum_unsigned = Schritt 4/5 · {algorithm} des Herausgebers verifiziert · Signatur nicht verifiziert ({note}) · abgeschlossen unter {path}
 integrity.finalized.signature = Schritt 4/5 · {label} · abgeschlossen unter {path}
+
+# Header and brand
+header.tagline = Startmedien, bewusst geschrieben.
+header.title.create = Startmedium erstellen
+header.subtitle.create = Ein bewusster Weg vom Abbild zum Wechsellaufwerk.
+header.subtitle.review = Prüfen Sie jeden Vorgang vor der Bestätigung.
+guide.title = Anleitung
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Downloads
+action.downloads_count = Downloads · {count}
+action.downloads_compact = Jobs
+action.discover = Abbilder entdecken
+action.discover_compact = Suchen
+action.catalog_close = Katalog schließen
+action.catalog_close_compact = Katalog
+action.setup_options = Einrichtungsoptionen
+action.setup_options_compact = Einrichtung
+action.hide_options = Optionen ausblenden
+action.hide_options_compact = Ausblenden
+action.refresh_drives = Laufwerke aktualisieren
+action.refresh = Aktualisieren
+action.retry = Erneut versuchen
+action.browse = Durchsuchen
+action.change = Ändern
+action.inspecting = Wird geprüft…
+action.select = Auswählen
+action.selected = Ausgewählt
+action.blocked = Gesperrt
+action.close = Schließen
+action.cancel = Abbrechen
+action.cancelling = Wird abgebrochen…
+action.back = Zurück
+action.pause = Pausieren
+action.resume = Fortsetzen
+action.stop = Stopp
+action.review = Prüfen
+action.quit = Beenden
+
+# Tooltips
+tooltip.guide = Anleitung und Tastenkürzel ({shortcut})
+tooltip.refresh_drives = Wechsellaufwerke aktualisieren
+tooltip.refresh_distrowatch = DistroWatch-Daten aktualisieren
+tooltip.refresh_pi = Raspberry-Pi-Katalog aktualisieren

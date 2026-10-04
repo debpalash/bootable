@@ -125,6 +125,45 @@ messages! {
     IntegrityFinalizedChecksum => "integrity.finalized.checksum",
     IntegrityFinalizedChecksumUnsigned => "integrity.finalized.checksum_unsigned",
     IntegrityFinalizedSignature => "integrity.finalized.signature",
+    HeaderTagline => "header.tagline",
+    HeaderTitleCreate => "header.title.create",
+    HeaderSubtitleCreate => "header.subtitle.create",
+    HeaderSubtitleReview => "header.subtitle.review",
+    GuideTitle => "guide.title",
+    CommonLabeled => "common.labeled",
+    ActionDownloads => "action.downloads",
+    ActionDownloadsCount => "action.downloads_count",
+    ActionDownloadsCompact => "action.downloads_compact",
+    ActionDiscover => "action.discover",
+    ActionDiscoverCompact => "action.discover_compact",
+    ActionCatalogClose => "action.catalog_close",
+    ActionCatalogCloseCompact => "action.catalog_close_compact",
+    ActionSetupOptions => "action.setup_options",
+    ActionSetupOptionsCompact => "action.setup_options_compact",
+    ActionHideOptions => "action.hide_options",
+    ActionHideOptionsCompact => "action.hide_options_compact",
+    ActionRefreshDrives => "action.refresh_drives",
+    ActionRefresh => "action.refresh",
+    ActionRetry => "action.retry",
+    ActionBrowse => "action.browse",
+    ActionChange => "action.change",
+    ActionInspecting => "action.inspecting",
+    ActionSelect => "action.select",
+    ActionSelected => "action.selected",
+    ActionBlocked => "action.blocked",
+    ActionClose => "action.close",
+    ActionCancel => "action.cancel",
+    ActionCancelling => "action.cancelling",
+    ActionBack => "action.back",
+    ActionPause => "action.pause",
+    ActionResume => "action.resume",
+    ActionStop => "action.stop",
+    ActionReview => "action.review",
+    ActionQuit => "action.quit",
+    TooltipGuide => "tooltip.guide",
+    TooltipRefreshDrives => "tooltip.refresh_drives",
+    TooltipRefreshDistrowatch => "tooltip.refresh_distrowatch",
+    TooltipRefreshPi => "tooltip.refresh_pi",
 }
 
 /// A named value substituted for `{name}` in a message.
@@ -158,6 +197,55 @@ impl Message {
         table(Locale::SOURCE)
             .entries
             .contains_key(format!("{}.other", self.key()).as_str())
+    }
+}
+
+/// A [`Locale`] bound to the catalog, so adapters write `t.text(Message::X)`
+/// instead of threading the locale through every call.
+///
+/// It is `Copy` and holds nothing but the locale; keep it in app state and
+/// rebuild it (`locale.strings()`) when the user changes the language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Strings {
+    locale: Locale,
+}
+
+impl Strings {
+    pub const fn new(locale: Locale) -> Self {
+        Self { locale }
+    }
+
+    pub const fn locale(self) -> Locale {
+        self.locale
+    }
+
+    /// [`Message::text`] in this locale.
+    pub fn text(self, message: Message) -> &'static str {
+        message.text(self.locale)
+    }
+
+    /// [`Message::format`] in this locale.
+    pub fn format(self, message: Message, args: &[Arg<'_>]) -> String {
+        message.format(self.locale, args)
+    }
+
+    /// [`Message::plural`] in this locale.
+    pub fn plural(self, message: Message, count: u64, args: &[Arg<'_>]) -> String {
+        message.plural(self.locale, count, args)
+    }
+
+    /// The message upper-cased for section headings and badges (`SOURCE`,
+    /// `ERASES DATA`). Catalog text is stored in sentence case; scripts
+    /// without case (CJK) are unchanged.
+    pub fn heading(self, message: Message) -> String {
+        message.text(self.locale).to_uppercase()
+    }
+}
+
+impl Locale {
+    /// This locale bound to the message catalog.
+    pub const fn strings(self) -> Strings {
+        Strings::new(self)
     }
 }
 

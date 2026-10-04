@@ -100,3 +100,48 @@ integrity.finalized.transfer = ステージ 4/5 · HTTPS転送の長さを検証
 integrity.finalized.checksum = ステージ 4/5 · 配布元の{algorithm}を検証済み · {path} に確定
 integrity.finalized.checksum_unsigned = ステージ 4/5 · 配布元の{algorithm}を検証済み · 署名は未検証 ({note}) · {path} に確定
 integrity.finalized.signature = ステージ 4/5 · {label} · {path} に確定
+
+# Header and brand
+header.tagline = ブートメディアを、慎重に書き込む。
+header.title.create = ブートメディアを作成
+header.subtitle.create = イメージからリムーバブルドライブまで、確実な一本道。
+header.subtitle.review = 確認の前にすべての操作を点検します。
+guide.title = ガイド
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = ダウンロード
+action.downloads_count = ダウンロード · {count}
+action.downloads_compact = ジョブ
+action.discover = イメージを探す
+action.discover_compact = 探す
+action.catalog_close = カタログを閉じる
+action.catalog_close_compact = カタログ
+action.setup_options = セットアップオプション
+action.setup_options_compact = セットアップ
+action.hide_options = オプションを隠す
+action.hide_options_compact = 隠す
+action.refresh_drives = ドライブを更新
+action.refresh = 更新
+action.retry = 再試行
+action.browse = 参照
+action.change = 変更
+action.inspecting = 検査中…
+action.select = 選択
+action.selected = 選択済み
+action.blocked = ブロック
+action.close = 閉じる
+action.cancel = キャンセル
+action.cancelling = キャンセル中…
+action.back = 戻る
+action.pause = 一時停止
+action.resume = 再開
+action.stop = 停止
+action.review = 確認
+action.quit = 終了
+
+# Tooltips
+tooltip.guide = ガイドとショートカット ({shortcut})
+tooltip.refresh_drives = リムーバブルドライブを更新
+tooltip.refresh_distrowatch = DistroWatchのデータを更新
+tooltip.refresh_pi = Raspberry Piカタログを更新
