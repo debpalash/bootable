@@ -36,6 +36,9 @@ const MINISIGN_HEADER: &str = "untrusted comment:";
 /// Detached-signature file names publishers use next to a checksum manifest.
 const OPENPGP_SUFFIXES: [&str; 4] = [".gpg", ".sign", ".asc", ".sig"];
 const MINISIGN_SUFFIX: &str = ".minisig";
+/// Reason recorded when no signature file could be fetched next to a manifest.
+pub(crate) const NO_SIGNATURE_PUBLISHED: &str =
+    "the publisher does not publish a signature next to the checksum file";
 /// Upper bound on a signature file; real ones are a few hundred bytes.
 pub(crate) const MAX_SIGNATURE_BYTES: u64 = 64 * 1024;
 
@@ -416,6 +419,17 @@ pub(crate) struct AuthenticatedManifest {
     pub signature: ManifestSignature,
 }
 
+/// The note shown when a manifest from a publisher that signs its manifests
+/// (see [`pinned::signing_publisher_for`]) could not be authenticated. Distinct
+/// from the note for publishers that simply do not sign.
+pub(crate) fn expected_signature_note(publisher: &str, unverified_reason: &str) -> String {
+    if unverified_reason == NO_SIGNATURE_PUBLISHED {
+        format!("signature expected but unavailable: {publisher} signs its checksum files")
+    } else {
+        format!("signature expected from {publisher} but not verified: {unverified_reason}")
+    }
+}
+
 /// Sibling URL of the manifest with `suffix` appended to its file name.
 fn signature_url(manifest: &Url, suffix: &str) -> Option<Url> {
     let mut url = manifest.clone();
@@ -497,9 +511,9 @@ pub(crate) fn authenticate_manifest(
     }
     Ok(AuthenticatedManifest {
         text,
-        signature: ManifestSignature::Unverified(reason.unwrap_or_else(|| {
-            "the publisher does not publish a signature next to the checksum file".into()
-        })),
+        signature: ManifestSignature::Unverified(
+            reason.unwrap_or_else(|| NO_SIGNATURE_PUBLISHED.into()),
+        ),
     })
 }
 

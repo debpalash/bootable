@@ -25,6 +25,12 @@ pub enum IntegrityState {
     ChecksumVerified {
         algorithm: ChecksumAlgorithm,
         signature_note: Option<String>,
+        /// The checksum came from a publisher known to sign its manifests, but
+        /// no usable signature was obtained (missing, unfetchable, unknown key,
+        /// weak hash). This is a possible downgrade, not an ordinary unsigned
+        /// publisher; adapters can refuse it with `require_signature`.
+        #[serde(default)]
+        signature_expected: bool,
     },
     /// The image matches a checksum from a manifest signed by a pinned key.
     SignatureVerified {
@@ -45,6 +51,18 @@ impl IntegrityState {
 
     pub fn is_signature_verified(&self) -> bool {
         matches!(self, Self::SignatureVerified { .. })
+    }
+
+    /// True when a signature was expected from this publisher but could not be
+    /// verified, so integrity fell back to the bare checksum.
+    pub fn signature_expected_but_unverified(&self) -> bool {
+        matches!(
+            self,
+            Self::ChecksumVerified {
+                signature_expected: true,
+                ..
+            }
+        )
     }
 
     /// The pinned key that vouched for the image, when there is one.
@@ -109,6 +127,7 @@ impl IntegrityState {
             Self::ChecksumVerified {
                 algorithm,
                 signature_note,
+                ..
             } => match signature_note {
                 None => Message::IntegrityFinalizedChecksum
                     .format(locale, &[("algorithm", algorithm), ("path", &path)]),
@@ -158,6 +177,7 @@ mod tests {
         let checksum = IntegrityState::ChecksumVerified {
             algorithm: ChecksumAlgorithm::Sha256,
             signature_note: None,
+            signature_expected: false,
         };
         let signed = IntegrityState::SignatureVerified {
             algorithm: ChecksumAlgorithm::Sha256,
@@ -179,6 +199,7 @@ mod tests {
         let checksum = IntegrityState::ChecksumVerified {
             algorithm: ChecksumAlgorithm::Sha256,
             signature_note: Some("the publisher does not publish a signature".into()),
+            signature_expected: false,
         };
         let label = checksum.label();
         assert!(label.starts_with("Publisher checksum verified"));
@@ -198,10 +219,12 @@ mod tests {
             IntegrityState::ChecksumVerified {
                 algorithm: ChecksumAlgorithm::Sha256,
                 signature_note: None,
+                signature_expected: false,
             },
             IntegrityState::ChecksumVerified {
                 algorithm: ChecksumAlgorithm::Sha512,
                 signature_note: Some("NOTE-DATA".into()),
+                signature_expected: true,
             },
             IntegrityState::SignatureVerified {
                 algorithm: ChecksumAlgorithm::Sha256,

@@ -73,6 +73,7 @@ use platform::NativePlatform;
 
 pub struct Bootable {
     platform: NativePlatform,
+    require_signature: bool,
 }
 
 impl Default for Bootable {
@@ -85,7 +86,20 @@ impl Bootable {
     pub fn native() -> Self {
         Self {
             platform: NativePlatform::new(),
+            require_signature: false,
         }
+    }
+
+    /// When `required`, catalog ISO downloads (including queued retries run by
+    /// this engine) are refused before any image byte is transferred unless the
+    /// publisher's checksum manifest carried a verified signature from a pinned
+    /// key. Off by default: without it, a missing signature degrades to a
+    /// checksum-only result that is labelled as such (see
+    /// [`IntegrityState::signature_expected_but_unverified`]).
+    #[must_use]
+    pub fn require_signature(mut self, required: bool) -> Self {
+        self.require_signature = required;
+        self
     }
 
     pub fn discover_devices(&self) -> Result<Vec<Device>> {
@@ -209,6 +223,24 @@ impl Bootable {
         self.run_download_job(&id, control, progress)
     }
 
+    /// [`Bootable::download_iso_controlled`] that also returns how well the
+    /// image was authenticated, so adapters can show or act on the state.
+    pub fn download_iso_with_integrity(
+        &self,
+        release: &IsoRelease,
+        destination: impl AsRef<Path>,
+        control: &OperationControl,
+        progress: impl FnMut(Progress),
+    ) -> Result<(ImageReport, IntegrityState)> {
+        let id = self.enqueue_iso_download(release, destination)?;
+        let (report, integrity) = self.run_download_job_detailed(&id, control, progress)?;
+        // Every ISO job yields an integrity state.
+        let integrity = integrity.ok_or_else(|| {
+            Error::InvalidDownload("the download job produced no integrity result".into())
+        })?;
+        Ok((report, integrity))
+    }
+
     pub fn enqueue_iso_download(
         &self,
         release: &IsoRelease,
@@ -227,7 +259,13 @@ impl Bootable {
         control: &OperationControl,
         mut progress: impl FnMut(Progress),
     ) -> Result<(ImageReport, IntegrityState)> {
-        let integrity = catalog::download_iso(release, destination, control, &mut progress)?;
+        let integrity = catalog::download_iso(
+            release,
+            destination,
+            self.require_signature,
+            control,
+            &mut progress,
+        )?;
         control.checkpoint()?;
         progress(Progress {
             phase: ProgressPhase::Verifying,
@@ -360,8 +398,18 @@ impl Bootable {
         &self,
         id: &str,
         control: &OperationControl,
-        mut progress: impl FnMut(Progress),
+        progress: impl FnMut(Progress),
     ) -> Result<ImageReport> {
+        self.run_download_job_detailed(id, control, progress)
+            .map(|(report, _)| report)
+    }
+
+    fn run_download_job_detailed(
+        &self,
+        id: &str,
+        control: &OperationControl,
+        mut progress: impl FnMut(Progress),
+    ) -> Result<(ImageReport, Option<IntegrityState>)> {
         let ledger = download::DownloadLedger::open_default()?;
         let (payload, destination) = ledger.begin(id)?;
         let mut recorder = download::ProgressRecorder::new(ledger.clone(), id.to_owned());
@@ -371,7 +419,7 @@ impl Bootable {
                     recorder.record(&update);
                     progress(update);
                 })
-                .map(|(report, integrity)| (report, Some(integrity.completion_message()))),
+                .map(|(report, integrity)| (report, Some(integrity))),
             download::DownloadPayload::RaspberryPi(image) => self
                 .download_pi_payload(&image, &destination, control, |update| {
                     recorder.record(&update);
@@ -379,15 +427,16 @@ impl Bootable {
                 })
                 .map(|report| (report, None)),
         };
+        let completion_message = result
+            .as_ref()
+            .ok()
+            .and_then(|(_, integrity)| integrity.as_ref())
+            .map(IntegrityState::completion_message);
         let ledger_result = ledger.finish_with_message(
             id,
             result.as_ref().map(|_| ()),
-            result
-                .as_ref()
-                .ok()
-                .and_then(|(_, message)| message.as_deref()),
+            completion_message.as_deref(),
         );
-        let result = result.map(|(report, _)| report);
         match (result, ledger_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
