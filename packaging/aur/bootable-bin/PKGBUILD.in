@@ -1,0 +1,40 @@
+# Maintainer: Your Name <you@example.com>
+pkgname=bootable-bin
+_name=bootable
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Safety-first boot media writer with matching desktop and terminal interfaces (prebuilt release)'
+arch=('x86_64')
+url='https://github.com/debpalash/bootable'
+license=('Apache-2.0')
+depends=('glibc' 'gcc-libs' 'fontconfig' 'libxkbcommon-x11' 'polkit' 'vulkan-icd-loader')
+optdepends=('vulkan-driver: GPU rendering for the desktop interface'
+            'wimlib: some Windows installer operations')
+provides=("$_name=$pkgver")
+conflicts=("$_name")
+options=('!strip')
+source=("$_name-$pkgver-x86_64-unknown-linux-gnu.tar.gz::$url/releases/download/v$pkgver/$_name-$pkgver-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('@SHA256_LINUX_TARBALL@')
+noextract=("$_name-$pkgver-x86_64-unknown-linux-gnu.tar.gz")
+
+prepare() {
+  mkdir -p "$srcdir/$_name-$pkgver"
+  bsdtar -xf "$srcdir/$_name-$pkgver-x86_64-unknown-linux-gnu.tar.gz" -C "$srcdir/$_name-$pkgver"
+}
+
+package() {
+  cd "$srcdir/$_name-$pkgver"
+  install -Dm755 bootable "$pkgdir/usr/bin/bootable"
+  install -Dm755 bootable-desktop "$pkgdir/usr/bin/bootable-desktop"
+  # The helper must be root-owned and not group/world-writable; pacman installs it as root.
+  install -Dm755 bootable-helper "$pkgdir/usr/libexec/bootable-helper"
+  install -Dm644 app.bootable.write-media.policy \
+    "$pkgdir/usr/share/polkit-1/actions/app.bootable.write-media.policy"
+  sed 's|^Exec=.*|Exec=/usr/bin/bootable-desktop|' app.bootable.Bootable.desktop \
+    > app.bootable.Bootable.desktop.arch
+  install -Dm644 app.bootable.Bootable.desktop.arch \
+    "$pkgdir/usr/share/applications/app.bootable.Bootable.desktop"
+  install -Dm644 bootable.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/bootable.svg"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$_name/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -1,0 +1,48 @@
+# Bootable Flatpak manifest (EXPERIMENTAL, read docs/package-managers.md before use).
+#
+# What this bundle can do: launch the desktop app, discover drives that the sandbox can see,
+# download and inspect images, and verify them.
+#
+# What it CANNOT do today: write to a drive. Approved writes are performed by a root-owned
+# helper that the app starts through /usr/bin/pkexec and finds at /usr/libexec/bootable-helper.
+# Inside the sandbox /usr is the Flatpak runtime, so neither pkexec nor the host helper nor the
+# polkit action is reachable, and raw block devices are not exposed. This manifest therefore
+# deliberately does NOT request --device=all, --talk-name=org.freedesktop.Flatpak, or
+# --filesystem=host: widening the sandbox that far would defeat its purpose without making the
+# privileged write path work.
+#
+# It repackages the released x86-64 binary archive. Flathub requires building from source with
+# vendored cargo sources, so this file is suitable for local testing and for a self-hosted
+# repository, not for direct Flathub submission.
+app-id: app.bootable.Bootable
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: bootable-desktop
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=xdg-download
+modules:
+  - name: bootable
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bootable /app/bin/bootable
+      - install -Dm755 bootable-desktop /app/bin/bootable-desktop
+      - install -Dm644 bootable.svg /app/share/icons/hicolor/scalable/apps/app.bootable.Bootable.svg
+      - sed -e 's|^Exec=.*|Exec=bootable-desktop|' -e 's|^Icon=.*|Icon=app.bootable.Bootable|' app.bootable.Bootable.desktop > bootable.desktop.flatpak
+      - install -Dm644 bootable.desktop.flatpak /app/share/applications/app.bootable.Bootable.desktop
+      - install -Dm644 app.bootable.Bootable.metainfo.xml /app/share/metainfo/app.bootable.Bootable.metainfo.xml
+      - install -Dm644 LICENSE /app/share/licenses/app.bootable.Bootable/LICENSE
+    sources:
+      - type: archive
+        url: https://github.com/debpalash/bootable/releases/download/v@VERSION@/bootable-@VERSION@-x86_64-unknown-linux-gnu.tar.gz
+        sha256: @SHA256_LINUX_TARBALL@
+        strip-components: 0
+        only-arches:
+          - x86_64
+      - type: file
+        path: app.bootable.Bootable.metainfo.xml

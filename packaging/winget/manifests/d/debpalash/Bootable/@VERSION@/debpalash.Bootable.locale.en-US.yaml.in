@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: debpalash.Bootable
+PackageVersion: @VERSION@
+PackageLocale: en-US
+Publisher: Bootable contributors
+PublisherUrl: https://github.com/debpalash
+PublisherSupportUrl: https://github.com/debpalash/bootable/issues
+PackageName: Bootable
+PackageUrl: https://github.com/debpalash/bootable
+License: Apache-2.0
+LicenseUrl: https://github.com/debpalash/bootable/blob/v@VERSION@/LICENSE
+Copyright: Copyright (c) Bootable contributors
+ShortDescription: Safety-first boot media writer with matching desktop and terminal interfaces.
+Description: |-
+  Bootable finds, downloads, writes, and verifies operating-system images on removable media.
+  It ships a desktop app (Bootable) and a terminal interface (bootable) with the same
+  capabilities. The interfaces stay unelevated; a small fixed helper installed under
+  Program Files performs approved writes after a UAC prompt. The installer is not
+  Authenticode-signed, so Windows SmartScreen may warn on first run.
+Moniker: bootable
+Tags:
+  - boot
+  - bootable-usb
+  - iso
+  - removable-media
+  - usb
+  - verification
+ReleaseNotesUrl: https://github.com/debpalash/bootable/releases/tag/v@VERSION@
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

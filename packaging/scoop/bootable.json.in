@@ -1,0 +1,44 @@
+{
+    "version": "@VERSION@",
+    "description": "Safety-first boot media writer with matching desktop and terminal interfaces.",
+    "homepage": "https://github.com/debpalash/bootable",
+    "license": "Apache-2.0",
+    "notes": [
+        "Bootable can erase removable drives after explicit review and confirmation.",
+        "Scoop only extracts the portable ZIP. Writing to a drive also needs the fixed, protected helper",
+        "at C:\\Program Files\\Bootable\\bootable-helper.exe, which this manifest does NOT install.",
+        "To enable writes, run once from an unelevated PowerShell (UAC will prompt):",
+        "  powershell -NoProfile -ExecutionPolicy Bypass -File \"$dir\\install.ps1\" -Variant All",
+        "Without the helper, discovery, downloads, and verification work but writing is unavailable.",
+        "Prefer the winget package or the setup EXE if you want the helper installed automatically."
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/debpalash/bootable/releases/download/v@VERSION@/bootable-@VERSION@-x86_64-pc-windows-msvc.zip",
+            "hash": "@SHA256_WINDOWS_ZIP@"
+        }
+    },
+    "bin": [
+        "bootable.exe",
+        "bootable-desktop.exe"
+    ],
+    "shortcuts": [
+        [
+            "bootable-desktop.exe",
+            "Bootable"
+        ]
+    ],
+    "checkver": {
+        "github": "https://github.com/debpalash/bootable"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/debpalash/bootable/releases/download/v$version/bootable-$version-x86_64-pc-windows-msvc.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                }
+            }
+        }
+    }
+}

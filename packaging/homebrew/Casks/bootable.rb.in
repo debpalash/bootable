@@ -1,0 +1,47 @@
+cask "bootable" do
+  version "@VERSION@"
+  sha256 "@SHA256_MACOS_DMG@"
+
+  url "https://github.com/debpalash/bootable/releases/download/v#{version}/bootable-#{version}-aarch64.dmg",
+      verified: "github.com/debpalash/bootable/"
+  name "Bootable"
+  desc "Safety-first boot media writer with matching desktop and terminal interfaces"
+  homepage "https://github.com/debpalash/bootable"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on arch: :arm64
+  depends_on macos: ">= :monterey"
+
+  app "Bootable.app"
+  binary "#{appdir}/Bootable.app/Contents/MacOS/bootable"
+
+  uninstall delete: "/Library/PrivilegedHelperTools/app.bootable.helper"
+
+  zap trash: [
+    "~/Library/Application Support/bootable",
+    "~/Library/Application Support/Bootable",
+  ]
+
+  caveats <<~EOS
+    Bootable can erase removable drives after explicit review and confirmation.
+
+    This cask installs Bootable.app and the `bootable` terminal command. It does NOT
+    install the root-owned write helper, because that needs administrator rights.
+    Discovery, downloads, and verification work without it, but writing is unavailable
+    until you install the helper once:
+
+      sudo install -d -m 0755 /Library/PrivilegedHelperTools
+      sudo install -m 0755 "#{appdir}/Bootable.app/Contents/MacOS/bootable-helper" \\
+        /Library/PrivilegedHelperTools/app.bootable.helper
+      sudo chown root:wheel /Library/PrivilegedHelperTools/app.bootable.helper
+
+    The app is ad-hoc signed and not notarized. If macOS blocks the first launch,
+    open it from System Settings > Privacy & Security, or run:
+
+      xattr -dr com.apple.quarantine "#{appdir}/Bootable.app"
+  EOS
+end

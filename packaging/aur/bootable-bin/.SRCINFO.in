@@ -1,0 +1,23 @@
+pkgbase = bootable-bin
+	pkgdesc = Safety-first boot media writer with matching desktop and terminal interfaces (prebuilt release)
+	pkgver = @VERSION@
+	pkgrel = 1
+	url = https://github.com/debpalash/bootable
+	arch = x86_64
+	license = Apache-2.0
+	depends = glibc
+	depends = gcc-libs
+	depends = fontconfig
+	depends = libxkbcommon-x11
+	depends = polkit
+	depends = vulkan-icd-loader
+	optdepends = vulkan-driver: GPU rendering for the desktop interface
+	optdepends = wimlib: some Windows installer operations
+	provides = bootable=@VERSION@
+	conflicts = bootable
+	noextract = bootable-@VERSION@-x86_64-unknown-linux-gnu.tar.gz
+	options = !strip
+	source = bootable-@VERSION@-x86_64-unknown-linux-gnu.tar.gz::https://github.com/debpalash/bootable/releases/download/v@VERSION@/bootable-@VERSION@-x86_64-unknown-linux-gnu.tar.gz
+	sha256sums = @SHA256_LINUX_TARBALL@
+
+pkgname = bootable-bin
