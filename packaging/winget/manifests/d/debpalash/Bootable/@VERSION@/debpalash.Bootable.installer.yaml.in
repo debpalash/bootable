@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: debpalash.Bootable
+PackageVersion: @VERSION@
+InstallerLocale: en-US
+MinimumOSVersion: 10.0.0.0
+InstallerType: nullsoft
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ReleaseDate: @RELEASE_DATE@
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/debpalash/bootable/releases/download/v@VERSION@/bootable-@VERSION@-x86_64-setup.exe
+    InstallerSha256: @SHA256_WINDOWS_SETUP_UPPER@
+ManifestType: installer
+ManifestVersion: 1.6.0

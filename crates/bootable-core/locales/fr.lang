@@ -1,0 +1,545 @@
+# Bootable message catalog: French (fr).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Typography note: plain spaces are used before ; : ! ? (no NBSP) so terminal
+# layouts wrap predictably; a native reviewer may prefer U+202F / U+00A0.
+
+help.intro = Source → Cible → Vérifier et écrire. Rien n'est écrit tant que vous n'avez pas vérifié le plan et confirmé l'effacement.
+help.section.source = Source
+help.section.target = Cible
+help.section.review = Vérifier et écrire
+help.section.general = Général
+
+help.source.choose.action = Choisir une image
+help.source.choose.detail = Parcourir pour trouver une image ISO, IMG, RAW ou compressée
+help.source.recent.action = Utiliser une image récente
+help.source.recent.detail = Réinspecter l'une de vos dernières images
+help.source.recent.desktop = Cliquer sur une image récente
+help.source.discover.action = Découvrir des images
+help.source.discover.detail = Ouvrir ou fermer le catalogue des distributions
+help.source.downloads.action = Téléchargements
+help.source.downloads.detail = Ouvrir ou fermer le gestionnaire de téléchargements
+help.source.downloads.desktop = Bouton Téléchargements
+
+help.target.refresh.action = Actualiser les lecteurs
+help.target.refresh.detail = Réanalyser les supports amovibles
+help.target.choose.action = Choisir un lecteur
+help.target.choose.detail = La sélection est toujours explicite ; les disques fixes sont bloqués
+help.target.choose.desktop = Cliquer sur un lecteur
+
+help.review.plan.action = Vérifier le plan
+help.review.plan.detail = Ouvre le plan ; rien n'est encore écrit
+help.review.stop.action = Arrêter une écriture
+help.review.stop.detail = S'arrête au prochain point sûr
+help.review.stop.desktop = Bouton Arrêter
+help.review.firmware.action = Firmware de démarrage (média Windows)
+help.review.firmware.detail = Expérimental : ajoute le démarrage BIOS hérité ; exige le schéma MBR
+help.review.firmware.desktop = Sélecteur de firmware de démarrage
+
+help.general.toggle.action = Afficher ou masquer ce guide
+help.general.toggle.detail = Rouvrez-le à tout moment
+help.general.close.action = Fermer un panneau
+help.general.close.detail = Ferme ce guide ou le catalogue
+help.general.language.action = Changer la langue
+help.general.language.detail = S’applique aux deux interfaces et est mémorisé
+help.general.language.desktop = Menu de langue
+language.label = Langue
+language.system_default = Par défaut du système
+
+detail.drive = Lecteur
+detail.path = Chemin
+detail.capacity = Capacité
+detail.connection = Connexion
+detail.serial = N° de série
+detail.status = État
+detail.mounted = Monté
+detail.connection.unknown = inconnue
+detail.serial.not_reported = non communiqué
+detail.mounted.none = rien n'est monté
+detail.mounted.list = {listed} · démonté avant l'écriture
+detail.mounted.list_more = {listed} +{hidden} de plus · démonté avant l'écriture
+
+target.system_blocked = Disque système · bloqué
+target.internal_blocked = Disque interne · bloqué
+target.read_only_blocked = Lecture seule · bloqué
+target.eligible = Amovible · éligible
+
+media.none = Aucun lecteur amovible connecté
+media.ready.one = {count} lecteur amovible prêt
+media.ready.other = {count} lecteurs amovibles prêts
+media.none_eligible.one = {count} lecteur amovible connecté · aucun éligible
+media.none_eligible.other = {count} lecteurs amovibles connectés · aucun éligible
+media.some_ready.one = {count} lecteur amovible connecté · prêts : {ready}
+media.some_ready.other = {count} lecteurs amovibles connectés · prêts : {ready}
+
+readiness.needs_image.action = Choisissez d'abord une image
+readiness.needs_target.action = Choisir un lecteur amovible
+readiness.ready.action = Vérifier le plan
+readiness.needs_image.guidance = Choisissez ou téléchargez une image pour continuer
+readiness.needs_target.guidance = Connectez et choisissez un lecteur amovible pour continuer
+readiness.ready.guidance = Prêt à vérifier l'image, la cible et le plan d'effacement
+workspace.needs_image.status = Choisissez ou téléchargez une image pour continuer
+workspace.needs_target.status = Choisissez un lecteur amovible · rien n'a été écrit
+workspace.ready.status = Prêt à vérifier · rien n'a été écrit
+
+step.source = Source
+step.target = Cible
+step.review = Vérifier et écrire
+
+phase.preparing = Préparation
+phase.downloading = Téléchargement
+phase.reading = Lecture
+phase.writing = Écriture
+phase.syncing = Synchronisation
+phase.verifying = Vérification
+phase.finished = Terminé
+
+integrity.transfer_checked = Transfert HTTPS et structure de démarrage vérifiés · somme de contrôle de l'éditeur indisponible
+integrity.checksum_verified = Somme de contrôle de l'éditeur vérifiée
+integrity.checksum_unsigned = Somme de contrôle de l'éditeur vérifiée · signature non vérifiée ({note})
+integrity.signature_verified = Signature vérifiée · {publisher} (clé {fingerprint}) · {algorithm} correspond au manifeste signé
+integrity.completion = {label} · prêt
+integrity.ready = Prêt · {label} · {path}
+integrity.finalized.transfer = Étape 4/5 · Longueur du transfert HTTPS vérifiée · somme de contrôle de l'éditeur indisponible · finalisé dans {path}
+integrity.finalized.checksum = Étape 4/5 · {algorithm} de l'éditeur vérifié · finalisé dans {path}
+integrity.finalized.checksum_unsigned = Étape 4/5 · {algorithm} de l'éditeur vérifié · signature non vérifiée ({note}) · finalisé dans {path}
+integrity.finalized.signature = Étape 4/5 · {label} · finalisé dans {path}
+
+# Header and brand
+header.tagline = Des supports de démarrage, écrits avec intention.
+header.title.create = Créer un support de démarrage
+header.subtitle.create = Un parcours délibéré de l'image au lecteur amovible.
+header.subtitle.review = Examinez chaque opération avant de confirmer.
+guide.title = Guide
+common.labeled = {label} : {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Téléchargements
+action.downloads_count = Téléchargements · {count}
+action.downloads_compact = Tâches
+action.discover = Découvrir des images
+action.discover_compact = Chercher
+action.catalog_close = Fermer le catalogue
+action.catalog_close_compact = Catalogue
+action.setup_options = Options de configuration
+action.setup_options_compact = Configuration
+action.hide_options = Masquer les options
+action.hide_options_compact = Masquer
+action.refresh_drives = Actualiser les lecteurs
+action.refresh = Actualiser
+action.retry = Réessayer
+action.browse = Parcourir
+action.change = Modifier
+action.inspecting = Inspection…
+action.select = Sélectionner
+action.selected = Sélectionné
+action.blocked = Bloqué
+action.close = Fermer
+action.cancel = Annuler
+action.cancelling = Annulation…
+action.back = Retour
+action.pause = Mettre en pause
+action.resume = Reprendre
+action.stop = Arrêter
+action.review = Vérifier
+action.quit = Quitter
+
+# Tooltips
+tooltip.guide = Guide et raccourcis ({shortcut})
+tooltip.refresh_drives = Actualiser les lecteurs amovibles
+tooltip.refresh_distrowatch = Actualiser les données DistroWatch
+tooltip.refresh_pi = Actualiser le catalogue Raspberry Pi
+
+# Source panel
+source.title = Choisir une image
+source.hint = L'image est inspectée avant toute écriture
+source.formats = Image disque ISO, IMG, RAW ou compressée
+source.inspected = Inspectée
+source.recent.title = Images récentes
+source.recent.empty = Les images que vous utilisez apparaissent ici pour être réutilisées en un clic
+source.recent.in_use = Utilisée
+source.dialog.title = Images de démarrage
+source.dialog.filter_iso = Images ISO
+source.dialog.filter_backup = Image brute du lecteur
+
+# Target panel
+target.title = Choisir un lecteur
+target.empty = Connectez un lecteur USB ou SD amovible, puis actualisez
+target.selected_drive = Lecteur sélectionné
+target.confirm_physical = Confirmez le lecteur physique avant de continuer · l'effacement ne commence qu'après la vérification
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Source · choisissez ou changez l'image
+focus.target = Cible · choisissez un lecteur amovible éligible
+focus.setup = Options de configuration · réglez les choix propres à l'image
+focus.review = Vérifier et écrire · examinez le plan avant l'effacement
+focus.discover = Découvrir des images · parcourez des catalogues de confiance
+focus.refresh = Actualiser les lecteurs · réanalysez les supports amovibles
+
+# Setup options: panel titles
+options.windows.title = Options du programme d'installation de Windows
+options.linux.title = Support de démarrage Linux / Unix
+options.selected_count = Sélection : {count}
+options.summary.verification = Vérification activée · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Schéma de partitionnement
+options.windows.scheme_value = Schéma : {scheme}
+options.windows.boot_firmware = Firmware de démarrage
+options.windows.boot_firmware_experimental = Firmware de démarrage · expérimental
+options.windows.boot_firmware_value = Firmware de démarrage : {value}
+options.windows.boot_firmware_value_experimental = Firmware de démarrage : {value} · expérimental
+options.windows.boot_firmware_value_compact = Firmware : {value}
+options.windows.boot_firmware_hint = Expérimental : BIOS + UEFI (CSM) exige le schéma MBR et n'est écrit pour l'instant que par l'adaptateur Linux. Pas encore vérifié sur du matériel réel.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Contourner les vérifications TPM, Secure Boot et RAM
+options.windows.bypass_hardware.short = Contournement matériel
+options.windows.bypass_hardware.on = Les vérifications TPM, Secure Boot et RAM de Windows 11 seront contournées
+options.windows.bypass_hardware.off = Les vérifications matérielles de Windows 11 utilisent les valeurs par défaut de Microsoft
+options.windows.offline_account.label = Proposer la configuration d'un compte local/hors ligne
+options.windows.offline_account.short = Compte hors ligne
+options.windows.offline_account.on = L'OOBE de Windows proposera l'option de compte local/hors ligne
+options.windows.offline_account.off = L'OOBE de Windows utilisera son parcours de compte standard
+options.windows.named_account.label = Créer un compte local : {name}
+options.windows.named_account.short = Compte nommé
+options.windows.named_account.on = Windows créera le compte administrateur local `{account}`
+options.windows.named_account.off = Création automatique du compte local désactivée
+options.windows.host_region.label = Copier les paramètres régionaux et le fuseau horaire de cet ordinateur
+options.windows.host_region.short = Région de l'hôte
+options.windows.host_region.on = Windows utilisera les paramètres régionaux {locale} et le fuseau horaire {zone}
+options.windows.host_region.off = Le programme d'installation de Windows demandera les options régionales
+options.windows.privacy.label = Appliquer les paramètres OOBE par défaut axés sur la confidentialité
+options.windows.privacy.short = Confidentialité par défaut
+options.windows.privacy.on = L'OOBE de Windows utilisera des paramètres par défaut axés sur la confidentialité
+options.windows.privacy.off = Les questions de confidentialité de l'OOBE de Windows resteront à leurs valeurs par défaut
+options.windows.bitlocker.label = Désactiver le chiffrement automatique BitLocker
+options.windows.bitlocker.short = Désactiver BitLocker
+options.windows.bitlocker.on = Le chiffrement automatique de l'appareil par Windows sera désactivé
+options.windows.bitlocker.off = Windows peut activer automatiquement le chiffrement de l'appareil
+options.windows.qol.label = Confort d'utilisation : réduire Copilot, OneDrive, Teams, les suggestions et le démarrage rapide
+options.windows.qol.short = Confort d'utilisation
+options.windows.qol.on = Windows réduira Copilot, OneDrive, Teams, les suggestions et le démarrage rapide
+options.windows.qol.off = Windows conserve le comportement par défaut de Copilot, OneDrive, Teams, des suggestions et du démarrage rapide
+options.windows.ca2023.label = Utiliser les chargeurs de démarrage signés Windows UEFI CA 2023
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = Les supports de démarrage CA 2023 exigent des certificats de firmware Secure Boot à jour
+options.windows.ca2023.off = Le support de démarrage utilisera les chargeurs de démarrage Windows standard
+options.windows.skusipolicy.label = Appliquer les révocations Secure Boot de SkuSiPolicy.p7b
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = Les révocations Secure Boot de SkuSiPolicy.p7b seront appliquées
+options.windows.skusipolicy.off = Les révocations Secure Boot de SkuSiPolicy.p7b ne seront pas appliquées
+options.windows.smode.label = Forcer le mode S de Windows (expert)
+options.windows.smode.short = Forcer le mode S
+options.windows.smode.on = Le mode S peut rester imposé après une réinstallation ; vérifiez attentivement le plan
+options.windows.smode.off = Le mode S de Windows ne sera pas forcé
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Choisissez une image d'installation de Windows avant de modifier les options Windows
+status.windows.not_windows = Les options de configuration de Windows ne s'appliquent qu'aux images d'installation de Windows
+status.windows.scheme = Schéma de partitionnement Windows : {scheme} · firmware de démarrage : {firmware}
+status.windows.firmware = Firmware de démarrage : {firmware} (expérimental) · schéma de partitionnement : {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Support d'installation de Windows
+options.windows.installer_ready = ISO Windows prête · choix de configuration déverrouillés
+options.windows.installer_locked = Choisissez une ISO Windows pour déverrouiller les choix de configuration
+options.windows.choose_iso = Choisir une ISO Windows
+options.windows.replace_iso = Remplacer l'ISO Windows
+options.windows.unavailable_note = Les éléments indisponibles ne sont pas cliquables. Les fichiers autounattend.xml existants ne sont jamais écrasés.
+options.windows.silent_install_warning = L'installation silencieuse peut effacer le premier disque détecté par le programme d'installation de Windows et exige une conception de sécurité distincte, à forte friction.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Conserver la disposition complète du disque de démarrage
+options.linux.layout_short = Disposition complète
+options.linux.verify = Vérifier les octets écrits avec SHA-256
+options.linux.verify_short = Vérification des octets
+options.linux.boot_records_short = Enregistrements de démarrage
+options.linux.unmount_short = Démontage sûr
+
+# Setup options: media tools
+options.tools.title = Outils pour supports
+options.tools.subtitle = Utilitaires de vérification et de sauvegarde
+options.tools.bad_blocks_off = Secteurs défectueux : désactivé
+options.tools.bad_blocks_passes = Secteurs défectueux : {passes}x
+options.tools.verify_image = Vérifier l'image
+options.tools.image_folder = Dossier d'images
+options.tools.backup_drive = Sauvegarder le lecteur
+
+# Review screen
+review.title = Vérifier le plan d'écriture
+review.subtitle = Rien n'est écrit tant que les conséquences n'ont pas été examinées et confirmées.
+review.subtitle_writing = L'écriture et la vérification sont en cours • ne débranchez pas la cible.
+review.plan_summary = Résumé du plan
+review.field.source = Source
+review.field.target = Cible
+review.field.method = Méthode
+review.field.consequence = Conséquence
+review.consequence = Toutes les données et partitions existantes de la cible sélectionnée seront effacées.
+review.permanent_changes = Modifications permanentes
+review.ordered_operations = Opérations ordonnées
+review.step.erases = Efface les données
+review.step.safe = Sûr
+review.step.verifies = Vérifie
+review.state.writing = L'écriture et la vérification sont en cours
+review.state.final_confirm = Une dernière confirmation est requise
+review.warning.writing = Ne fermez pas l'application, n'éteignez pas l'ordinateur et ne débranchez pas le lecteur cible.
+review.warning.idle = Examinez les modifications exactes de la cible et les conséquences irréversibles avant d'écrire.
+review.hint.open_confirmation = Ouvrez la confirmation pour examiner les modifications, les conséquences et le lecteur physique cible.
+review.action.stop_safely = Arrêter en toute sécurité
+review.action.written = Écrit et vérifié
+review.action.retry = Vérifier et réessayer
+review.action.consequences = Examiner les conséquences
+review.status.writing = L'écriture et la vérification sont en cours · ne débranchez pas la cible
+review.status.complete = Terminé · le support écrit a réussi la vérification octet par octet
+review.status.review = Vérifiez le lecteur physique cible et les modifications permanentes avant d'écrire
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirmer les modifications permanentes
+confirm.subtitle = Vérifiez ce que Bootable va modifier et ce qui peut mal tourner.
+confirm.badge = Permanent
+confirm.physical_target = Cible physique
+confirm.changes = Modifications de ce lecteur
+confirm.consequences = Conséquences
+confirm.consequence.erase = Tous les fichiers et partitions existants de ce lecteur physique seront définitivement effacés.
+confirm.consequence.wrong_drive = Choisir le mauvais lecteur détruit les données qu'il contient ; vérifiez ci-dessous son modèle, son chemin et sa capacité.
+confirm.consequence.interrupted = Une coupure de courant, la fermeture de l'application ou un débranchement pendant l'écriture peut laisser un support incomplet et non amorçable.
+confirm.consequence.recheck = Bootable revérifie l'identité de la cible juste avant l'effacement et vérifie le résultat ensuite.
+confirm.ack = J'ai vérifié le lecteur physique cible et je comprends que toutes ses données existantes seront définitivement effacées.
+confirm.submit = Confirmer l'effacement et l'écriture
+confirm.acknowledge_first = Confirmez d'abord
+
+# Write result
+result.success.title = Écriture terminée
+result.success.body = L'image a été écrite et vérifiée. Vous pouvez maintenant retirer le lecteur amovible en toute sécurité.
+result.authentication_denied.title = Écriture annulée avant l'effacement
+result.authentication_denied.body = L'authentification administrateur a été annulée ou refusée.
+result.stopped.title = Écriture arrêtée en toute sécurité
+result.stopped.body = Le support est incomplet et doit être réécrit avant d'être utilisé.
+result.failed.title = Échec de l'écriture
+
+# Review and write status lines
+status.review.open = Examen du plan d'écriture • rien n'a été écrit
+status.review.consequences = Examinez les modifications de la cible et les conséquences avant d'écrire
+status.review.ack_required = Prenez acte des conséquences avant de confirmer l'écriture
+status.write.active = L'écriture est en cours • ne fermez pas l'application et ne débranchez pas la cible
+status.write.started = Écriture démarrée • ne débranchez pas la cible
+status.write.cancelled = Écriture annulée avant l'effacement • la cible est inchangée
+status.write.stopping = Arrêt en toute sécurité • vidage des écritures terminées ; le support restera incomplet
+
+# Discover: catalog shell
+discover.title = Découvrir des images de démarrage
+discover.collapsed_hint = Parcourez des catalogues de confiance · Ouvrir
+discover.disclaimer = Le classement par visites de DistroWatch mesure l'intérêt, pas la qualité ni la part de marché.
+discover.search_title = Recherche
+discover.search_placeholder = Rechercher par nom, slug ou famille de base…
+discover.windows_hint = Parcours du programme d'installation de Windows · sélectionnez une ISO pour déverrouiller toutes les cases de configuration
+discover.quick.all = Toutes
+discover.section.popular = Populaires · six mois
+discover.section.search = Résultats de recherche
+discover.section.arch = Basées sur Arch
+discover.section.debian = Basées sur Debian
+
+# Discover: distribution rows and profile
+discover.item.independent = Indépendante
+discover.item.directory = Annuaire
+discover.item.directory_source = Annuaire DistroWatch
+discover.item.hits_per_day = {hits}/jour
+discover.item.size_unknown = Taille inconnue
+discover.item.publisher_checksum = {algorithm} de l'éditeur
+discover.item.no_publisher_checksum = Pas de somme de contrôle de l'éditeur
+discover.item.https_only = HTTPS uniquement
+discover.detail.empty = Choisissez une distribution pour charger son profil et ses fichiers ISO
+discover.detail.unknown_os = Système inconnu
+discover.detail.unknown_status = Statut inconnu
+discover.detail.unknown_origin = Inconnue
+discover.detail.no_description = Aucune description
+discover.detail.not_listed = Non indiqué
+discover.detail.based_on = Basée sur
+discover.detail.origin = Origine
+discover.detail.architecture = Architecture
+discover.detail.desktop = Bureau
+discover.detail.logo = Logo
+discover.detail.screenshot = Capture d'écran
+discover.detail.screenshot_of = Capture d'écran de {name}
+discover.detail.rating.one = ★ {rating}/10 · {count} avis
+discover.detail.rating.other = ★ {rating}/10 · {count} avis
+discover.detail.direct_isos = Fichiers ISO directs
+discover.detail.loading = Chargement…
+discover.detail.found = Trouvés : {count}
+discover.detail.open_page = Ouvrir la page de téléchargement DistroWatch
+discover.detail.download_use = Télécharger et utiliser l'ISO
+discover.artwork.loading = Chargement de l'illustration…
+discover.artwork.none = Aucune illustration
+discover.artwork.unavailable = Illustration indisponible
+
+# Discover: Raspberry Pi catalog
+pi.title = Catalogue officiel de Raspberry Pi Imager
+pi.subtitle = Compatibilité des cartes, avec sommes de contrôle compressées et extraites
+pi.board_filter = Filtre de carte
+pi.compatible_images = Images compatibles
+pi.all_images = Toutes les images
+pi.empty = Aucune image Raspberry Pi compatible trouvée
+pi.empty_query = Aucune image Raspberry Pi ne correspond à « {query} »
+pi.hint = Choisissez une carte et une image. Les sommes de contrôle officielles sont vérifiées avant l'utilisation de l'image.
+pi.default_category = Image Raspberry Pi
+pi.date_unknown = Date inconnue
+pi.details = Téléchargement {download} · Décompressée {expanded}\nPubliée le {date}\n{description}
+pi.download_use = Télécharger, vérifier et utiliser
+
+# Discover: catalog load states ({subject} comes from catalog.subject.*; {reason} and {warning} are core-produced text shown as received)
+catalog.state.idle = Non chargé : {subject}
+catalog.state.loading = Chargement : {subject}…
+catalog.state.ready = Prêt : {subject}
+catalog.state.ready_cached = Prêt (en cache) : {subject}
+catalog.state.ready_warning = Prêt (en cache) : {subject} · {warning}
+catalog.state.empty = Aucun résultat : {subject}
+catalog.state.failed = Échec du chargement : {subject} · {reason} · réessayer
+catalog.subject.distributions = distributions
+catalog.subject.search_catalog = catalogue de recherche
+catalog.subject.pi_images = images Raspberry Pi
+catalog.subject.pi_boards = cartes Raspberry Pi
+catalog.subject.base_distributions = distributions basées sur {base}
+catalog.subject.iso_releases = versions ISO
+catalog.subject.distribution_profile = profil de la distribution
+
+# Discover: status lines
+status.catalog.closed = Catalogue fermé • {guidance}
+status.catalog.search_closed = Recherche fermée · affichage de la popularité DistroWatch sur six mois
+status.catalog.popularity = Affichage de la popularité DistroWatch sur six mois
+status.catalog.ready = Catalogue DistroWatch prêt • les classements indiquent l'intérêt, pas la qualité
+status.catalog.loading_popularity = Chargement de la popularité DistroWatch sur six mois…
+status.catalog.searching_directory = Recherche dans l'annuaire complet des distributions de DistroWatch…
+status.catalog.loading = Chargement des distributions…
+status.catalog.loading_base = Recherche sur DistroWatch des distributions actives basées sur {base}…
+status.catalog.showing_base.one = Affichage de {count} distribution active basée sur {base} depuis DistroWatch
+status.catalog.showing_base.other = Affichage de {count} distributions actives basées sur {base} depuis DistroWatch
+status.catalog.loading_releases = Résolution des fichiers ISO actuels de {name}…
+status.catalog.profile_ready_no_iso = Profil prêt · aucune ISO directe trouvée
+status.catalog.profile_ready_errors.one = Profil prêt · aucune ISO directe trouvée · {count} erreur de source
+status.catalog.profile_ready_errors.other = Profil prêt · aucune ISO directe trouvée · {count} erreurs de source
+status.catalog.releases_loaded.one = {count} version ISO directe · {source}
+status.catalog.releases_loaded.other = {count} versions ISO directes · {source}
+status.catalog.source_warnings.one = {count} avertissement de source
+status.catalog.source_warnings.other = {count} avertissements de source
+status.catalog.with_warnings = {summary} · {warnings}
+status.catalog.omarchy = Famille Omarchy · les versions ISO sont inscriptibles ; les dérivés réservés à l'installateur sont clairement signalés
+status.catalog.omarchy_missing = Omarchy est absent de l'annuaire DistroWatch actuel
+status.catalog.windows_tools = Outils de support Windows · choisissez une ISO Windows pour déverrouiller les options de configuration
+status.catalog.windows_uses_iso = Les outils Windows utilisent l'ISO locale sélectionnée
+status.catalog.pi_selected = Découverte d'images Raspberry Pi sélectionnée
+status.catalog.pi_loading = Chargement du catalogue officiel de Raspberry Pi Imager…
+status.catalog.pi_compatible = Affichage des images compatibles avec {board}
+status.catalog.pi_all = Affichage de toutes les images Raspberry Pi
+status.catalog.pi_choose = Choisissez une image Raspberry Pi à télécharger
+status.catalog.pi_selected_verify = Image Raspberry Pi sélectionnée • le téléchargement sera extrait et vérifié
+status.catalog.iso_selected_checksum = ISO sélectionnée • la somme de contrôle de l'éditeur sera vérifiée avant l'utilisation
+status.catalog.iso_selected_https = ISO sélectionnée • somme de contrôle de l'éditeur indisponible ; la longueur HTTPS et la structure de démarrage seront vérifiées
+status.catalog.choose_distribution = Choisissez d'abord une distribution
+status.catalog.choose_release = Choisissez une version ISO à télécharger
+status.catalog.browser_opened = La page de la distribution DistroWatch a été ouverte dans votre navigateur
+status.catalog.artwork_error = Impossible de décoder l'illustration du catalogue : {error}
+
+# Downloads panel
+downloads.subtitle = Historique persistant · les transferts interrompus peuvent reprendre
+downloads.empty = Aucun téléchargement géré pour l'instant · choisissez une image dans Découvrir pour commencer
+downloads.selected = Téléchargement sélectionné
+downloads.interrupted_note = Les transferts interrompus ne conservent que les fichiers partiels qui leur appartiennent ; l'annulation explicite les supprime.
+downloads.action.retry_resume = Réessayer / reprendre
+downloads.action.use_image = Utiliser l'image
+downloads.action.remove = Supprimer l'entrée
+downloads.action.cancel = Annuler le téléchargement
+downloads.jobs_in_history.one = {count} téléchargement dans l'historique
+downloads.jobs_in_history.other = {count} téléchargements dans l'historique
+downloads.status.queued = En attente
+downloads.status.running = Téléchargement
+downloads.status.paused = En pause
+downloads.status.interrupted = Interrompu
+downloads.status.completed = Terminé
+downloads.status.failed = Échec
+downloads.status.cancelled = Annulé
+downloads.kind.iso = ISO
+downloads.kind.raspberry_pi = Image Raspberry Pi
+
+# Download status lines
+status.download.history_unavailable = Historique des téléchargements indisponible · {error}
+status.download.queued = Téléchargement en attente · il démarrera à la fin de la tâche active
+status.download.retrying = Nouvelle tentative de téléchargement · les octets conservés reprendront si possible
+status.download.starting = Démarrage du téléchargement géré…
+status.download.retry_queued = Nouvelle tentative en attente · elle démarrera après le téléchargement actif
+status.download.choose_job = Choisissez d'abord un téléchargement
+status.download.job_gone = Ce téléchargement n'existe plus
+status.download.start_failed = Impossible de démarrer le téléchargement en attente · {error}
+status.download.using_completed = Utilisation du téléchargement terminé {path}
+status.download.completed_unavailable = L'image téléchargée est indisponible · {error}
+status.download.history_removed = Entrée de l'historique supprimée · l'image terminée est conservée
+status.download.iso_cancelled = Téléchargement de l'ISO annulé
+status.download.pi_cancelled = Téléchargement de l'image Raspberry Pi annulé
+status.download.ready = Prêt · {name} téléchargée, vérifiée et inspectée · la découverte reste ouverte
+status.download.cancelled_cleaned = Téléchargement annulé • données temporaires supprimées
+status.download.stopped = Téléchargement arrêté · {error}
+status.download.paused = Téléchargement en pause • reprenez ou annulez quand vous voulez
+status.download.resumed = Téléchargement repris
+status.download.cancelling = Annulation sécurisée du téléchargement • nettoyage des données temporaires…
+
+# Image, drive and options status lines
+status.startup = {media} · choisissez une image pour commencer
+status.image.busy = L'inspection de l'image est déjà en cours
+status.image.cancelled = Sélection de l'image annulée
+status.image.inspecting = Inspection de l'image • les sources compressées sont mesurées après décompression…
+status.image.recognized = Reconnu : {kind}
+status.image.stopped = L'inspection de l'image s'est arrêtée de manière inattendue
+status.image.folder = Dossier du sélecteur d'images : {path}
+status.image.folder_cancelled = Sélection du dossier annulée
+status.image.choose_first = Choisissez d'abord une image
+status.image.no_recent = Aucune image récente à cette position
+status.prefs.save_failed = Les préférences n'ont pas été enregistrées : {error}
+status.target.none_eligible = Aucun lecteur amovible éligible n'est disponible
+status.target.selected = Cible sélectionnée · confirmez le lecteur physique avant d'examiner le plan d'effacement
+status.target.blocked = Ce lecteur est bloqué et ne peut pas être sélectionné
+status.target.choose_first = Choisissez d'abord un lecteur cible
+status.drives.refresh_paused = L'actualisation des lecteurs est suspendue pendant l'écriture • ne débranchez pas la cible
+status.drives.up_to_date = La liste des lecteurs est à jour • la détection automatique est activée
+status.drives.changed = Les détails des lecteurs ont changé • liste mise à jour automatiquement
+status.drives.added.one = {count} nouveau lecteur détecté • liste mise à jour automatiquement
+status.drives.added.other = {count} nouveaux lecteurs détectés • liste mise à jour automatiquement
+status.drives.removed.one = {count} lecteur retiré • liste mise à jour automatiquement
+status.drives.removed.other = {count} lecteurs retirés • liste mise à jour automatiquement
+status.drives.added_removed = Liste des lecteurs modifiée : {added} ajoutés, {removed} retirés • mise à jour automatique
+status.options.expanded = Options avancées développées • chaque choix figure dans le plan examiné
+status.options.collapsed = Options avancées réduites • les valeurs configurées restent actives
+status.options.open_needs_image = Choisissez ou téléchargez une image avant d'ouvrir les options du support
+status.checksum.algorithm = Algorithme de somme de contrôle : {algorithm}
+status.checksum.choose_image = Choisissez une image avant de calculer sa somme de contrôle
+status.badblocks.off = Vérification destructive des secteurs défectueux désactivée
+status.badblocks.passes.one = Vérification des secteurs défectueux : {count} motif destructif avant l'écriture
+status.badblocks.passes.other = Vérification des secteurs défectueux : {count} motifs destructifs avant l'écriture
+status.backup.choose_drive = Choisissez un lecteur amovible à sauvegarder
+status.backup.cancelled = Sauvegarde du lecteur annulée
+status.backup.running = Sauvegarde de {drive}…
+status.backup.done = Image du lecteur enregistrée dans {path}
+status.backup.failed = {error} • dernière étape : {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = réseau indisponible
+catalog.failure.refresh = actualisation indisponible
+catalog.failure.cache = cache indisponible
+catalog.failure.unsupported = réponse du catalogue non prise en charge
+catalog.failure.service = service indisponible
+catalog.source.network = mis à jour à l'instant
+catalog.source.cache = en cache
+catalog.source.stale_cache = en cache · échec de l'actualisation
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Terminé • image écrite et vérifiée • la cible peut être retirée en toute sécurité
+status.write.auth_denied = Écriture annulée avant l'effacement • l'authentification administrateur a été annulée ou refusée
+status.write.stopped = Écriture arrêtée en toute sécurité • le support est incomplet et doit être réécrit avant utilisation
+status.write.failed = Échec de l'écriture • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribution · {source}
+status.catalog.distributions_loaded.other = {count} distributions · {source}
+status.catalog.pi_images_loaded.one = {count} image Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} images Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} distribution active basée sur {base} · {source}
+status.catalog.base_loaded.other = {count} distributions actives basées sur {base} · {source}

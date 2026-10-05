@@ -28,6 +28,16 @@ produce an explicit selection, and blocked/internal/system/read-only drives rema
 Both adapters show the same removable-media inventory summary before the device rows, followed by
 the physical path, display name, capacity, eligibility, and explicit Select/Selected state.
 
+## Shared conveniences
+
+- **Preferences** (`Preferences` in `bootable-core`) store the last image folder, checksum
+  algorithm, and up to four recent images. Recents are re-inspected on reuse, hidden when the file
+  is gone, and forgotten when inspection fails. Targets and destructive options are never stored.
+- **Selected-drive details** come from `device_details`: both adapters show connection, masked
+  serial tail, and mounted volumes only for an explicitly selected drive.
+- **Guide** content comes from `HELP_SECTIONS`; each entry names the desktop and terminal input.
+  Adding an action to either adapter means adding it there.
+
 ## Shared discovery states
 
 | State | Required behavior |

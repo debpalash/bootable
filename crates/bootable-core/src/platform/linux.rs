@@ -6,6 +6,7 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use crate::bios_boot;
 use crate::error::{Error, Result, io_error};
 use crate::model::{
     Device, DeviceId, MountPoint, Progress, ProgressPhase, WindowsPartitionScheme, WindowsPayload,
@@ -61,17 +62,12 @@ impl NativePlatform {
 
         let target = refresh_target(plan)?;
         control.checkpoint()?;
-        unmount_all(&target)?;
-        progress(Progress {
-            phase: ProgressPhase::Preparing,
-            completed: 0,
-            total: None,
-            message: format!("Target identity verified: {}", target.display_name()),
-        });
-        check_bad_blocks(&target, plan.options.bad_block_check, control, progress)?;
 
         match plan.strategy {
-            WriteStrategy::RawVerified => raw_write(plan, &target, control, progress),
+            WriteStrategy::RawVerified => {
+                prepare_target(plan, &target, control, progress)?;
+                raw_write(plan, &target, control, progress)
+            }
             WriteStrategy::WindowsFat32 {
                 payload,
                 partition_scheme,
@@ -341,10 +337,33 @@ fn collect_mounts(node: &LsblkNode) -> Vec<MountPoint> {
 }
 
 fn refresh_target(plan: &WritePlan) -> Result<Device> {
-    let target = discover_devices()?
+    select_refreshed_target(discover_devices()?, plan)
+}
+
+/// Picks the device the plan was reviewed for from a fresh scan. The Linux id is
+/// the drive serial, which cheap sticks often share, so the node path must also
+/// match and an id that now matches several devices is refused.
+fn select_refreshed_target(devices: Vec<Device>, plan: &WritePlan) -> Result<Device> {
+    let mut matches = devices
         .into_iter()
-        .find(|device| device.id == plan.target.id)
+        .filter(|device| device.id == plan.target.id)
+        .collect::<Vec<_>>();
+    if matches.len() > 1 {
+        return Err(Error::StalePlan(format!(
+            "{} connected drives report the same identity; unplug the others and review again",
+            matches.len()
+        )));
+    }
+    let target = matches
+        .pop()
         .ok_or_else(|| Error::DeviceNotFound(plan.target.id.to_string()))?;
+    if target.path != plan.target.path {
+        return Err(Error::StalePlan(format!(
+            "the drive moved from {} to {}; review the plan again",
+            plan.target.path.display(),
+            target.path.display()
+        )));
+    }
     if target.capacity != plan.target.capacity {
         return Err(Error::StalePlan(format!(
             "capacity changed from {} to {} bytes",
@@ -364,6 +383,78 @@ fn unmount_all(target: &Device) -> Result<()> {
         run_status("umount", [mount.path.as_os_str()])?;
     }
     Ok(())
+}
+
+/// The first destructive step: unmount the target's filesystems, then run the
+/// optional bad-block test. Callers run every validation that can refuse the
+/// plan before calling this.
+fn prepare_target(
+    plan: &WritePlan,
+    target: &Device,
+    control: &OperationControl,
+    progress: &mut dyn FnMut(Progress),
+) -> Result<()> {
+    unmount_all(target)?;
+    progress(Progress {
+        phase: ProgressPhase::Preparing,
+        completed: 0,
+        total: None,
+        message: format!("Target identity verified: {}", target.display_name()),
+    });
+    check_bad_blocks(target, plan.options.bad_block_check, control, progress)
+}
+
+/// Read-only loop mount of the source ISO that is unmounted on every exit path.
+struct IsoMount {
+    path: PathBuf,
+    mounted: bool,
+}
+
+impl IsoMount {
+    fn mount(image: &Path, path: PathBuf) -> Result<Self> {
+        run_status(
+            "mount",
+            [
+                OsStr::new("-o"),
+                OsStr::new("loop,ro"),
+                image.as_os_str(),
+                path.as_os_str(),
+            ],
+        )?;
+        Ok(Self {
+            path,
+            mounted: true,
+        })
+    }
+
+    fn unmount(mut self) -> Result<()> {
+        self.mounted = false;
+        run_status("umount", [self.path.as_os_str()])
+    }
+}
+
+impl Drop for IsoMount {
+    fn drop(&mut self) {
+        if self.mounted {
+            let _ = run_status("umount", [self.path.as_os_str()]);
+        }
+    }
+}
+
+/// Legacy BIOS limits decided from the plan and the freshly discovered target.
+/// The writer repeats them itself: a plan delivered by a helper client was not
+/// necessarily built by this crate's planner.
+fn validate_bios_plan(
+    partition_scheme: WindowsPartitionScheme,
+    plan_capacity: u64,
+    target_capacity: u64,
+) -> Result<()> {
+    if partition_scheme != WindowsPartitionScheme::Mbr {
+        return Err(Error::UnsupportedImage(
+            "legacy BIOS boot requires the MBR partition scheme".into(),
+        ));
+    }
+    bios_boot::validate_capacity(plan_capacity.max(target_capacity))
 }
 
 fn raw_write(
@@ -391,6 +482,7 @@ fn windows_write(
         "umount",
         "findmnt",
         "sync",
+        "blockdev",
     ] {
         ensure_tool(tool)?;
     }
@@ -399,24 +491,34 @@ fn windows_write(
         WindowsPartitionScheme::Mbr => "parted",
     })?;
 
+    // Every check that can refuse the plan runs before the first destructive
+    // step (unmount, bad-block test, wipefs, partitioning, mkfs).
+    let legacy_bios = plan.options.windows_boot_firmware.includes_legacy_bios();
+    if legacy_bios {
+        validate_bios_plan(partition_scheme, plan.target.capacity, target.capacity)?;
+        require_512_byte_sectors(&target.path)?;
+    }
+
     let workspace = tempfile::tempdir().map_err(|error| io_error("temporary directory", error))?;
-    let iso_mount = workspace.path().join("iso");
+    let iso_mount_path = workspace.path().join("iso");
     let usb_mount = workspace.path().join("usb");
-    fs::create_dir_all(&iso_mount).map_err(|error| io_error(&iso_mount, error))?;
+    fs::create_dir_all(&iso_mount_path).map_err(|error| io_error(&iso_mount_path, error))?;
     fs::create_dir_all(&usb_mount).map_err(|error| io_error(&usb_mount, error))?;
 
-    run_status(
-        "mount",
-        [
-            OsStr::new("-o"),
-            OsStr::new("loop,ro"),
-            plan.image.path.as_os_str(),
-            iso_mount.as_os_str(),
-        ],
-    )?;
-
+    let iso = IsoMount::mount(&plan.image.path, iso_mount_path)?;
+    let iso_mount = iso.path.clone();
     let result = (|| {
         control.checkpoint()?;
+        if legacy_bios {
+            // The loader reads whole clusters, so the limit depends on the
+            // cluster size mkfs will choose; estimate it now (before erasure)
+            // and check the exact size once the filesystem exists.
+            bios_boot::preflight_tree(
+                &iso_mount,
+                bios_boot::expected_cluster_bytes(target.capacity),
+            )?;
+        }
+        prepare_target(plan, target, control, progress)?;
         progress(Progress {
             phase: ProgressPhase::Preparing,
             completed: 0,
@@ -479,6 +581,13 @@ fn windows_write(
             ],
         )?;
         unmount_device_if_mounted(&partition)?;
+        let cluster_bytes = if legacy_bios {
+            let cluster_bytes = partition_cluster_bytes(&partition)?;
+            bios_boot::preflight_tree(&iso_mount, cluster_bytes)?;
+            cluster_bytes
+        } else {
+            0
+        };
         run_status("mount", [partition.as_os_str(), usb_mount.as_os_str()])?;
 
         let copy_result = copy_windows_tree(
@@ -496,6 +605,13 @@ fn windows_write(
             } else {
                 Ok(())
             }
+        })
+        .and_then(|()| {
+            if legacy_bios {
+                bios_boot::preflight_tree(&usb_mount, cluster_bytes)
+            } else {
+                Ok(())
+            }
         });
         let sync_result = if copy_result.is_ok() {
             run_status("sync", [OsStr::new("-f"), usb_mount.as_os_str()])
@@ -506,10 +622,22 @@ fn windows_write(
         copy_result?;
         sync_result?;
         unmount_result?;
+        if legacy_bios {
+            // After the filesystem is unmounted and flushed, so no cached
+            // write of the old boot sector can race with ours.
+            control.checkpoint()?;
+            progress(Progress {
+                phase: ProgressPhase::Verifying,
+                completed: plan.image.size,
+                total: Some(plan.image.size),
+                message: "Installing and verifying the legacy BIOS boot sectors".into(),
+            });
+            install_bios_boot_sectors(&target.path)?;
+        }
         Ok(())
     })();
 
-    let iso_unmount_result = run_status("umount", [iso_mount.as_os_str()]);
+    let iso_unmount_result = iso.unmount();
     result?;
     iso_unmount_result?;
     progress(Progress {
@@ -520,12 +648,142 @@ fn windows_write(
             WindowsPartitionScheme::Gpt => {
                 format!("Windows installer ready on FAT32 (partition type {BASIC_DATA_GUID})")
             }
+            WindowsPartitionScheme::Mbr if legacy_bios => {
+                "Windows installer ready on active MBR FAT32 media for UEFI and legacy BIOS (CSM) systems".into()
+            }
             WindowsPartitionScheme::Mbr => {
                 "Windows installer ready on active MBR FAT32 media for UEFI systems".into()
             }
         },
     });
     Ok(())
+}
+
+/// The cluster size of the freshly made FAT32 filesystem, from its boot sector.
+fn partition_cluster_bytes(partition: &Path) -> Result<u64> {
+    let mut sector = [0_u8; bios_boot::SECTOR_SIZE];
+    File::open(partition)
+        .and_then(|mut file| file.read_exact(&mut sector))
+        .map_err(|error| io_error(partition, error))?;
+    bios_boot::cluster_bytes(&sector)
+}
+
+/// Writes the BIOS boot sectors through the whole-disk node and re-reads them.
+///
+/// A desktop automounter can mount the fresh FAT32 partition the moment it is
+/// unmounted. The FAT driver then rewrites its cached copy of the boot sector
+/// (dirty flag) on the next unmount and silently reverts our boot record. So the
+/// partition is proven unmounted before the install, stale cached copies are
+/// dropped around it, and the result is verified, settled, and verified again.
+///
+/// Remaining gap: the re-reads go through the kernel page cache after
+/// `blockdev --flushbufs`, not through `O_DIRECT` (which needs aligned buffers
+/// and is not achievable here without `unsafe`). A device that acknowledges a
+/// write but returns the old data from its own cache is therefore not detected.
+fn install_bios_boot_sectors(disk: &Path) -> Result<()> {
+    let partition = partition_path(disk);
+    for node in [partition.as_path(), disk] {
+        unmount_device_if_mounted(node)?;
+    }
+    refuse_if_mounted(&[partition.as_path(), disk])?;
+    flush_buffers(&[partition.as_path(), disk])?;
+
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(disk)
+        .map_err(|error| io_error(disk, error))?;
+    bios_boot::install(&mut file)?;
+    file.sync_all().map_err(|error| io_error(disk, error))?;
+    drop(file);
+    flush_buffers(&[partition.as_path(), disk])?;
+    verify_bios_boot_sectors(disk)?;
+
+    // Give udev/automounters time to react to the change events, then prove
+    // nothing mounted the partition and the sectors are still ours.
+    let _ = run_status(
+        "udevadm",
+        [OsStr::new("settle"), OsStr::new("--timeout=10")],
+    );
+    thread::sleep(Duration::from_millis(500));
+    refuse_if_mounted_after_install(&[partition.as_path(), disk])?;
+    flush_buffers(&[partition.as_path(), disk])?;
+    verify_bios_boot_sectors(disk)
+}
+
+fn verify_bios_boot_sectors(disk: &Path) -> Result<()> {
+    let mut file = File::open(disk).map_err(|error| io_error(disk, error))?;
+    bios_boot::verify(&mut file)
+}
+
+/// Drops cached blocks (`BLKFLSBUF`) so a read cannot be answered from a stale
+/// copy and a later writeback cannot resurrect old boot-sector contents.
+fn flush_buffers(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        run_status("blockdev", [OsStr::new("--flushbufs"), device.as_os_str()])?;
+    }
+    Ok(())
+}
+
+fn refuse_if_mounted(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        let mounts = mount_targets(device)?;
+        if !mounts.is_empty() {
+            return Err(still_mounted_error(device, &mounts, false));
+        }
+    }
+    Ok(())
+}
+
+fn refuse_if_mounted_after_install(devices: &[&Path]) -> Result<()> {
+    for device in devices {
+        let mounts = mount_targets(device)?;
+        if !mounts.is_empty() {
+            return Err(still_mounted_error(device, &mounts, true));
+        }
+    }
+    Ok(())
+}
+
+fn still_mounted_error(device: &Path, mounts: &[String], after_install: bool) -> Error {
+    let when = if after_install {
+        "was mounted again after the BIOS boot sectors were written (an automounter?); \
+         the filesystem driver may rewrite the old boot sector when it is unmounted"
+    } else {
+        "is still mounted (an automounter?); refusing to write boot sectors under a \
+         live filesystem"
+    };
+    Error::UnsafeTarget(format!(
+        "{} {when}: {}. Unmount it and retry.",
+        device.display(),
+        mounts.join(", ")
+    ))
+}
+
+/// The BIOS boot record addresses 512-byte sectors; 4Kn drives are refused
+/// before erasure rather than after formatting.
+fn require_512_byte_sectors(disk: &Path) -> Result<()> {
+    let name = disk
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| Error::DeviceNotFound(disk.display().to_string()))?;
+    let path = Path::new("/sys/block")
+        .join(name)
+        .join("queue/logical_block_size");
+    let size = fs::read_to_string(&path).map_err(|error| io_error(&path, error))?;
+    check_logical_block_size(disk, &size)
+}
+
+fn check_logical_block_size(disk: &Path, size: &str) -> Result<()> {
+    if size.trim() == "512" {
+        Ok(())
+    } else {
+        Err(Error::UnsupportedImage(format!(
+            "legacy BIOS boot requires 512-byte logical sectors but {} reports {}",
+            disk.display(),
+            size.trim()
+        )))
+    }
 }
 
 fn apply_windows_ca_2023(root: &Path, control: &OperationControl) -> Result<()> {
@@ -788,6 +1046,14 @@ fn wait_for_partition(device: &Path) -> Result<PathBuf> {
 }
 
 fn unmount_device_if_mounted(device: &Path) -> Result<()> {
+    for mount in mount_targets(device)? {
+        run_status("umount", [OsStr::new(&mount)])?;
+    }
+    Ok(())
+}
+
+/// Mount points currently using `device` as their source (empty when unmounted).
+fn mount_targets(device: &Path) -> Result<Vec<String>> {
     let output = Command::new("findmnt")
         .args(["--noheadings", "--output", "TARGET", "--source"])
         .arg(device)
@@ -800,22 +1066,26 @@ fn unmount_device_if_mounted(device: &Path) -> Result<()> {
             }
         })?;
     if output.status.success() {
-        for mount in String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|mount| !mount.is_empty())
-        {
-            run_status("umount", [OsStr::new(mount)])?;
-        }
-        return Ok(());
+        return Ok(parse_mount_targets(&String::from_utf8_lossy(
+            &output.stdout,
+        )));
     }
     if output.status.code() == Some(1) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     Err(Error::CommandFailed {
         program: "findmnt".into(),
         message: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
     })
+}
+
+fn parse_mount_targets(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|mount| !mount.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 fn partition_path(device: &Path) -> PathBuf {
@@ -985,6 +1255,55 @@ mod tests {
     use super::*;
     use crate::model::{CompressedImageKind, ImageCompression, ImageKind, ImageReport};
 
+    fn reviewed_plan(target: Device) -> WritePlan {
+        WritePlan {
+            image: ImageReport {
+                path: PathBuf::from("image.iso"),
+                size: 1,
+                kind: ImageKind::HybridIso,
+                volume_label: None,
+                warnings: Vec::new(),
+            },
+            target,
+            strategy: crate::model::WriteStrategy::RawVerified,
+            options: Default::default(),
+            steps: Vec::new(),
+            required_tools: Vec::new(),
+            confirmation_phrase: String::new(),
+        }
+    }
+
+    fn stick(path: &str) -> Device {
+        Device {
+            id: crate::model::DeviceId::new("serial:SAMESERIAL"),
+            path: PathBuf::from(path),
+            vendor: None,
+            model: None,
+            serial: Some("SAMESERIAL".into()),
+            transport: Some("usb".into()),
+            capacity: 16 * 1024 * 1024 * 1024,
+            removable: true,
+            read_only: false,
+            system_disk: false,
+            mounts: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn refresh_refuses_a_different_stick_that_shares_the_serial() {
+        let plan = reviewed_plan(stick("/dev/sdc"));
+        // The reviewed node vanished; a look-alike stick sits at another node.
+        let error = select_refreshed_target(vec![stick("/dev/sdb")], &plan).expect_err("moved");
+        assert!(matches!(error, Error::StalePlan(_)), "{error}");
+        // Both look-alikes are connected: never guess which one was reviewed.
+        let error = select_refreshed_target(vec![stick("/dev/sdb"), stick("/dev/sdc")], &plan)
+            .expect_err("ambiguous");
+        assert!(matches!(error, Error::StalePlan(_)), "{error}");
+        // The reviewed stick alone still passes.
+        let target = select_refreshed_target(vec![stick("/dev/sdc")], &plan).expect("same");
+        assert_eq!(target.path, PathBuf::from("/dev/sdc"));
+    }
+
     #[test]
     fn partition_names_handle_sd_and_nvme_devices() {
         assert_eq!(
@@ -995,6 +1314,50 @@ mod tests {
             partition_path(Path::new("/dev/nvme0n1")),
             Path::new("/dev/nvme0n1p1")
         );
+    }
+
+    #[test]
+    fn findmnt_output_is_split_into_clean_mount_targets() {
+        assert!(parse_mount_targets("").is_empty());
+        assert_eq!(
+            parse_mount_targets("/run/media/user/WINDOWS\n\n  /mnt/usb \n"),
+            ["/run/media/user/WINDOWS", "/mnt/usb"]
+        );
+    }
+
+    #[test]
+    fn a_remounted_boot_partition_is_reported_with_its_mount_points() {
+        let before = still_mounted_error(
+            Path::new("/dev/sdb1"),
+            &["/run/media/u/WINDOWS".to_owned()],
+            false,
+        )
+        .to_string();
+        assert!(before.contains("/dev/sdb1") && before.contains("still mounted"));
+        assert!(before.contains("/run/media/u/WINDOWS"));
+        let after =
+            still_mounted_error(Path::new("/dev/sdb1"), &["/mnt".to_owned()], true).to_string();
+        assert!(after.contains("mounted again") && after.contains("old boot sector"));
+    }
+
+    #[test]
+    fn bios_plan_is_revalidated_by_the_writer_before_any_destructive_step() {
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 8 << 30, 8 << 30).expect("small MBR");
+        validate_bios_plan(WindowsPartitionScheme::Gpt, 8 << 30, 8 << 30)
+            .expect_err("GPT cannot carry a BIOS boot record");
+        // Either the reviewed or the freshly discovered capacity can exceed 2 TiB.
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 3 << 40, 8 << 30)
+            .expect_err("reviewed plan over 2 TiB");
+        validate_bios_plan(WindowsPartitionScheme::Mbr, 8 << 30, 3 << 40)
+            .expect_err("refreshed device over 2 TiB");
+    }
+
+    #[test]
+    fn four_k_native_drives_are_refused_for_bios_boot() {
+        let disk = Path::new("/dev/sdz");
+        check_logical_block_size(disk, "512\n").expect("512");
+        check_logical_block_size(disk, "4096\n").expect_err("4Kn");
+        check_logical_block_size(disk, "").expect_err("unreadable");
     }
 
     #[test]

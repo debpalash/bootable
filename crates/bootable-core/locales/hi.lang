@@ -1,0 +1,4 @@
+# Bootable message catalog: Hindi (hi).
+# STATUS: recognized locale, no translations yet; every message falls back to
+# English. Add translations here (keys and placeholders must match en.lang);
+# plural messages need `.one` and `.other`.

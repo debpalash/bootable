@@ -1,0 +1,574 @@
+# Bootable message catalog: Russian (ru).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Plural messages carry one/few/many/other forms.
+
+help.intro = Источник → Цель → Проверка и запись. Ничего не записывается, пока вы не проверите план и не подтвердите стирание.
+help.section.source = Источник
+help.section.target = Цель
+help.section.review = Проверка и запись
+help.section.general = Общее
+
+help.source.choose.action = Выбрать образ
+help.source.choose.detail = Выбор образа ISO, IMG, RAW или сжатого образа
+help.source.recent.action = Использовать недавний образ
+help.source.recent.detail = Повторно проверить один из последних образов
+help.source.recent.desktop = Щёлкнуть недавний образ
+help.source.discover.action = Найти образы
+help.source.discover.detail = Открыть или закрыть каталог дистрибутивов
+help.source.downloads.action = Загрузки
+help.source.downloads.detail = Открыть или закрыть менеджер загрузок
+help.source.downloads.desktop = Кнопка «Загрузки»
+
+help.target.refresh.action = Обновить накопители
+help.target.refresh.detail = Повторно найти съёмные носители
+help.target.choose.action = Выбрать накопитель
+help.target.choose.detail = Выбор всегда явный; встроенные диски заблокированы
+help.target.choose.desktop = Щёлкнуть накопитель
+
+help.review.plan.action = Проверить план
+help.review.plan.detail = Открывает план; пока ничего не записано
+help.review.stop.action = Остановить запись
+help.review.stop.detail = Останавливается в ближайшей безопасной точке
+help.review.stop.desktop = Кнопка «Остановить»
+help.review.firmware.action = Прошивка загрузки (носитель Windows)
+help.review.firmware.detail = Экспериментально: добавляет загрузку через устаревший BIOS; нужна схема MBR
+help.review.firmware.desktop = Выбор прошивки загрузки
+
+help.general.toggle.action = Показать или скрыть это руководство
+help.general.toggle.detail = Его можно открыть снова в любой момент
+help.general.close.action = Закрыть панель
+help.general.close.detail = Закрывает это руководство или каталог
+help.general.language.action = Сменить язык
+help.general.language.detail = Действует в обоих интерфейсах и сохраняется
+help.general.language.desktop = Меню языка
+language.label = Язык
+language.system_default = Как в системе
+
+detail.drive = Накопитель
+detail.path = Путь
+detail.capacity = Ёмкость
+detail.connection = Подключение
+detail.serial = Серийный номер
+detail.status = Состояние
+detail.mounted = Смонтировано
+detail.connection.unknown = неизвестно
+detail.serial.not_reported = не сообщается
+detail.mounted.none = ничего не смонтировано
+detail.mounted.list = {listed} · будет размонтировано перед записью
+detail.mounted.list_more = {listed} +ещё {hidden} · будет размонтировано перед записью
+
+target.system_blocked = Системный диск · заблокирован
+target.internal_blocked = Внутренний диск · заблокирован
+target.read_only_blocked = Только чтение · заблокирован
+target.eligible = Съёмный · подходит
+
+media.none = Съёмные накопители не подключены
+media.ready.one = {count} съёмный накопитель готов
+media.ready.few = {count} съёмных накопителя готовы
+media.ready.many = {count} съёмных накопителей готовы
+media.ready.other = {count} съёмного накопителя готово
+media.none_eligible.one = Подключён {count} съёмный накопитель · подходящих нет
+media.none_eligible.few = Подключено {count} съёмных накопителя · подходящих нет
+media.none_eligible.many = Подключено {count} съёмных накопителей · подходящих нет
+media.none_eligible.other = Подключено {count} съёмного накопителя · подходящих нет
+media.some_ready.one = Подключён {count} съёмный накопитель · готовых: {ready}
+media.some_ready.few = Подключено {count} съёмных накопителя · готовых: {ready}
+media.some_ready.many = Подключено {count} съёмных накопителей · готовых: {ready}
+media.some_ready.other = Подключено {count} съёмного накопителя · готовых: {ready}
+
+readiness.needs_image.action = Сначала выберите образ
+readiness.needs_target.action = Выбрать съёмный накопитель
+readiness.ready.action = Проверить план
+readiness.needs_image.guidance = Выберите или скачайте образ, чтобы продолжить
+readiness.needs_target.guidance = Подключите и выберите съёмный накопитель, чтобы продолжить
+readiness.ready.guidance = Можно проверить образ, цель и план стирания
+workspace.needs_image.status = Выберите или скачайте образ, чтобы продолжить
+workspace.needs_target.status = Выберите съёмный накопитель · ничего не записано
+workspace.ready.status = Можно проверять · ничего не записано
+
+step.source = Источник
+step.target = Цель
+step.review = Проверка и запись
+
+phase.preparing = Подготовка
+phase.downloading = Загрузка
+phase.reading = Чтение
+phase.writing = Запись
+phase.syncing = Синхронизация
+phase.verifying = Проверка
+phase.finished = Завершено
+
+integrity.transfer_checked = HTTPS-передача и загрузочная структура проверены · контрольная сумма издателя недоступна
+integrity.checksum_verified = Контрольная сумма издателя проверена
+integrity.checksum_unsigned = Контрольная сумма издателя проверена · подпись не проверена ({note})
+integrity.signature_verified = Подпись проверена · {publisher} (ключ {fingerprint}) · {algorithm} совпадает с подписанным манифестом
+integrity.completion = {label} · готово
+integrity.ready = Готово · {label} · {path}
+integrity.finalized.transfer = Этап 4/5 · Размер HTTPS-передачи проверен · контрольная сумма издателя недоступна · завершено в {path}
+integrity.finalized.checksum = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · завершено в {path}
+integrity.finalized.checksum_unsigned = Этап 4/5 · Контрольная сумма издателя ({algorithm}) проверена · подпись не проверена ({note}) · завершено в {path}
+integrity.finalized.signature = Этап 4/5 · {label} · завершено в {path}
+
+# Header and brand
+header.tagline = Загрузочные носители, записанные осознанно.
+header.title.create = Создать загрузочный носитель
+header.subtitle.create = Один осознанный путь от образа до съёмного накопителя.
+header.subtitle.review = Проверьте каждую операцию перед подтверждением.
+guide.title = Руководство
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Загрузки
+action.downloads_count = Загрузки · {count}
+action.downloads_compact = Задачи
+action.discover = Найти образы
+action.discover_compact = Найти
+action.catalog_close = Закрыть каталог
+action.catalog_close_compact = Каталог
+action.setup_options = Параметры настройки
+action.setup_options_compact = Настройка
+action.hide_options = Скрыть параметры
+action.hide_options_compact = Скрыть
+action.refresh_drives = Обновить накопители
+action.refresh = Обновить
+action.retry = Повторить
+action.browse = Обзор
+action.change = Изменить
+action.inspecting = Проверка…
+action.select = Выбрать
+action.selected = Выбрано
+action.blocked = Заблокировано
+action.close = Закрыть
+action.cancel = Отмена
+action.cancelling = Отмена…
+action.back = Назад
+action.pause = Пауза
+action.resume = Продолжить
+action.stop = Остановить
+action.review = Проверить
+action.quit = Выход
+
+# Tooltips
+tooltip.guide = Руководство и сочетания клавиш ({shortcut})
+tooltip.refresh_drives = Обновить съёмные накопители
+tooltip.refresh_distrowatch = Обновить данные DistroWatch
+tooltip.refresh_pi = Обновить каталог Raspberry Pi
+
+# Source panel
+source.title = Выбрать образ
+source.hint = Образ проверяется до того, как будет разрешена любая запись
+source.formats = Образ диска ISO, IMG, RAW или сжатый
+source.inspected = Проверен
+source.recent.title = Недавние образы
+source.recent.empty = Используемые вами образы появятся здесь для повторного выбора одним щелчком
+source.recent.in_use = Используется
+source.dialog.title = Загрузочные образы
+source.dialog.filter_iso = Образы ISO
+source.dialog.filter_backup = Необработанный образ накопителя
+
+# Target panel
+target.title = Выбрать накопитель
+target.empty = Подключите съёмный USB- или SD-накопитель, затем обновите список
+target.selected_drive = Выбранный накопитель
+target.confirm_physical = Убедитесь, что это нужный физический накопитель · стирание начнётся только после проверки
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Источник · выберите или смените образ
+focus.target = Цель · выберите подходящий съёмный накопитель
+focus.setup = Параметры настройки · настройте параметры, зависящие от образа
+focus.review = Проверка и запись · изучите план до стирания
+focus.discover = Найти образы · просмотр надёжных каталогов
+focus.refresh = Обновить накопители · повторный поиск съёмных носителей
+
+# Setup options: panel titles
+options.windows.title = Параметры установщика Windows
+options.linux.title = Загрузочный носитель Linux / Unix
+options.selected_count = Выбрано: {count}
+options.summary.verification = Проверка включена · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Схема разделов
+options.windows.scheme_value = Схема: {scheme}
+options.windows.boot_firmware = Прошивка загрузки
+options.windows.boot_firmware_experimental = Прошивка загрузки · экспериментально
+options.windows.boot_firmware_value = Прошивка загрузки: {value}
+options.windows.boot_firmware_value_experimental = Прошивка загрузки: {value} · экспериментально
+options.windows.boot_firmware_value_compact = Прошивка: {value}
+options.windows.boot_firmware_hint = Экспериментально: BIOS + UEFI (CSM) требует схемы MBR и пока записывается только адаптером Linux. На реальном оборудовании ещё не проверено.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Обойти проверки TPM, Secure Boot и объёма ОЗУ
+options.windows.bypass_hardware.short = Обход требований
+options.windows.bypass_hardware.on = Проверки TPM, Secure Boot и ОЗУ в Windows 11 будут обойдены
+options.windows.bypass_hardware.off = Проверки оборудования Windows 11 используют настройки Microsoft по умолчанию
+options.windows.offline_account.label = Показать настройку локальной учётной записи (без сети)
+options.windows.offline_account.short = Локальная запись
+options.windows.offline_account.on = В OOBE Windows будет доступен путь с локальной учётной записью
+options.windows.offline_account.off = OOBE Windows будет использовать стандартную процедуру создания учётной записи
+options.windows.named_account.label = Создать локальную запись: {name}
+options.windows.named_account.short = Именная запись
+options.windows.named_account.on = Windows создаст локальную учётную запись администратора `{account}`
+options.windows.named_account.off = Автоматическое создание локальной учётной записи отключено
+options.windows.host_region.label = Скопировать региональные настройки и часовой пояс этого компьютера
+options.windows.host_region.short = Регион ПК
+options.windows.host_region.on = Windows будет использовать региональные настройки {locale} и часовой пояс {zone}
+options.windows.host_region.off = Программа установки Windows запросит региональные параметры
+options.windows.privacy.label = Применить настройки OOBE, ориентированные на конфиденциальность
+options.windows.privacy.short = Приватность
+options.windows.privacy.on = OOBE Windows будет использовать настройки, ориентированные на конфиденциальность
+options.windows.privacy.off = Вопросы о конфиденциальности в OOBE Windows сохранят значения по умолчанию
+options.windows.bitlocker.label = Отключить автоматическое шифрование BitLocker
+options.windows.bitlocker.short = Без BitLocker
+options.windows.bitlocker.on = Автоматическое шифрование устройства Windows будет отключено
+options.windows.bitlocker.off = Windows может автоматически включить шифрование устройства
+options.windows.qol.label = Удобство: ограничить Copilot, OneDrive, Teams, рекомендации и быстрый запуск
+options.windows.qol.short = Удобство
+options.windows.qol.on = Windows ограничит Copilot, OneDrive, Teams, рекомендации и быстрый запуск
+options.windows.qol.off = Copilot, OneDrive, Teams, рекомендации и быстрый запуск в Windows останутся по умолчанию
+options.windows.ca2023.label = Использовать загрузчики, подписанные Windows UEFI CA 2023
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = Для носителя с CA 2023 нужны обновлённые сертификаты Secure Boot в прошивке
+options.windows.ca2023.off = Загрузочный носитель будет использовать стандартные загрузчики Windows
+options.windows.skusipolicy.label = Применить отзывы Secure Boot из SkuSiPolicy.p7b
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = Отзывы Secure Boot из SkuSiPolicy.p7b будут применены
+options.windows.skusipolicy.off = Отзывы Secure Boot из SkuSiPolicy.p7b не будут применены
+options.windows.smode.label = Принудительно включить режим S Windows (для опытных)
+options.windows.smode.short = Режим S
+options.windows.smode.on = Режим S может остаться принудительным после переустановки; внимательно проверьте план
+options.windows.smode.off = Режим S Windows не будет принудительно включён
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Выберите установочный образ Windows, прежде чем менять параметры Windows
+status.windows.not_windows = Параметры настройки Windows применяются только к установочным образам Windows
+status.windows.scheme = Схема разделов Windows: {scheme} · прошивка загрузки: {firmware}
+status.windows.firmware = Прошивка загрузки: {firmware} (экспериментально) · схема разделов: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Установочный носитель Windows
+options.windows.installer_ready = ISO Windows готов · параметры настройки разблокированы
+options.windows.installer_locked = Выберите ISO Windows, чтобы разблокировать параметры настройки
+options.windows.choose_iso = Выбрать ISO Windows
+options.windows.replace_iso = Заменить ISO Windows
+options.windows.unavailable_note = Недоступные элементы нельзя нажать. Существующие файлы autounattend.xml никогда не перезаписываются.
+options.windows.silent_install_warning = Автоматическая установка может стереть первый диск, обнаруженный программой установки Windows, и требует отдельной защиты с многоступенчатым подтверждением.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Сохранить полную разметку загрузочного диска
+options.linux.layout_short = Полная разметка
+options.linux.verify = Проверить записанные байты по SHA-256
+options.linux.verify_short = Проверка байтов
+options.linux.boot_records_short = Загрузочные записи
+options.linux.unmount_short = Безопасное размонтирование
+
+# Setup options: media tools
+options.tools.title = Инструменты носителя
+options.tools.subtitle = Утилиты проверки и резервного копирования
+options.tools.bad_blocks_off = Сбойные блоки: выкл.
+options.tools.bad_blocks_passes = Сбойные блоки: {passes}x
+options.tools.verify_image = Проверить образ
+options.tools.image_folder = Папка образов
+options.tools.backup_drive = Резервная копия накопителя
+
+# Review screen
+review.title = Проверка плана записи
+review.subtitle = Ничего не записывается, пока последствия не проверены и не подтверждены.
+review.subtitle_writing = Идут запись и проверка • не отключайте целевой накопитель.
+review.plan_summary = Сводка плана
+review.field.source = Источник
+review.field.target = Цель
+review.field.method = Метод
+review.field.consequence = Последствие
+review.consequence = Все данные и разделы на выбранном накопителе будут стёрты.
+review.permanent_changes = Необратимые изменения
+review.ordered_operations = Операции по порядку
+review.step.erases = Стирает данные
+review.step.safe = Безопасно
+review.step.verifies = Проверяет
+review.state.writing = Идут запись и проверка
+review.state.final_confirm = Требуется одно последнее подтверждение
+review.warning.writing = Не закрывайте приложение, не выключайте питание и не отключайте целевой накопитель.
+review.warning.idle = Перед записью проверьте точные изменения на целевом накопителе и необратимые последствия.
+review.hint.open_confirmation = Откройте подтверждение, чтобы проверить изменения, последствия и физический накопитель.
+review.action.stop_safely = Безопасно остановить
+review.action.written = Записано и проверено
+review.action.retry = Проверить и повторить
+review.action.consequences = Проверить последствия
+review.status.writing = Идут запись и проверка · не отключайте целевой накопитель
+review.status.complete = Готово · записанный носитель прошёл побайтовую проверку
+review.status.review = Перед записью проверьте физический накопитель и необратимые изменения
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Подтвердите необратимые изменения
+confirm.subtitle = Проверьте, что изменит Bootable и что может пойти не так.
+confirm.badge = Необратимо
+confirm.physical_target = Физический накопитель
+confirm.changes = Изменения на этом накопителе
+confirm.consequences = Последствия
+confirm.consequence.erase = Все существующие файлы и разделы на этом физическом накопителе будут безвозвратно стёрты.
+confirm.consequence.wrong_drive = Выбор неверного накопителя уничтожит данные на нём; проверьте ниже его модель, путь и ёмкость.
+confirm.consequence.interrupted = Потеря питания, закрытие приложения или отключение во время записи могут оставить носитель незавершённым и незагрузочным.
+confirm.consequence.recheck = Bootable повторно проверяет идентичность накопителя непосредственно перед стиранием и проверяет результат после него.
+confirm.ack = Я проверил физический накопитель и понимаю, что все данные на нём будут безвозвратно стёрты.
+confirm.submit = Подтвердить стирание и запись
+confirm.acknowledge_first = Сначала подтвердите
+
+# Write result
+result.success.title = Запись завершена
+result.success.body = Образ записан и проверен. Съёмный накопитель теперь можно безопасно извлечь.
+result.authentication_denied.title = Запись отменена до стирания
+result.authentication_denied.body = Аутентификация администратора была отменена или отклонена.
+result.stopped.title = Запись безопасно остановлена
+result.stopped.body = Носитель неполный, и перед использованием его нужно записать заново.
+result.failed.title = Ошибка записи
+
+# Review and write status lines
+status.review.open = Проверка плана записи • ничего не записано
+status.review.consequences = Перед записью проверьте изменения на накопителе и последствия
+status.review.ack_required = Подтвердите, что понимаете последствия, прежде чем подтверждать запись
+status.write.active = Идёт запись • не закрывайте приложение и не отключайте накопитель
+status.write.started = Запись начата • не отключайте накопитель
+status.write.cancelled = Запись отменена до стирания • накопитель не изменён
+status.write.stopping = Безопасная остановка • сброс завершённых записей; носитель останется неполным
+
+# Discover: catalog shell
+discover.title = Найти загрузочные образы
+discover.collapsed_hint = Просмотр надёжных каталогов · Открыть
+discover.disclaimer = Рейтинг просмотров DistroWatch показывает интерес, а не качество или долю рынка.
+discover.search_title = Поиск
+discover.search_placeholder = Поиск по названию, slug или базовому семейству…
+discover.windows_hint = Сценарий установщика Windows · выберите ISO, чтобы разблокировать все флажки настройки
+discover.quick.all = Все
+discover.section.popular = Популярные · шесть месяцев
+discover.section.search = Результаты поиска
+discover.section.arch = На основе Arch
+discover.section.debian = На основе Debian
+
+# Discover: distribution rows and profile
+discover.item.independent = Независимый
+discover.item.directory = Справочник
+discover.item.directory_source = Справочник DistroWatch
+discover.item.hits_per_day = {hits}/день
+discover.item.size_unknown = Размер неизвестен
+discover.item.publisher_checksum = {algorithm} издателя
+discover.item.no_publisher_checksum = Нет контрольной суммы издателя
+discover.item.https_only = Только HTTPS
+discover.detail.empty = Выберите дистрибутив, чтобы загрузить его профиль и ISO-файлы
+discover.detail.unknown_os = Неизвестная ОС
+discover.detail.unknown_status = Статус неизвестен
+discover.detail.unknown_origin = Неизвестно
+discover.detail.no_description = Нет описания
+discover.detail.not_listed = Не указано
+discover.detail.based_on = Основа
+discover.detail.origin = Происхождение
+discover.detail.architecture = Архитектура
+discover.detail.desktop = Рабочий стол
+discover.detail.logo = Логотип
+discover.detail.screenshot = Снимок экрана
+discover.detail.screenshot_of = Снимок экрана {name}
+discover.detail.rating.one = ★ {rating}/10 · {count} отзыв
+discover.detail.rating.few = ★ {rating}/10 · {count} отзыва
+discover.detail.rating.many = ★ {rating}/10 · {count} отзывов
+discover.detail.rating.other = ★ {rating}/10 · {count} отзыва
+discover.detail.direct_isos = Прямые ISO-файлы
+discover.detail.loading = Загрузка…
+discover.detail.found = Найдено: {count}
+discover.detail.open_page = Открыть страницу загрузки DistroWatch
+discover.detail.download_use = Скачать и использовать ISO
+discover.artwork.loading = Загрузка изображения…
+discover.artwork.none = Нет изображения
+discover.artwork.unavailable = Изображение недоступно
+
+# Discover: Raspberry Pi catalog
+pi.title = Официальный каталог Raspberry Pi Imager
+pi.subtitle = Совместимость плат, контрольные суммы сжатых и распакованных файлов
+pi.board_filter = Фильтр плат
+pi.compatible_images = Совместимые образы
+pi.all_images = Все образы
+pi.empty = Совместимые образы Raspberry Pi не найдены
+pi.empty_query = Нет образов Raspberry Pi, соответствующих «{query}»
+pi.hint = Выберите плату и образ. Официальные контрольные суммы проверяются до использования образа.
+pi.default_category = Образ Raspberry Pi
+pi.date_unknown = Дата неизвестна
+pi.details = Загрузка {download} · Распаковано {expanded}\nВыпущено {date}\n{description}
+pi.download_use = Скачать, проверить и использовать
+
+# Discover: catalog load states ({subject} comes from catalog.subject.*; {reason} and {warning} are core-produced text shown as received)
+catalog.state.idle = Не загружено: {subject}
+catalog.state.loading = Загрузка: {subject}…
+catalog.state.ready = Готово: {subject}
+catalog.state.ready_cached = Готово (из кэша): {subject}
+catalog.state.ready_warning = Готово (из кэша): {subject} · {warning}
+catalog.state.empty = Не найдено: {subject}
+catalog.state.failed = Не удалось загрузить: {subject} · {reason} · повторить
+catalog.subject.distributions = дистрибутивы
+catalog.subject.search_catalog = каталог поиска
+catalog.subject.pi_images = образы Raspberry Pi
+catalog.subject.pi_boards = платы Raspberry Pi
+catalog.subject.base_distributions = дистрибутивы на основе {base}
+catalog.subject.iso_releases = релизы ISO
+catalog.subject.distribution_profile = профиль дистрибутива
+
+# Discover: status lines
+status.catalog.closed = Каталог закрыт • {guidance}
+status.catalog.search_closed = Поиск закрыт · показан рейтинг популярности DistroWatch за шесть месяцев
+status.catalog.popularity = Показан рейтинг популярности DistroWatch за шесть месяцев
+status.catalog.ready = Каталог DistroWatch готов • рейтинг отражает интерес, а не качество
+status.catalog.loading_popularity = Загрузка рейтинга популярности DistroWatch за шесть месяцев…
+status.catalog.searching_directory = Поиск по полному справочнику дистрибутивов DistroWatch…
+status.catalog.loading = Загрузка дистрибутивов…
+status.catalog.loading_base = Поиск на DistroWatch активных дистрибутивов на основе {base}…
+status.catalog.showing_base.one = Показан {count} активный дистрибутив на основе {base} из DistroWatch
+status.catalog.showing_base.few = Показано {count} активных дистрибутива на основе {base} из DistroWatch
+status.catalog.showing_base.many = Показано {count} активных дистрибутивов на основе {base} из DistroWatch
+status.catalog.showing_base.other = Показано {count} активного дистрибутива на основе {base} из DistroWatch
+status.catalog.loading_releases = Определение текущих ISO-файлов {name}…
+status.catalog.profile_ready_no_iso = Профиль готов · прямой ISO не найден
+status.catalog.profile_ready_errors.one = Профиль готов · прямой ISO не найден · {count} ошибка источника
+status.catalog.profile_ready_errors.few = Профиль готов · прямой ISO не найден · {count} ошибки источника
+status.catalog.profile_ready_errors.many = Профиль готов · прямой ISO не найден · {count} ошибок источника
+status.catalog.profile_ready_errors.other = Профиль готов · прямой ISO не найден · {count} ошибки источника
+status.catalog.releases_loaded.one = {count} прямой релиз ISO · {source}
+status.catalog.releases_loaded.few = {count} прямых релиза ISO · {source}
+status.catalog.releases_loaded.many = {count} прямых релизов ISO · {source}
+status.catalog.releases_loaded.other = {count} прямого релиза ISO · {source}
+status.catalog.source_warnings.one = {count} предупреждение источника
+status.catalog.source_warnings.few = {count} предупреждения источника
+status.catalog.source_warnings.many = {count} предупреждений источника
+status.catalog.source_warnings.other = {count} предупреждения источника
+status.catalog.with_warnings = {summary} · {warnings}
+status.catalog.omarchy = Семейство Omarchy · релизы ISO можно записать; производные только с установщиком чётко помечены
+status.catalog.omarchy_missing = Omarchy отсутствует в текущем справочнике DistroWatch
+status.catalog.windows_tools = Инструменты носителя Windows · выберите ISO Windows, чтобы разблокировать параметры настройки
+status.catalog.windows_uses_iso = Инструменты Windows используют выбранный локальный ISO
+status.catalog.pi_selected = Выбран поиск образов Raspberry Pi
+status.catalog.pi_loading = Загрузка официального каталога Raspberry Pi Imager…
+status.catalog.pi_compatible = Показаны образы, совместимые с {board}
+status.catalog.pi_all = Показаны все образы Raspberry Pi
+status.catalog.pi_choose = Выберите образ Raspberry Pi для загрузки
+status.catalog.pi_selected_verify = Образ Raspberry Pi выбран • загрузка будет распакована и проверена
+status.catalog.iso_selected_checksum = ISO выбран • контрольная сумма издателя будет проверена перед использованием
+status.catalog.iso_selected_https = ISO выбран • контрольная сумма издателя недоступна; будут проверены размер HTTPS-передачи и загрузочная структура
+status.catalog.choose_distribution = Сначала выберите дистрибутив
+status.catalog.choose_release = Выберите релиз ISO для загрузки
+status.catalog.browser_opened = Страница дистрибутива DistroWatch открыта в браузере
+status.catalog.artwork_error = Не удалось декодировать изображение каталога: {error}
+
+# Downloads panel
+downloads.subtitle = Постоянная история · прерванные загрузки можно возобновить
+downloads.empty = Управляемых загрузок пока нет · выберите образ в разделе «Найти образы», чтобы начать
+downloads.selected = Выбранная загрузка
+downloads.interrupted_note = Прерванные загрузки сохраняют только собственные частичные файлы; явная отмена удаляет их.
+downloads.action.retry_resume = Повторить / продолжить
+downloads.action.use_image = Использовать образ
+downloads.action.remove = Удалить запись
+downloads.action.cancel = Отменить загрузку
+downloads.jobs_in_history.one = {count} загрузка в истории
+downloads.jobs_in_history.few = {count} загрузки в истории
+downloads.jobs_in_history.many = {count} загрузок в истории
+downloads.jobs_in_history.other = {count} загрузки в истории
+downloads.status.queued = В очереди
+downloads.status.running = Загрузка
+downloads.status.paused = Приостановлено
+downloads.status.interrupted = Прервано
+downloads.status.completed = Завершено
+downloads.status.failed = Ошибка
+downloads.status.cancelled = Отменено
+downloads.kind.iso = ISO
+downloads.kind.raspberry_pi = Образ Raspberry Pi
+
+# Download status lines
+status.download.history_unavailable = История загрузок недоступна · {error}
+status.download.queued = Загрузка поставлена в очередь · она начнётся, когда завершится активная задача
+status.download.retrying = Повтор загрузки · сохранённые данные будут докачаны, если это поддерживается
+status.download.starting = Запуск управляемой загрузки…
+status.download.retry_queued = Повтор поставлен в очередь · он начнётся после активной загрузки
+status.download.choose_job = Сначала выберите задачу загрузки
+status.download.job_gone = Задача загрузки больше не существует
+status.download.start_failed = Не удалось запустить загрузку из очереди · {error}
+status.download.using_completed = Используется завершённая загрузка {path}
+status.download.completed_unavailable = Скачанный образ недоступен · {error}
+status.download.history_removed = Запись истории удалена · готовый образ сохранён
+status.download.iso_cancelled = Загрузка ISO отменена
+status.download.pi_cancelled = Загрузка образа Raspberry Pi отменена
+status.download.ready = Готово · {name} скачан, проверен и проанализирован · поиск остаётся открытым
+status.download.cancelled_cleaned = Загрузка отменена • временные данные удалены
+status.download.stopped = Загрузка остановлена · {error}
+status.download.paused = Загрузка приостановлена • возобновите или отмените, когда будете готовы
+status.download.resumed = Загрузка возобновлена
+status.download.cancelling = Безопасная отмена загрузки • очистка временных данных…
+
+# Image, drive and options status lines
+status.startup = {media} · выберите образ, чтобы начать
+status.image.busy = Проверка образа уже выполняется
+status.image.cancelled = Выбор образа отменён
+status.image.inspecting = Проверка образа • размер сжатых источников определяется после распаковки…
+status.image.recognized = Распознано: {kind}
+status.image.stopped = Проверка образа неожиданно прервалась
+status.image.folder = Папка выбора образов: {path}
+status.image.folder_cancelled = Выбор папки отменён
+status.image.choose_first = Сначала выберите образ
+status.image.no_recent = На этой позиции нет недавнего образа
+status.prefs.save_failed = Настройки не сохранены: {error}
+status.target.none_eligible = Нет подходящего съёмного накопителя
+status.target.selected = Цель выбрана · убедитесь, что это нужный физический накопитель, прежде чем проверять план стирания
+status.target.blocked = Этот накопитель заблокирован и не может быть выбран
+status.target.choose_first = Сначала выберите целевой накопитель
+status.drives.refresh_paused = Обновление списка накопителей приостановлено на время записи • не отключайте накопитель
+status.drives.up_to_date = Список накопителей актуален • автоматическое обнаружение включено
+status.drives.changed = Сведения о накопителях изменились • список обновлён автоматически
+status.drives.added.one = Обнаружен {count} новый накопитель • список обновлён автоматически
+status.drives.added.few = Обнаружено {count} новых накопителя • список обновлён автоматически
+status.drives.added.many = Обнаружено {count} новых накопителей • список обновлён автоматически
+status.drives.added.other = Обнаружено {count} нового накопителя • список обновлён автоматически
+status.drives.removed.one = Удалён {count} накопитель • список обновлён автоматически
+status.drives.removed.few = Удалено {count} накопителя • список обновлён автоматически
+status.drives.removed.many = Удалено {count} накопителей • список обновлён автоматически
+status.drives.removed.other = Удалено {count} накопителя • список обновлён автоматически
+status.drives.added_removed = Список накопителей изменён: добавлено {added}, удалено {removed} • обновлён автоматически
+status.options.expanded = Расширенные параметры развёрнуты • каждый выбор входит в проверяемый план
+status.options.collapsed = Расширенные параметры свёрнуты • заданные значения остаются в силе
+status.options.open_needs_image = Выберите или скачайте образ, прежде чем открывать параметры носителя
+status.checksum.algorithm = Алгоритм контрольной суммы: {algorithm}
+status.checksum.choose_image = Выберите образ, прежде чем вычислять его контрольную сумму
+status.badblocks.off = Деструктивная проверка сбойных блоков отключена
+status.badblocks.passes.one = Проверка сбойных блоков: {count} деструктивный шаблон перед записью
+status.badblocks.passes.few = Проверка сбойных блоков: {count} деструктивных шаблона перед записью
+status.badblocks.passes.many = Проверка сбойных блоков: {count} деструктивных шаблонов перед записью
+status.badblocks.passes.other = Проверка сбойных блоков: {count} деструктивного шаблона перед записью
+status.backup.choose_drive = Выберите съёмный накопитель для резервного копирования
+status.backup.cancelled = Резервное копирование накопителя отменено
+status.backup.running = Резервное копирование {drive}…
+status.backup.done = Образ накопителя сохранён в {path}
+status.backup.failed = {error} • последний шаг: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = сеть недоступна
+catalog.failure.refresh = обновление недоступно
+catalog.failure.cache = кэш недоступен
+catalog.failure.unsupported = ответ каталога не поддерживается
+catalog.failure.service = служба недоступна
+catalog.source.network = только что обновлено
+catalog.source.cache = из кэша
+catalog.source.stale_cache = из кэша · обновление не удалось
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Готово • образ записан и проверен • накопитель можно безопасно извлечь
+status.write.auth_denied = Запись отменена до стирания • аутентификация администратора отменена или отклонена
+status.write.stopped = Запись безопасно остановлена • носитель неполный, его нужно записать заново перед использованием
+status.write.failed = Ошибка записи • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} дистрибутив · {source}
+status.catalog.distributions_loaded.few = {count} дистрибутива · {source}
+status.catalog.distributions_loaded.many = {count} дистрибутивов · {source}
+status.catalog.distributions_loaded.other = {count} дистрибутива · {source}
+status.catalog.pi_images_loaded.one = {count} образ Raspberry Pi · {source}
+status.catalog.pi_images_loaded.few = {count} образа Raspberry Pi · {source}
+status.catalog.pi_images_loaded.many = {count} образов Raspberry Pi · {source}
+status.catalog.pi_images_loaded.other = {count} образа Raspberry Pi · {source}
+status.catalog.base_loaded.one = {count} активный дистрибутив на основе {base} · {source}
+status.catalog.base_loaded.few = {count} активных дистрибутива на основе {base} · {source}
+status.catalog.base_loaded.many = {count} активных дистрибутивов на основе {base} · {source}
+status.catalog.base_loaded.other = {count} активного дистрибутива на основе {base} · {source}

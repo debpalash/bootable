@@ -1,3 +1,4 @@
+mod bios_boot;
 mod catalog;
 mod catalog_cache;
 mod checksum;
@@ -5,12 +6,17 @@ mod discovery_session;
 mod download;
 mod download_session;
 mod error;
+mod guide;
 mod inspect;
+mod integrity;
+mod locale;
+mod messages;
 mod model;
 mod operation;
 mod pi_catalog;
 mod plan;
 mod platform;
+mod preferences;
 #[cfg(target_os = "linux")]
 mod privilege;
 #[cfg(any(target_os = "macos", all(test, unix)))]
@@ -20,6 +26,7 @@ mod privilege_macos;
 #[cfg_attr(test, allow(dead_code))]
 mod privilege_windows;
 mod privileged_protocol;
+mod signature;
 mod windows;
 mod windows_media;
 mod write_session;
@@ -38,17 +45,27 @@ pub use download_session::{
     DownloadCompletion, DownloadLaunch, DownloadRequest, ManagedDownloadSession,
 };
 pub use error::{Error, Result};
+pub use guide::{
+    DetailRow, HELP_INTRO, HELP_SECTIONS, HelpEntry, HelpSection, LocalizedHelpSection,
+    device_details, device_details_in, help_intro, help_sections,
+};
+pub use integrity::IntegrityState;
+pub use locale::{Locale, PluralCategory, TextDirection, UnsupportedLocale};
+pub use messages::{Arg, Coverage, Message, Strings};
 pub use model::{
     BadBlockCheck, CompressedImageKind, Device, DeviceId, ImageCompression, ImageKind, ImageReport,
     MountPoint, PlanStep, PrivilegedWriteCommand, PrivilegedWriteEvent, PrivilegedWriteRequest,
-    Progress, ProgressPhase, ReviewReadiness, WindowsExperienceOptions, WindowsPartitionScheme,
-    WindowsPayload, WindowsRegionalOptions, WorkspaceProgress, WorkspaceStepState, WriteOptions,
-    WritePlan, WriteStrategy, destructive_confirmation_ready, format_bytes, removable_media_status,
-    review_readiness, target_eligibility_label, workspace_progress,
+    Progress, ProgressPhase, ReviewReadiness, WindowsBootFirmware, WindowsExperienceOptions,
+    WindowsPartitionScheme, WindowsPayload, WindowsRegionalOptions, WorkspaceProgress,
+    WorkspaceStepState, WriteOptions, WritePlan, WriteStrategy, destructive_confirmation_ready,
+    format_bytes, removable_media_status, removable_media_status_in, review_readiness,
+    target_eligibility_label, target_eligibility_label_in, workspace_progress,
 };
 pub use operation::{OperationControl, OperationState};
 pub use pi_catalog::{PiCatalog, PiDevice, PiImage};
+pub use preferences::{Preferences, RecentImage};
 pub use privileged_protocol::serve_privileged_writer;
+pub use signature::{SignatureProtocol, SignerIdentity};
 pub use windows::{host_regional_options, suggested_account_name};
 pub use write_session::{ReviewedWriteSession, WriteCompletion, WriteLaunch};
 
@@ -56,6 +73,7 @@ use platform::NativePlatform;
 
 pub struct Bootable {
     platform: NativePlatform,
+    require_signature: bool,
 }
 
 impl Default for Bootable {
@@ -68,7 +86,20 @@ impl Bootable {
     pub fn native() -> Self {
         Self {
             platform: NativePlatform::new(),
+            require_signature: false,
         }
+    }
+
+    /// When `required`, catalog ISO downloads (including queued retries run by
+    /// this engine) are refused before any image byte is transferred unless the
+    /// publisher's checksum manifest carried a verified signature from a pinned
+    /// key. Off by default: without it, a missing signature degrades to a
+    /// checksum-only result that is labelled as such (see
+    /// [`IntegrityState::signature_expected_but_unverified`]).
+    #[must_use]
+    pub fn require_signature(mut self, required: bool) -> Self {
+        self.require_signature = required;
+        self
     }
 
     pub fn discover_devices(&self) -> Result<Vec<Device>> {
@@ -192,6 +223,24 @@ impl Bootable {
         self.run_download_job(&id, control, progress)
     }
 
+    /// [`Bootable::download_iso_controlled`] that also returns how well the
+    /// image was authenticated, so adapters can show or act on the state.
+    pub fn download_iso_with_integrity(
+        &self,
+        release: &IsoRelease,
+        destination: impl AsRef<Path>,
+        control: &OperationControl,
+        progress: impl FnMut(Progress),
+    ) -> Result<(ImageReport, IntegrityState)> {
+        let id = self.enqueue_iso_download(release, destination)?;
+        let (report, integrity) = self.run_download_job_detailed(&id, control, progress)?;
+        // Every ISO job yields an integrity state.
+        let integrity = integrity.ok_or_else(|| {
+            Error::InvalidDownload("the download job produced no integrity result".into())
+        })?;
+        Ok((report, integrity))
+    }
+
     pub fn enqueue_iso_download(
         &self,
         release: &IsoRelease,
@@ -209,9 +258,14 @@ impl Bootable {
         destination: &Path,
         control: &OperationControl,
         mut progress: impl FnMut(Progress),
-    ) -> Result<ImageReport> {
-        catalog::download_iso(release, destination, control, &mut progress)?;
-        let publisher_checksum = release.checksum.is_some() || release.checksum_url.is_some();
+    ) -> Result<(ImageReport, IntegrityState)> {
+        let integrity = catalog::download_iso(
+            release,
+            destination,
+            self.require_signature,
+            control,
+            &mut progress,
+        )?;
         control.checkpoint()?;
         progress(Progress {
             phase: ProgressPhase::Verifying,
@@ -224,19 +278,9 @@ impl Bootable {
             phase: ProgressPhase::Finished,
             completed: report.size,
             total: Some(report.size),
-            message: if publisher_checksum {
-                format!(
-                    "Ready · publisher checksum verified · {}",
-                    report.path.display()
-                )
-            } else {
-                format!(
-                    "Ready · HTTPS transfer and boot structure checked · publisher checksum unavailable · {}",
-                    report.path.display()
-                )
-            },
+            message: integrity.ready_message(&report.path),
         });
-        Ok(report)
+        Ok((report, integrity))
     }
 
     pub fn raspberry_pi_catalog(&self) -> Result<PiCatalog> {
@@ -354,26 +398,45 @@ impl Bootable {
         &self,
         id: &str,
         control: &OperationControl,
-        mut progress: impl FnMut(Progress),
+        progress: impl FnMut(Progress),
     ) -> Result<ImageReport> {
+        self.run_download_job_detailed(id, control, progress)
+            .map(|(report, _)| report)
+    }
+
+    fn run_download_job_detailed(
+        &self,
+        id: &str,
+        control: &OperationControl,
+        mut progress: impl FnMut(Progress),
+    ) -> Result<(ImageReport, Option<IntegrityState>)> {
         let ledger = download::DownloadLedger::open_default()?;
         let (payload, destination) = ledger.begin(id)?;
         let mut recorder = download::ProgressRecorder::new(ledger.clone(), id.to_owned());
         let result = match payload {
-            download::DownloadPayload::Iso(release) => {
-                self.download_iso_payload(&release, &destination, control, |update| {
+            download::DownloadPayload::Iso(release) => self
+                .download_iso_payload(&release, &destination, control, |update| {
                     recorder.record(&update);
                     progress(update);
                 })
-            }
-            download::DownloadPayload::RaspberryPi(image) => {
-                self.download_pi_payload(&image, &destination, control, |update| {
+                .map(|(report, integrity)| (report, Some(integrity))),
+            download::DownloadPayload::RaspberryPi(image) => self
+                .download_pi_payload(&image, &destination, control, |update| {
                     recorder.record(&update);
                     progress(update);
                 })
-            }
+                .map(|report| (report, None)),
         };
-        let ledger_result = ledger.finish(id, result.as_ref().map(|_| ()));
+        let completion_message = result
+            .as_ref()
+            .ok()
+            .and_then(|(_, integrity)| integrity.as_ref())
+            .map(IntegrityState::completion_message);
+        let ledger_result = ledger.finish_with_message(
+            id,
+            result.as_ref().map(|_| ()),
+            completion_message.as_deref(),
+        );
         match (result, ledger_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),

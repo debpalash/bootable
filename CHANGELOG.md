@@ -2,6 +2,43 @@
 
 All notable changes to Bootable are documented here.
 
+## Unreleased
+
+- Added remembered preferences shared by the GUI and TUI: last image folder, checksum algorithm, and
+  the four most recent images, reusable in one click (GUI) or with keys `1`–`4` (TUI). Target
+  drives and destructive options are never remembered.
+- Added selected-drive details in both interfaces: connection, masked serial tail, and mounted
+  volumes that will be unmounted before writing.
+- Added a shared Guide (`?` button, F1 or `?`) listing every action and its key in each interface,
+  plus desktop shortcuts: Ctrl/Cmd+O image, G discover, R refresh drives, P review plan, Esc close.
+- Added OpenPGP and minisign verification of publisher checksum manifests against pinned keys
+  (Ubuntu, Debian, Linux Mint, Kali, Fedora, AlmaLinux). A bad signature refuses the download; a
+  missing signature or unknown key falls back to checksum-only and says so. See `docs/signatures.md`.
+- Added headless CLI `bootable flash <slug-or-image> <target>` (still requires the exact
+  `--confirm` phrase), `bootable completions <shell>`, and stable exit codes. See `docs/cli.md`.
+  `write` without `--confirm` now exits 3 instead of 1.
+- Added package-manager manifest templates (winget, Scoop, Homebrew, AUR, Nix, Flatpak) and a
+  renderer script; nothing is published automatically. See `docs/package-managers.md`.
+- Made the release workflow signing-ready for macOS notarization, Windows Authenticode, and
+  cosign-signed checksums. Builds stay unsigned until secrets are configured (`docs/signing.md`).
+- Added comparison and roadmap pages to the website.
+
+## 0.1.4 — 2026-10-02
+
+- Added a safe progress protocol for Omarchy and other external clients, streaming catalog
+  download and write progress as JSON, plus removable-media status in both interfaces.
+- Polished shared GUI and TUI discovery, keeping their capabilities and information hierarchy in
+  step.
+- Fixed the Linux release job so the packaged GUI is smoke-tested under a software Vulkan device.
+- Published to the AUR as `bootable-tui` and `bootable-gui` (source builds from this release).
+- Added localization: a shared message catalog with English, Spanish, French, German, Brazilian
+  Portuguese, Russian, Japanese, and Simplified Chinese (machine-quality drafts that need native
+  review), a saved language setting, a header language select (GUI) and the `L` key (TUI). Only
+  text produced by the shared core is translated so far; most app-owned UI text is still English.
+- Added an experimental "BIOS + UEFI (CSM)" boot-firmware option for MBR Windows installer media on
+  Linux (GUI select, TUI `f` key, `--windows-boot-firmware` CLI flag). It is tested against a stub
+  `bootmgr` in QEMU only and has not been verified with a real Windows installer or real hardware.
+
 ## 0.1.1 — 2026-08-27
 
 - Added native Linux AppImage, DEB, and RPM packages, each containing the desktop app, TUI, and

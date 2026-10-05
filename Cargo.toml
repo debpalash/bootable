@@ -20,8 +20,11 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 anyhow = "1.0"
+blake2 = "0.10"
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 crossterm = "0.29"
+ed25519-dalek = "2"
 gpui = "0.2.2"
 gpui-component = "0.5.1"
 gpui_http_client = "0.2.2"
@@ -29,6 +32,9 @@ image = { version = "0.25.10", default-features = false, features = ["gif", "jpe
 futures = "0.3"
 libc = "0.2"
 md-5 = "0.10"
+minisign-verify = "0.3"
+pgp = { version = "0.21", default-features = false }
+rand = "0.8"
 ratatui = "0.30"
 ratatui-image = { version = "11.0.6", default-features = false, features = ["crossterm", "image-defaults"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }

@@ -1,0 +1,92 @@
+name: Package manifests
+
+# Renders submit-ready package-manager manifests (winget, Scoop, Homebrew, Flatpak, AUR, Nix)
+# for a published stable release and uploads them as a workflow artifact ONLY.
+#
+# This workflow never pushes to another repository, never opens pull requests, and uses no
+# secrets. A maintainer downloads the artifact and submits each manifest by hand; see
+# docs/package-managers.md.
+#
+# Triggers:
+#   workflow_dispatch  the reliable path; defaults to the version in Cargo.toml.
+#   release: published only fires for releases NOT created with the default GITHUB_TOKEN
+#                      (GitHub suppresses events from it), so it will not see releases that the
+#                      Release workflow publishes itself.
+#   workflow_run       fires when a manually dispatched Release workflow finishes successfully,
+#                      which is how stable releases are actually published.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable version to render, for example 0.1.4 (default is the Cargo.toml version)
+        required: false
+        type: string
+  release:
+    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-manifests-${{ github.event.release.tag_name || github.event.workflow_run.id || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  render:
+    name: Render package manifests
+    runs-on: ubuntu-24.04
+    # Prereleases and release-candidate runs are never packaged.
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'workflow_dispatch')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            release) version="${RELEASE_TAG#v}" ;;
+            workflow_dispatch)
+              version="${INPUT_VERSION#v}"
+              ;;
+            *) version="" ;;
+          esac
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing to package '$version': only stable MAJOR.MINOR.PATCH releases are supported." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Lint and self-test the renderer
+        shell: bash
+        run: |
+          shellcheck scripts/render-package-manifests.sh
+          scripts/render-package-manifests.sh --self-test
+
+      - name: Render manifests from the published checksums
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/render-package-manifests.sh "$VERSION" --out dist/package-manifests
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-manifests-${{ steps.version.outputs.version }}
+          path: dist/package-manifests
+          if-no-files-found: error

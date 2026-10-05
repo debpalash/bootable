@@ -20,7 +20,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | Windows 11 TPM/Secure Boot/RAM bypass | guarded answer file | flag + clickable toggle | clickable toggle | Implemented |
 | Runtime UEFI boot validation | Bootable write/verify → disposable virtual USB → QEMU/OVMF + RGB frame assertion | same script | same script | Implemented locally and in CI with a deterministic UEFI fixture |
 | Bad-block/fake-drive test | 1/2/4 destructive patterns | flag + clickable cycle | clickable cycle | Implemented on Linux |
-| Partition scheme and target firmware choices | GPT or MBR + UEFI | clickable cycle | native select box | Partial: legacy BIOS remains |
+| Partition scheme and target firmware choices | GPT or MBR + UEFI | clickable cycle | native select box | Partial: experimental BIOS + UEFI (CSM) for MBR Windows media on Linux only; unverified on real hardware |
 | FAT/FAT32/NTFS/UDF/exFAT/ext formatting | Windows FAT32 only | automatic only | automatic only | Planned |
 | Linux persistence | not implemented | not implemented | not implemented | Planned |
 | Windows To Go | not implemented | not implemented | not implemented | Planned |
@@ -36,7 +36,7 @@ is an original cross-platform implementation; parity means equivalent outcomes, 
 | Official ISO/UEFI Shell downloads | not implemented | not implemented | not implemented | Planned |
 | Publisher download integrity | checksum sidecars/manifests, strongest digest, atomic mismatch refusal | integrity label + persistent result | integrity label + persistent result | Implemented for MD5/SHA-1/SHA-256/SHA-512; signatures planned |
 | Native Windows/macOS raw adapters | USB/whole-removable discovery, stable refresh, detach/unmount, raw write/backup/verify | same core path | same core path | Raw adapters, narrow-helper authorization, and native Windows FAT32 paths implemented |
-| Localization | not implemented | not implemented | not implemented | Planned |
+| Localization | shared catalog, 8 languages (machine-quality drafts) | `L` cycles language; Guide, drive and status text | header language select; Guide, drive and status text | Partial: app-owned UI text is not extracted yet |
 
 ## Delivery order
 

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.bootable.Bootable</id>
+  <name>Bootable</name>
+  <summary>Create verified boot media from trusted images</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <developer id="app.bootable">
+    <name>Bootable contributors</name>
+  </developer>
+  <description>
+    <p>Bootable finds, downloads, writes, and verifies operating-system images on removable media, with matching desktop and terminal interfaces.</p>
+    <p>Note: in this Flatpak build the sandbox cannot reach the privileged write helper, so writing to a drive is unavailable. Discovery, downloads, and verification work. Use the native DEB, RPM, or AppImage package to write media.</p>
+  </description>
+  <launchable type="desktop-id">app.bootable.Bootable.desktop</launchable>
+  <provides>
+    <binary>bootable</binary>
+    <binary>bootable-desktop</binary>
+  </provides>
+  <url type="homepage">https://github.com/debpalash/bootable</url>
+  <url type="bugtracker">https://github.com/debpalash/bootable/issues</url>
+  <url type="vcs-browser">https://github.com/debpalash/bootable</url>
+  <categories>
+    <category>System</category>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@RELEASE_DATE@">
+      <url type="details">https://github.com/debpalash/bootable/releases/tag/v@VERSION@</url>
+    </release>
+  </releases>
+</component>

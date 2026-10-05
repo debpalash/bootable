@@ -1,0 +1,529 @@
+# Bootable message catalog: Simplified Chinese (zh-Hans).
+# STATUS: machine-quality draft; needs review by a native speaker.
+# Keys and placeholders must match en.lang; missing keys fall back to English.
+# Chinese has no plural forms, so plural messages define only `.other`.
+
+help.intro = 源 → 目标 → 检查并写入。在您检查计划并确认擦除之前，不会写入任何内容。
+help.section.source = 源
+help.section.target = 目标
+help.section.review = 检查并写入
+help.section.general = 常规
+
+help.source.choose.action = 选择镜像
+help.source.choose.detail = 浏览 ISO、IMG、RAW 或压缩镜像
+help.source.recent.action = 使用最近的镜像
+help.source.recent.detail = 重新检查最近使用的镜像之一
+help.source.recent.desktop = 点击最近的镜像
+help.source.discover.action = 发现镜像
+help.source.discover.detail = 打开或关闭发行版目录
+help.source.downloads.action = 下载
+help.source.downloads.detail = 打开或关闭下载管理器
+help.source.downloads.desktop = “下载”按钮
+
+help.target.refresh.action = 刷新驱动器
+help.target.refresh.detail = 重新扫描可移动介质
+help.target.choose.action = 选择驱动器
+help.target.choose.detail = 选择始终需要明确操作；固定磁盘已被阻止
+help.target.choose.desktop = 点击驱动器
+
+help.review.plan.action = 检查计划
+help.review.plan.detail = 打开计划；目前尚未写入任何内容
+help.review.stop.action = 停止写入
+help.review.stop.detail = 在下一个安全点停止
+help.review.stop.desktop = “停止”按钮
+help.review.firmware.action = 引导固件（Windows 介质）
+help.review.firmware.detail = 实验性：添加传统 BIOS 引导；需要 MBR 方案
+help.review.firmware.desktop = 引导固件选择
+
+help.general.toggle.action = 显示或隐藏本指南
+help.general.toggle.detail = 可随时重新打开
+help.general.close.action = 关闭面板
+help.general.close.detail = 关闭本指南或目录
+help.general.language.action = 更改语言
+help.general.language.detail = 同时应用于两种界面并会保存
+help.general.language.desktop = 语言菜单
+language.label = 语言
+language.system_default = 跟随系统
+
+detail.drive = 驱动器
+detail.path = 路径
+detail.capacity = 容量
+detail.connection = 连接
+detail.serial = 序列号
+detail.status = 状态
+detail.mounted = 已挂载
+detail.connection.unknown = 未知
+detail.serial.not_reported = 未报告
+detail.mounted.none = 未挂载任何内容
+detail.mounted.list = {listed} · 写入前将卸载
+detail.mounted.list_more = {listed} 等另外 {hidden} 项 · 写入前将卸载
+
+target.system_blocked = 系统磁盘 · 已阻止
+target.internal_blocked = 内部磁盘 · 已阻止
+target.read_only_blocked = 只读 · 已阻止
+target.eligible = 可移动 · 可用
+
+media.none = 未连接可移动驱动器
+media.ready.other = {count} 个可移动驱动器就绪
+media.none_eligible.other = 已连接 {count} 个可移动驱动器 · 无可用
+media.some_ready.other = 已连接 {count} 个可移动驱动器 · {ready} 个就绪
+
+readiness.needs_image.action = 请先选择镜像
+readiness.needs_target.action = 选择可移动驱动器
+readiness.ready.action = 检查计划
+readiness.needs_image.guidance = 选择或下载镜像以继续
+readiness.needs_target.guidance = 连接并选择可移动驱动器以继续
+readiness.ready.guidance = 可以检查镜像、目标和擦除计划
+workspace.needs_image.status = 选择或下载镜像以继续
+workspace.needs_target.status = 选择可移动驱动器 · 尚未写入任何内容
+workspace.ready.status = 可以检查 · 尚未写入任何内容
+
+step.source = 源
+step.target = 目标
+step.review = 检查并写入
+
+phase.preparing = 准备中
+phase.downloading = 下载中
+phase.reading = 读取中
+phase.writing = 写入中
+phase.syncing = 同步中
+phase.verifying = 验证中
+phase.finished = 已完成
+
+integrity.transfer_checked = 已检查 HTTPS 传输和启动结构 · 发布者校验和不可用
+integrity.checksum_verified = 发布者校验和已验证
+integrity.checksum_unsigned = 发布者校验和已验证 · 签名未验证（{note}）
+integrity.signature_verified = 签名已验证 · {publisher}（密钥 {fingerprint}）· {algorithm} 与已签名清单匹配
+integrity.completion = {label} · 就绪
+integrity.ready = 就绪 · {label} · {path}
+integrity.finalized.transfer = 阶段 4/5 · HTTPS 传输长度已验证 · 发布者校验和不可用 · 已在 {path} 完成
+integrity.finalized.checksum = 阶段 4/5 · 发布者 {algorithm} 已验证 · 已在 {path} 完成
+integrity.finalized.checksum_unsigned = 阶段 4/5 · 发布者 {algorithm} 已验证 · 签名未验证（{note}）· 已在 {path} 完成
+integrity.finalized.signature = 阶段 4/5 · {label} · 已在 {path} 完成
+
+# Header and brand
+header.tagline = 有意识地写入启动介质。
+header.title.create = 创建启动介质
+header.subtitle.create = 从镜像到可移动驱动器的一条明确路径。
+header.subtitle.review = 确认之前请检查每一项操作。
+guide.title = 指南
+common.labeled = {label}：{value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = 下载
+action.downloads_count = 下载 · {count}
+action.downloads_compact = 任务
+action.discover = 发现镜像
+action.discover_compact = 查找
+action.catalog_close = 关闭目录
+action.catalog_close_compact = 目录
+action.setup_options = 设置选项
+action.setup_options_compact = 设置
+action.hide_options = 隐藏选项
+action.hide_options_compact = 隐藏
+action.refresh_drives = 刷新驱动器
+action.refresh = 刷新
+action.retry = 重试
+action.browse = 浏览
+action.change = 更改
+action.inspecting = 正在检查…
+action.select = 选择
+action.selected = 已选择
+action.blocked = 已阻止
+action.close = 关闭
+action.cancel = 取消
+action.cancelling = 正在取消…
+action.back = 返回
+action.pause = 暂停
+action.resume = 继续
+action.stop = 停止
+action.review = 检查
+action.quit = 退出
+
+# Tooltips
+tooltip.guide = 指南和快捷键（{shortcut}）
+tooltip.refresh_drives = 刷新可移动驱动器
+tooltip.refresh_distrowatch = 刷新 DistroWatch 数据
+tooltip.refresh_pi = 刷新 Raspberry Pi 目录
+
+# Source panel
+source.title = 选择镜像
+source.hint = 在允许任何写入之前会先检查镜像
+source.formats = ISO、IMG、RAW 或压缩磁盘镜像
+source.inspected = 已检查
+source.recent.title = 最近的镜像
+source.recent.empty = 您使用过的镜像会显示在这里，可一键重新使用
+source.recent.in_use = 使用中
+source.dialog.title = 启动镜像
+source.dialog.filter_iso = ISO 镜像
+source.dialog.filter_backup = 原始驱动器镜像
+
+# Target panel
+target.title = 选择驱动器
+target.empty = 请连接可移动的 USB 或 SD 驱动器，然后刷新
+target.selected_drive = 所选驱动器
+target.confirm_physical = 继续之前请确认实际的物理驱动器 · 仅在检查之后才会开始擦除
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = 源 · 选择或更改镜像
+focus.target = 目标 · 选择符合条件的可移动驱动器
+focus.setup = 设置选项 · 配置与镜像相关的选择
+focus.review = 检查并写入 · 擦除之前先检查计划
+focus.discover = 发现镜像 · 浏览可信目录
+focus.refresh = 刷新驱动器 · 重新扫描可移动介质
+
+# Setup options: panel titles
+options.windows.title = Windows 安装程序选项
+options.linux.title = Linux / Unix 启动介质
+options.selected_count = 已选择 {count} 项
+options.summary.verification = 验证已开启 · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = 分区方案
+options.windows.scheme_value = 方案：{scheme}
+options.windows.boot_firmware = 引导固件
+options.windows.boot_firmware_experimental = 引导固件 · 实验性
+options.windows.boot_firmware_value = 引导固件：{value}
+options.windows.boot_firmware_value_experimental = 引导固件：{value} · 实验性
+options.windows.boot_firmware_value_compact = 固件：{value}
+options.windows.boot_firmware_hint = 实验性：BIOS + UEFI (CSM) 需要 MBR 方案，目前仅由 Linux 适配器写入。尚未在真实硬件上验证。
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = 绕过 TPM、安全启动和内存检查
+options.windows.bypass_hardware.short = 绕过硬件检查
+options.windows.bypass_hardware.on = 将绕过 Windows 11 的 TPM、安全启动和内存检查
+options.windows.bypass_hardware.off = Windows 11 硬件检查使用 Microsoft 默认设置
+options.windows.offline_account.label = 提供本地/离线账户设置
+options.windows.offline_account.short = 离线账户
+options.windows.offline_account.on = Windows OOBE 将显示本地/离线账户路径
+options.windows.offline_account.off = Windows OOBE 将使用标准账户流程
+options.windows.named_account.label = 创建本地账户：{name}
+options.windows.named_account.short = 指定账户
+options.windows.named_account.on = Windows 将创建本地管理员账户 `{account}`
+options.windows.named_account.off = 已禁用自动创建本地账户
+options.windows.host_region.label = 复制此计算机的区域设置和时区
+options.windows.host_region.short = 主机区域
+options.windows.host_region.on = Windows 将使用区域设置 {locale} 和时区 {zone}
+options.windows.host_region.off = Windows 安装程序将询问区域选项
+options.windows.privacy.label = 应用注重隐私的 OOBE 默认设置
+options.windows.privacy.short = 隐私默认值
+options.windows.privacy.on = Windows OOBE 将使用注重隐私的默认设置
+options.windows.privacy.off = Windows OOBE 隐私问题将保持默认设置
+options.windows.bitlocker.label = 禁用 BitLocker 自动加密
+options.windows.bitlocker.short = 禁用 BitLocker
+options.windows.bitlocker.on = 将禁用 Windows 自动设备加密
+options.windows.bitlocker.off = Windows 可能会自动启用设备加密
+options.windows.qol.label = 体验优化：减少 Copilot、OneDrive、Teams、建议和快速启动
+options.windows.qol.short = 体验优化
+options.windows.qol.on = Windows 将减少 Copilot、OneDrive、Teams、建议和快速启动
+options.windows.qol.off = Copilot、OneDrive、Teams、建议和快速启动将保持 Windows 默认行为
+options.windows.ca2023.label = 使用 Windows UEFI CA 2023 签名的引导加载程序
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA 2023 启动介质需要更新的安全启动固件证书
+options.windows.ca2023.off = 启动介质将使用标准的 Windows 引导加载程序
+options.windows.skusipolicy.label = 应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = 将应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.skusipolicy.off = 将不应用 SkuSiPolicy.p7b 安全启动吊销
+options.windows.smode.label = 强制 Windows S 模式（专家）
+options.windows.smode.short = 强制 S 模式
+options.windows.smode.on = 重新安装后 S 模式可能仍被强制启用；请仔细检查计划
+options.windows.smode.off = 不会强制启用 Windows S 模式
+
+# Setup options: Windows status lines
+status.windows.choose_installer = 更改 Windows 选项之前，请先选择 Windows 安装镜像
+status.windows.not_windows = Windows 设置选项仅适用于 Windows 安装镜像
+status.windows.scheme = Windows 分区方案：{scheme} · 引导固件：{firmware}
+status.windows.firmware = 引导固件：{firmware}（实验性） · 分区方案：{scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windows 安装介质
+options.windows.installer_ready = Windows ISO 已就绪 · 设置选项已解锁
+options.windows.installer_locked = 选择 Windows ISO 以解锁设置选项
+options.windows.choose_iso = 选择 Windows ISO
+options.windows.replace_iso = 替换 Windows ISO
+options.windows.unavailable_note = 不可用的项目无法点击。现有的 autounattend.xml 文件绝不会被覆盖。
+options.windows.silent_install_warning = 静默安装可能会擦除 Windows 安装程序检测到的第一块磁盘，需要单独设计高门槛的安全机制。
+
+# Setup options: Linux / Unix media
+options.linux.layout = 保留完整的可启动磁盘布局
+options.linux.layout_short = 完整磁盘布局
+options.linux.verify = 使用 SHA-256 验证已写入的字节
+options.linux.verify_short = 字节验证
+options.linux.boot_records_short = 引导记录
+options.linux.unmount_short = 安全卸载
+
+# Setup options: media tools
+options.tools.title = 介质工具
+options.tools.subtitle = 验证和备份实用工具
+options.tools.bad_blocks_off = 坏块检测 关
+options.tools.bad_blocks_passes = 坏块检测：{passes} 次
+options.tools.verify_image = 验证镜像
+options.tools.image_folder = 镜像文件夹
+options.tools.backup_drive = 备份驱动器
+
+# Review screen
+review.title = 检查写入计划
+review.subtitle = 在检查并确认后果之前，不会写入任何内容。
+review.subtitle_writing = 正在写入和验证 • 请勿拔出目标驱动器。
+review.plan_summary = 计划摘要
+review.field.source = 源
+review.field.target = 目标
+review.field.method = 方法
+review.field.consequence = 后果
+review.consequence = 所选目标上的所有现有数据和分区都将被擦除。
+review.permanent_changes = 永久性更改
+review.ordered_operations = 按顺序的操作
+review.step.erases = 擦除数据
+review.step.safe = 安全
+review.step.verifies = 验证
+review.state.writing = 正在写入和验证
+review.state.final_confirm = 还需要最后一次确认
+review.warning.writing = 请勿关闭应用、断电或拔出目标驱动器。
+review.warning.idle = 写入之前请检查目标上的具体更改和不可逆的后果。
+review.hint.open_confirmation = 打开确认窗口以检查更改、后果和实际的目标驱动器。
+review.action.stop_safely = 安全停止
+review.action.written = 已写入并验证
+review.action.retry = 检查并重试
+review.action.consequences = 检查后果
+review.status.writing = 正在写入和验证 · 请勿拔出目标驱动器
+review.status.complete = 完成 · 写入的介质已通过字节验证
+review.status.review = 写入之前请检查实际的目标驱动器和永久性更改
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = 确认永久性更改
+confirm.subtitle = 请查看 Bootable 将更改的内容以及可能出现的问题。
+confirm.badge = 永久
+confirm.physical_target = 实际目标
+confirm.changes = 对此驱动器的更改
+confirm.consequences = 后果
+confirm.consequence.erase = 此实际驱动器上的所有现有文件和分区都将被永久擦除。
+confirm.consequence.wrong_drive = 选错驱动器会破坏该驱动器上的数据；请在下方确认其型号、路径和容量。
+confirm.consequence.interrupted = 写入期间断电、关闭应用或拔出驱动器可能导致介质不完整且无法启动。
+confirm.consequence.recheck = Bootable 会在擦除前立即重新核对目标的身份，并在之后验证结果。
+confirm.ack = 我已检查实际的目标驱动器，并明白其上所有现有数据都将被永久擦除。
+confirm.submit = 确认擦除并写入
+confirm.acknowledge_first = 请先确认
+
+# Write result
+result.success.title = 写入完成
+result.success.body = 镜像已写入并通过验证。现在可以安全移除该可移动驱动器。
+result.authentication_denied.title = 擦除前已取消写入
+result.authentication_denied.body = 管理员身份验证已被取消或拒绝。
+result.stopped.title = 写入已安全停止
+result.stopped.body = 介质不完整，使用前必须重新写入。
+result.failed.title = 写入失败
+
+# Review and write status lines
+status.review.open = 正在检查写入计划 • 尚未写入任何内容
+status.review.consequences = 写入之前请检查对目标的更改和后果
+status.review.ack_required = 确认写入之前请先确认已了解后果
+status.write.active = 正在写入 • 请勿关闭应用或拔出目标驱动器
+status.write.started = 已开始写入 • 请勿拔出目标驱动器
+status.write.cancelled = 擦除前已取消写入 • 目标未发生更改
+status.write.stopping = 正在安全停止 • 正在刷新已完成的写入；介质将保持不完整
+
+# Discover: catalog shell
+discover.title = 发现可启动镜像
+discover.collapsed_hint = 浏览可信目录 · 打开
+discover.disclaimer = DistroWatch 的页面点击排名反映的是关注度，而不是质量或市场份额。
+discover.search_title = 搜索
+discover.search_placeholder = 按名称、slug 或基础系列搜索…
+discover.windows_hint = Windows 安装程序流程 · 选择 ISO 以解锁所有设置复选框
+discover.quick.all = 全部
+discover.section.popular = 热门 · 六个月
+discover.section.search = 搜索结果
+discover.section.arch = 基于 Arch
+discover.section.debian = 基于 Debian
+
+# Discover: distribution rows and profile
+discover.item.independent = 独立
+discover.item.directory = 目录
+discover.item.directory_source = DistroWatch 目录
+discover.item.hits_per_day = {hits}/天
+discover.item.size_unknown = 大小未知
+discover.item.publisher_checksum = 发布者的 {algorithm}
+discover.item.no_publisher_checksum = 无发布者校验和
+discover.item.https_only = 仅 HTTPS
+discover.detail.empty = 选择一个发行版以加载其配置信息和 ISO 文件
+discover.detail.unknown_os = 未知操作系统
+discover.detail.unknown_status = 状态未知
+discover.detail.unknown_origin = 未知
+discover.detail.no_description = 无描述
+discover.detail.not_listed = 未列出
+discover.detail.based_on = 基于
+discover.detail.origin = 来源地
+discover.detail.architecture = 架构
+discover.detail.desktop = 桌面
+discover.detail.logo = 标志
+discover.detail.screenshot = 屏幕截图
+discover.detail.screenshot_of = {name} 的屏幕截图
+discover.detail.rating.other = ★ {rating}/10 · {count} 条评价
+discover.detail.direct_isos = 直接 ISO 文件
+discover.detail.loading = 正在加载…
+discover.detail.found = 找到 {count} 项
+discover.detail.open_page = 打开 DistroWatch 下载页面
+discover.detail.download_use = 下载并使用 ISO
+discover.artwork.loading = 正在加载图片…
+discover.artwork.none = 无图片
+discover.artwork.unavailable = 图片不可用
+
+# Discover: Raspberry Pi catalog
+pi.title = 官方 Raspberry Pi Imager 目录
+pi.subtitle = 含开发板兼容性及压缩与解压后的校验和
+pi.board_filter = 开发板筛选
+pi.compatible_images = 兼容的镜像
+pi.all_images = 所有镜像
+pi.empty = 未找到兼容的 Raspberry Pi 镜像
+pi.empty_query = 没有与“{query}”匹配的 Raspberry Pi 镜像
+pi.hint = 请选择开发板和镜像。使用镜像之前会先验证官方校验和。
+pi.default_category = Raspberry Pi 镜像
+pi.date_unknown = 日期未知
+pi.details = 下载 {download} · 解压后 {expanded}\n发布于 {date}\n{description}
+pi.download_use = 下载、验证并使用
+
+# Discover: catalog load states ({subject} comes from catalog.subject.*; {reason} and {warning} are core-produced text shown as received)
+catalog.state.idle = {subject}未加载
+catalog.state.loading = 正在加载{subject}…
+catalog.state.ready = {subject}已就绪
+catalog.state.ready_cached = {subject}已就绪 · 来自缓存
+catalog.state.ready_warning = {subject}已就绪 · 来自缓存 · {warning}
+catalog.state.empty = 未找到{subject}
+catalog.state.failed = 无法加载{subject} · {reason} · 重试
+catalog.subject.distributions = 发行版
+catalog.subject.search_catalog = 搜索目录
+catalog.subject.pi_images = Raspberry Pi 镜像
+catalog.subject.pi_boards = Raspberry Pi 开发板
+catalog.subject.base_distributions = 基于 {base} 的发行版
+catalog.subject.iso_releases = ISO 发行版本
+catalog.subject.distribution_profile = 发行版配置信息
+
+# Discover: status lines
+status.catalog.closed = 目录已关闭 • {guidance}
+status.catalog.search_closed = 搜索已关闭 · 正在显示 DistroWatch 六个月热度
+status.catalog.popularity = 正在显示 DistroWatch 六个月热度
+status.catalog.ready = DistroWatch 目录已就绪 • 排名反映的是关注度，而非质量
+status.catalog.loading_popularity = 正在加载 DistroWatch 六个月热度…
+status.catalog.searching_directory = 正在搜索 DistroWatch 的完整发行版目录…
+status.catalog.loading = 正在加载发行版…
+status.catalog.loading_base = 正在 DistroWatch 上搜索基于 {base} 的活跃发行版…
+status.catalog.showing_base.other = 正在显示来自 DistroWatch 的 {count} 个基于 {base} 的活跃发行版
+status.catalog.loading_releases = 正在解析 {name} 当前的 ISO 文件…
+status.catalog.profile_ready_no_iso = 配置信息已就绪 · 未找到直接 ISO
+status.catalog.profile_ready_errors.other = 配置信息已就绪 · 未找到直接 ISO · {count} 个来源错误
+status.catalog.releases_loaded.other = {count} 个直接 ISO 版本 · {source}
+status.catalog.source_warnings.other = {count} 条来源警告
+status.catalog.with_warnings = {summary} · {warnings}
+status.catalog.omarchy = Omarchy 系列 · ISO 版本可以写入；仅含安装程序的衍生版会明确标注
+status.catalog.omarchy_missing = 当前的 DistroWatch 目录中没有 Omarchy
+status.catalog.windows_tools = Windows 介质工具 · 选择 Windows ISO 以解锁设置选项
+status.catalog.windows_uses_iso = Windows 工具将使用所选的本地 ISO
+status.catalog.pi_selected = 已选择 Raspberry Pi 镜像发现
+status.catalog.pi_loading = 正在加载官方 Raspberry Pi Imager 目录…
+status.catalog.pi_compatible = 正在显示与 {board} 兼容的镜像
+status.catalog.pi_all = 正在显示所有 Raspberry Pi 镜像
+status.catalog.pi_choose = 请选择要下载的 Raspberry Pi 镜像
+status.catalog.pi_selected_verify = 已选择 Raspberry Pi 镜像 • 下载后将解压并验证
+status.catalog.iso_selected_checksum = 已选择 ISO • 使用前将验证发布者校验和
+status.catalog.iso_selected_https = 已选择 ISO • 发布者校验和不可用；将检查 HTTPS 长度和启动结构
+status.catalog.choose_distribution = 请先选择发行版
+status.catalog.choose_release = 请选择要下载的 ISO 版本
+status.catalog.browser_opened = 已在浏览器中打开 DistroWatch 发行版页面
+status.catalog.artwork_error = 无法解码目录图片：{error}
+
+# Downloads panel
+downloads.subtitle = 持久历史记录 · 中断的传输可以恢复
+downloads.empty = 尚无受管下载 · 请从“发现镜像”中选择镜像开始
+downloads.selected = 所选下载
+downloads.interrupted_note = 中断的传输只会保留其自身创建的部分文件；明确取消后这些文件会被删除。
+downloads.action.retry_resume = 重试 / 继续
+downloads.action.use_image = 使用镜像
+downloads.action.remove = 移除条目
+downloads.action.cancel = 取消下载
+downloads.jobs_in_history.other = 历史记录中有 {count} 个下载
+downloads.status.queued = 排队中
+downloads.status.running = 下载中
+downloads.status.paused = 已暂停
+downloads.status.interrupted = 已中断
+downloads.status.completed = 已完成
+downloads.status.failed = 失败
+downloads.status.cancelled = 已取消
+downloads.kind.iso = ISO
+downloads.kind.raspberry_pi = Raspberry Pi 镜像
+
+# Download status lines
+status.download.history_unavailable = 下载历史记录不可用 · {error}
+status.download.queued = 下载已加入队列 · 当前任务完成后将开始
+status.download.retrying = 正在重试下载 · 如果支持，将从已保留的字节继续
+status.download.starting = 正在启动受管下载…
+status.download.retry_queued = 重试已加入队列 · 将在当前下载之后开始
+status.download.choose_job = 请先选择下载任务
+status.download.job_gone = 该下载任务已不存在
+status.download.start_failed = 无法启动排队中的下载 · {error}
+status.download.using_completed = 正在使用已完成的下载 {path}
+status.download.completed_unavailable = 已下载的镜像不可用 · {error}
+status.download.history_removed = 已移除历史记录条目 · 已完成的镜像予以保留
+status.download.iso_cancelled = 已取消 ISO 下载
+status.download.pi_cancelled = 已取消 Raspberry Pi 镜像下载
+status.download.ready = 就绪 · 已下载、验证并检查 {name} · 发现页面保持打开
+status.download.cancelled_cleaned = 下载已取消 • 临时数据已清理
+status.download.stopped = 下载已停止 · {error}
+status.download.paused = 下载已暂停 • 准备好后可继续或取消
+status.download.resumed = 下载已继续
+status.download.cancelling = 正在安全取消下载 • 正在清理临时数据…
+
+# Image, drive and options status lines
+status.startup = {media} · 请选择镜像开始
+status.image.busy = 镜像检查已在进行中
+status.image.cancelled = 已取消选择镜像
+status.image.inspecting = 正在检查镜像 • 压缩的源文件会在解压后测量大小…
+status.image.recognized = 已识别：{kind}
+status.image.stopped = 镜像检查意外停止
+status.image.folder = 镜像选择文件夹：{path}
+status.image.folder_cancelled = 已取消选择文件夹
+status.image.choose_first = 请先选择镜像
+status.image.no_recent = 该位置没有最近的镜像
+status.prefs.save_failed = 未能保存偏好设置：{error}
+status.target.none_eligible = 没有符合条件的可移动驱动器
+status.target.selected = 已选择目标 · 检查擦除计划之前请先确认实际的驱动器
+status.target.blocked = 该驱动器已被阻止，无法选择
+status.target.choose_first = 请先选择目标驱动器
+status.drives.refresh_paused = 写入期间已暂停刷新驱动器 • 请勿拔出目标驱动器
+status.drives.up_to_date = 驱动器列表已是最新 • 已开启自动检测
+status.drives.changed = 驱动器详细信息已更改 • 列表已自动更新
+status.drives.added.other = 检测到 {count} 个新驱动器 • 列表已自动更新
+status.drives.removed.other = 已移除 {count} 个驱动器 • 列表已自动更新
+status.drives.added_removed = 驱动器列表已更改：新增 {added} 个，移除 {removed} 个 • 已自动更新
+status.options.expanded = 已展开高级选项 • 每项选择都包含在所检查的计划中
+status.options.collapsed = 已折叠高级选项 • 已配置的值仍然有效
+status.options.open_needs_image = 打开介质选项之前，请先选择或下载镜像
+status.checksum.algorithm = 校验和算法：{algorithm}
+status.checksum.choose_image = 计算校验和之前请先选择镜像
+status.badblocks.off = 已禁用破坏性坏块检测
+status.badblocks.passes.other = 坏块检测：写入前执行 {count} 轮破坏性模式
+status.backup.choose_drive = 请选择要备份的可移动驱动器
+status.backup.cancelled = 已取消驱动器备份
+status.backup.running = 正在备份 {drive}…
+status.backup.done = 驱动器镜像已保存到 {path}
+status.backup.failed = {error} • 最后一步：{step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = 网络不可用
+catalog.failure.refresh = 无法刷新
+catalog.failure.cache = 缓存不可用
+catalog.failure.unsupported = 不支持该目录响应
+catalog.failure.service = 服务不可用
+catalog.source.network = 刚刚更新
+catalog.source.cache = 来自缓存
+catalog.source.stale_cache = 来自缓存 · 刷新失败
+
+# Write completion status lines (core-owned write session)
+status.write.complete = 完成 • 镜像已写入并验证 • 可以安全移除目标驱动器
+status.write.auth_denied = 擦除前已取消写入 • 管理员身份验证已被取消或拒绝
+status.write.stopped = 写入已安全停止 • 介质不完整，使用前必须重新写入
+status.write.failed = 写入失败 • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.other = {count} 个发行版 · {source}
+status.catalog.pi_images_loaded.other = {count} 个 Raspberry Pi 镜像 · {source}
+status.catalog.base_loaded.other = {count} 个基于 {base} 的活跃发行版 · {source}

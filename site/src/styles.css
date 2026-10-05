@@ -2551,3 +2551,77 @@ footer {
     margin-left: 0;
   }
 }
+
+/* Comparison pages */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.compare-table {
+  min-width: 720px;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 14px 16px;
+  vertical-align: top;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.compare-table tbody th {
+  width: 17%;
+  color: var(--text);
+  font: 650 0.9rem system-ui, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.compare-table td {
+  width: 41.5%;
+}
+
+.compare-table sup {
+  margin-left: 2px;
+  font-size: 0.7rem;
+}
+
+.compare-note {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.roadmap-status {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: 700 0.66rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.roadmap-status.shipped {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.roadmap-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.roadmap-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}

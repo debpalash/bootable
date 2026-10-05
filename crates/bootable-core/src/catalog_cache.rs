@@ -7,6 +7,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::error::{Error, Result, io_error};
+use crate::locale::Locale;
+use crate::messages::Message;
 
 const CACHE_VERSION: u32 = 1;
 pub(crate) const CATALOG_TTL: Duration = Duration::from_secs(30 * 60);
@@ -35,17 +37,27 @@ pub struct CatalogFetch<T> {
 
 impl<T> CatalogFetch<T> {
     pub fn source_label(&self) -> &'static str {
+        self.source_label_in(Locale::SOURCE)
+    }
+
+    /// Where the data came from, in `locale`.
+    pub fn source_label_in(&self, locale: Locale) -> &'static str {
         match self.origin {
-            CatalogOrigin::Network => "updated now",
-            CatalogOrigin::FreshCache => "cached",
-            CatalogOrigin::StaleCache => "cached · refresh failed",
+            CatalogOrigin::Network => Message::CatalogSourceNetwork,
+            CatalogOrigin::FreshCache => Message::CatalogSourceCache,
+            CatalogOrigin::StaleCache => Message::CatalogSourceStaleCache,
         }
+        .text(locale)
     }
 
     pub fn status_suffix(&self) -> String {
+        self.status_suffix_in(Locale::SOURCE)
+    }
+
+    pub fn status_suffix_in(&self, locale: Locale) -> String {
         // Keep the always-visible status concise. The structured state retains the
         // detailed warning for diagnostics and retry handling.
-        self.source_label().into()
+        self.source_label_in(locale).into()
     }
 }
 
@@ -83,51 +95,64 @@ impl CatalogState {
     }
 
     pub fn short_label(&self, subject: &str) -> String {
+        self.short_label_in(Locale::SOURCE, subject)
+    }
+
+    /// A one-line summary of the state, in `locale`. `subject` is the noun
+    /// being loaded; pass `Message::CatalogSubject*` text so it is localized
+    /// too.
+    pub fn short_label_in(&self, locale: Locale, subject: &str) -> String {
+        let subject_arg: [(&str, &dyn std::fmt::Display); 1] = [("subject", &subject)];
         match self {
-            Self::Idle => format!("{subject} not loaded"),
-            Self::Loading => format!("Loading {subject}…"),
+            Self::Idle => Message::CatalogStateIdle.format(locale, &subject_arg),
+            Self::Loading => Message::CatalogStateLoading.format(locale, &subject_arg),
             Self::Ready {
                 origin: CatalogOrigin::Network,
                 warning: None,
-            } => format!("{subject} ready"),
-            Self::Ready {
-                origin: CatalogOrigin::FreshCache,
-                warning: None,
-            } => format!("{subject} ready · cached"),
+            } => Message::CatalogStateReady.format(locale, &subject_arg),
+            Self::Ready { warning: None, .. } => {
+                Message::CatalogStateReadyCached.format(locale, &subject_arg)
+            }
             Self::Ready {
                 warning: Some(warning),
                 ..
-            } => format!(
-                "{subject} ready · cached · {}",
-                concise_catalog_failure(warning)
+            } => Message::CatalogStateReadyWarning.format(
+                locale,
+                &[
+                    ("subject", &subject),
+                    ("warning", &concise_catalog_failure(warning, locale)),
+                ],
             ),
-            Self::Ready { warning: None, .. } => format!("{subject} ready · cached"),
-            Self::Empty => format!("No {subject} found"),
-            Self::Failed(message) => format!(
-                "Could not load {subject} · {} · retry",
-                concise_catalog_failure(message)
+            Self::Empty => Message::CatalogStateEmpty.format(locale, &subject_arg),
+            Self::Failed(message) => Message::CatalogStateFailed.format(
+                locale,
+                &[
+                    ("subject", &subject),
+                    ("reason", &concise_catalog_failure(message, locale)),
+                ],
             ),
         }
     }
 }
 
-fn concise_catalog_failure(message: &str) -> &'static str {
+fn concise_catalog_failure(message: &str, locale: Locale) -> &'static str {
     let message = message.to_ascii_lowercase();
     if message.contains("network request")
         || message.contains("connection")
         || message.contains("timed out")
         || message.contains("dns")
     {
-        "network unavailable"
+        Message::CatalogFailureNetwork
     } else if message.contains("refresh failed") {
-        "refresh unavailable"
+        Message::CatalogFailureRefresh
     } else if message.contains("cache") {
-        "cache unavailable"
+        Message::CatalogFailureCache
     } else if message.contains("invalid") || message.contains("parse") {
-        "catalog response unsupported"
+        Message::CatalogFailureUnsupported
     } else {
-        "service unavailable"
+        Message::CatalogFailureService
     }
+    .text(locale)
 }
 
 #[derive(Serialize, serde::Deserialize)]

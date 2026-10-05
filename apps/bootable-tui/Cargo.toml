@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+clap_complete.workspace = true
 crossterm.workspace = true
 bootable-core = { path = "../../crates/bootable-core" }
 image.workspace = true
@@ -20,6 +21,7 @@ ratatui.workspace = true
 ratatui-image.workspace = true
 rfd = "0.15"
 serde_json.workspace = true
+unicode-width = "0.2"
 
 [lints]
 workspace = true

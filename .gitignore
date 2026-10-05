@@ -15,3 +15,4 @@ site/public/omarchy-plugin.png
 site/public/tui-*.png
 site/public/tui-*.gif
 site/public/install.sh
+dist/

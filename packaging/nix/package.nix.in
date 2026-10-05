@@ -1,0 +1,103 @@
+# Bootable, repackaged from the prebuilt GitHub release archives. EXPERIMENTAL and UNTESTED on
+# NixOS / nix-darwin: see docs/package-managers.md.
+#
+# Usage (non-flake):  pkgs.callPackage ./package.nix { }
+#
+# Privileged writes: the app only trusts a root-owned, non-group/world-writable helper. Nix store
+# files satisfy that, and the app falls back to the helper sitting next to its own executable,
+# but the polkit action shipped upstream is bound to /usr/libexec/bootable-helper. A Nix install
+# therefore reaches pkexec's generic "run as root" authentication (or nothing, if polkit is not
+# enabled) rather than the dedicated Bootable action. Writing from this package is unverified.
+{
+  lib,
+  stdenv,
+  fetchurl,
+  autoPatchelfHook,
+  fontconfig,
+  libxkbcommon,
+  vulkan-loader,
+  wayland,
+  libX11,
+  libxcb,
+  libXau,
+  libXdmcp,
+}:
+
+let
+  version = "@VERSION@";
+  sources = {
+    x86_64-linux = {
+      url = "https://github.com/debpalash/bootable/releases/download/v${version}/bootable-${version}-x86_64-unknown-linux-gnu.tar.gz";
+      sha256 = "@SHA256_LINUX_TARBALL@";
+    };
+    aarch64-darwin = {
+      url = "https://github.com/debpalash/bootable/releases/download/v${version}/bootable-${version}-aarch64-apple-darwin.tar.gz";
+      sha256 = "@SHA256_MACOS_TARBALL@";
+    };
+  };
+  source =
+    sources.${stdenv.hostPlatform.system}
+      or (throw "bootable: unsupported system ${stdenv.hostPlatform.system}");
+in
+stdenv.mkDerivation {
+  pname = "bootable";
+  inherit version;
+
+  src = fetchurl { inherit (source) url sha256; };
+  # The release archives have no top-level directory.
+  sourceRoot = ".";
+
+  nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
+    fontconfig
+    libxkbcommon
+    libxcb
+    libXau
+    libXdmcp
+    stdenv.cc.cc.lib
+  ];
+  # Libraries the GUI loads with dlopen at run time are added to the RPATH.
+  runtimeDependencies = lib.optionals stdenv.hostPlatform.isLinux [
+    fontconfig
+    libxkbcommon
+    vulkan-loader
+    wayland
+    libX11
+    libxcb
+  ];
+
+  dontConfigure = true;
+  dontBuild = true;
+  # Keep the binaries byte-identical to the checksummed release build.
+  dontStrip = true;
+
+  installPhase = ''
+    runHook preInstall
+    install -Dm755 bootable $out/bin/bootable
+    install -Dm755 bootable-desktop $out/bin/bootable-desktop
+    install -Dm755 bootable-helper $out/bin/bootable-helper
+    install -Dm644 LICENSE $out/share/licenses/bootable/LICENSE
+    install -Dm644 README.md $out/share/doc/bootable/README.md
+  ''
+  + lib.optionalString stdenv.hostPlatform.isLinux ''
+    install -Dm644 bootable.svg $out/share/icons/hicolor/scalable/apps/bootable.svg
+    sed -e "s|^Exec=.*|Exec=$out/bin/bootable-desktop|" app.bootable.Bootable.desktop \
+      > app.bootable.Bootable.desktop.nix
+    install -Dm644 app.bootable.Bootable.desktop.nix \
+      $out/share/applications/app.bootable.Bootable.desktop
+    install -Dm644 app.bootable.write-media.policy \
+      $out/share/polkit-1/actions/app.bootable.write-media.policy
+  ''
+  + ''
+    runHook postInstall
+  '';
+
+  meta = {
+    description = "Safety-first boot media writer with matching desktop and terminal interfaces";
+    homepage = "https://github.com/debpalash/bootable";
+    license = lib.licenses.asl20;
+    mainProgram = "bootable";
+    platforms = builtins.attrNames sources;
+    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
+  };
+}

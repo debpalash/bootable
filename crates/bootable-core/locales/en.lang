@@ -1,0 +1,561 @@
+# Bootable message catalog: English (source of truth and fallback).
+#
+# Format: `key = value`, one message per line. `#` starts a comment line.
+# `{name}` is a placeholder; write `{{` and `}}` for literal braces.
+# Escapes: `\n` newline, `\\` backslash.
+# Plural messages use `key.one` / `key.few` / `key.many` / `key.other`; every
+# plural message must define `other`, and `{count}` is always available.
+# Every key here needs a variant in `Message` (src/messages.rs).
+
+# Guide: introduction and section titles
+help.intro = Source → Target → Review & write. Nothing is written until you review the plan and acknowledge the erase.
+help.section.source = Source
+help.section.target = Target
+help.section.review = Review & write
+help.section.general = General
+
+# Guide: Source
+help.source.choose.action = Choose an image
+help.source.choose.detail = Browse for an ISO, IMG, RAW, or compressed image
+help.source.recent.action = Use a recent image
+help.source.recent.detail = Re-inspect one of your last images
+help.source.recent.desktop = Click a recent image
+help.source.discover.action = Discover images
+help.source.discover.detail = Open or close the distribution catalog
+help.source.downloads.action = Downloads
+help.source.downloads.detail = Open or close the download manager
+help.source.downloads.desktop = Downloads button
+
+# Guide: Target
+help.target.refresh.action = Refresh drives
+help.target.refresh.detail = Rescan removable media
+help.target.choose.action = Choose a drive
+help.target.choose.detail = Selecting is always explicit; fixed disks are blocked
+help.target.choose.desktop = Click a drive
+
+# Guide: Review & write
+help.review.plan.action = Review plan
+help.review.plan.detail = Open the plan; nothing is written yet
+help.review.stop.action = Stop a write
+help.review.stop.detail = Stops at the next safe boundary
+help.review.stop.desktop = Stop button
+help.review.firmware.action = Boot firmware (Windows media)
+help.review.firmware.detail = Experimental: add legacy BIOS boot; needs the MBR scheme
+help.review.firmware.desktop = Boot firmware select
+
+# Guide: General
+help.general.toggle.action = Show or hide this guide
+help.general.toggle.detail = Reopen it any time
+help.general.close.action = Close a panel
+help.general.close.detail = Dismiss this guide or the catalog
+help.general.language.action = Change the language
+help.general.language.detail = Applies to both interfaces; saved for next time
+help.general.language.desktop = Language menu
+language.label = Language
+language.system_default = System default
+
+# Drive detail rows
+detail.drive = Drive
+detail.path = Path
+detail.capacity = Capacity
+detail.connection = Connection
+detail.serial = Serial
+detail.status = Status
+detail.mounted = Mounted
+detail.connection.unknown = unknown
+detail.serial.not_reported = not reported
+detail.mounted.none = nothing mounted
+detail.mounted.list = {listed} · unmounted before writing
+detail.mounted.list_more = {listed} +{hidden} more · unmounted before writing
+
+# Target eligibility
+target.system_blocked = System disk · blocked
+target.internal_blocked = Internal disk · blocked
+target.read_only_blocked = Read-only · blocked
+target.eligible = Removable · eligible
+
+# Removable media inventory ({count} is the number of connected drives
+# except in media.ready, where it is the number of ready drives)
+media.none = No removable drives connected
+media.ready.one = {count} removable drive ready
+media.ready.other = {count} removable drives ready
+media.none_eligible.one = {count} removable drive connected · none eligible
+media.none_eligible.other = {count} removable drives connected · none eligible
+media.some_ready.one = {count} removable drive connected · {ready} ready
+media.some_ready.other = {count} removable drives connected · {ready} ready
+
+# Workflow readiness
+readiness.needs_image.action = Choose image first
+readiness.needs_target.action = Choose a removable drive
+readiness.ready.action = Review plan
+readiness.needs_image.guidance = Choose or download an image to continue
+readiness.needs_target.guidance = Connect and choose a removable drive to continue
+readiness.ready.guidance = Ready to review the image, target, and erase plan
+workspace.needs_image.status = Choose or download an image to continue
+workspace.needs_target.status = Choose a removable drive · nothing has been written
+workspace.ready.status = Ready to review · nothing has been written
+
+# Workflow step titles
+step.source = Source
+step.target = Target
+step.review = Review & write
+
+# Operation phases
+phase.preparing = Preparing
+phase.downloading = Downloading
+phase.reading = Reading
+phase.writing = Writing
+phase.syncing = Syncing
+phase.verifying = Verifying
+phase.finished = Finished
+
+# Download integrity
+integrity.transfer_checked = HTTPS transfer and boot structure checked · publisher checksum unavailable
+integrity.checksum_verified = Publisher checksum verified
+integrity.checksum_unsigned = Publisher checksum verified · signature not verified ({note})
+integrity.signature_verified = Signature verified · {publisher} (key {fingerprint}) · {algorithm} matches signed manifest
+integrity.completion = {label} · ready
+integrity.ready = Ready · {label} · {path}
+integrity.finalized.transfer = Stage 4/5 · HTTPS transfer length verified · publisher checksum unavailable · finalized at {path}
+integrity.finalized.checksum = Stage 4/5 · Publisher {algorithm} verified · finalized at {path}
+integrity.finalized.checksum_unsigned = Stage 4/5 · Publisher {algorithm} verified · signature not verified ({note}) · finalized at {path}
+integrity.finalized.signature = Stage 4/5 · {label} · finalized at {path}
+
+# Header and brand
+header.tagline = Boot media, written deliberately.
+header.title.create = Create boot media
+header.subtitle.create = One deliberate path from image to removable drive.
+header.subtitle.review = Inspect every operation before confirmation.
+guide.title = Guide
+common.labeled = {label}: {value}
+
+# Buttons and actions shared by both interfaces
+action.downloads = Downloads
+action.downloads_count = Downloads · {count}
+action.downloads_compact = Jobs
+action.discover = Discover images
+action.discover_compact = Find
+action.catalog_close = Close catalog
+action.catalog_close_compact = Catalog
+action.setup_options = Setup options
+action.setup_options_compact = Setup
+action.hide_options = Hide options
+action.hide_options_compact = Hide
+action.refresh_drives = Refresh drives
+action.refresh = Refresh
+action.retry = Retry
+action.browse = Browse
+action.change = Change
+action.inspecting = Inspecting…
+action.select = Select
+action.selected = Selected
+action.blocked = Blocked
+action.close = Close
+action.cancel = Cancel
+action.cancelling = Cancelling…
+action.back = Back
+action.pause = Pause
+action.resume = Resume
+action.stop = Stop
+action.review = Review
+action.quit = Quit
+
+# Tooltips
+tooltip.guide = Guide and shortcuts ({shortcut})
+tooltip.refresh_drives = Refresh removable drives
+tooltip.refresh_distrowatch = Refresh DistroWatch data
+tooltip.refresh_pi = Refresh Raspberry Pi catalog
+
+# Source panel
+source.title = Choose an image
+source.hint = The image is inspected before any write is allowed
+source.formats = ISO, IMG, RAW, or compressed disk image
+source.inspected = Inspected
+source.recent.title = Recent images
+source.recent.empty = Images you use appear here for one-click reuse
+source.recent.in_use = In use
+source.dialog.title = Boot images
+source.dialog.filter_iso = ISO images
+source.dialog.filter_backup = Raw drive image
+
+# Target panel
+target.title = Choose a drive
+target.empty = Connect a removable USB or SD drive, then refresh
+target.selected_drive = Selected drive
+target.confirm_physical = Confirm the physical drive before continuing · erasure starts only after review
+
+# Workspace focus guidance (shown when keyboard focus moves)
+focus.source = Source · choose or change the image
+focus.target = Target · choose an eligible removable drive
+focus.setup = Setup options · configure image-specific choices
+focus.review = Review & write · inspect the plan before erasure
+focus.discover = Discover images · browse trusted catalogs
+focus.refresh = Refresh drives · rescan removable media
+
+# Setup options: panel titles
+options.windows.title = Windows installer options
+options.linux.title = Linux / Unix boot media
+options.selected_count = {count} selected
+options.summary.verification = Verification on · {bad_blocks}
+
+# Setup options: partition scheme and boot firmware (GPT, MBR, UEFI and BIOS + UEFI (CSM) stay verbatim)
+options.windows.partition_scheme = Partition scheme
+options.windows.scheme_value = Scheme: {scheme}
+options.windows.boot_firmware = Boot firmware
+options.windows.boot_firmware_experimental = Boot firmware · experimental
+options.windows.boot_firmware_value = Boot firmware: {value}
+options.windows.boot_firmware_value_experimental = Boot firmware: {value} · experimental
+options.windows.boot_firmware_value_compact = Firmware: {value}
+options.windows.boot_firmware_hint = Experimental: BIOS + UEFI (CSM) needs the MBR scheme and is currently written only by the Linux adapter. Not yet verified on real hardware.
+
+# Setup options: Windows checkboxes (label = full wording; short = compact cells; on/off = status line when toggled)
+options.windows.bypass_hardware.label = Bypass TPM, Secure Boot and RAM checks
+options.windows.bypass_hardware.short = Hardware bypass
+options.windows.bypass_hardware.on = Windows 11 TPM, Secure Boot, and RAM checks will be bypassed
+options.windows.bypass_hardware.off = Windows 11 hardware checks use Microsoft defaults
+options.windows.offline_account.label = Expose local/offline account setup
+options.windows.offline_account.short = Offline account
+options.windows.offline_account.on = Windows OOBE will expose the offline/local-account path
+options.windows.offline_account.off = Windows OOBE will use its standard account flow
+options.windows.named_account.label = Create local account: {name}
+options.windows.named_account.short = Named account
+options.windows.named_account.on = Windows will create local administrator account `{account}`
+options.windows.named_account.off = Automatic local-account creation disabled
+options.windows.host_region.label = Copy this computer's locale and time zone
+options.windows.host_region.short = Host region
+options.windows.host_region.on = Windows will use locale {locale} and time zone {zone}
+options.windows.host_region.off = Windows Setup will ask for regional options
+options.windows.privacy.label = Apply privacy-focused OOBE defaults
+options.windows.privacy.short = Privacy defaults
+options.windows.privacy.on = Windows OOBE will use privacy-focused defaults
+options.windows.privacy.off = Windows OOBE privacy questions will remain at their defaults
+options.windows.bitlocker.label = Disable automatic BitLocker encryption
+options.windows.bitlocker.short = Disable BitLocker
+options.windows.bitlocker.on = Automatic Windows device encryption will be disabled
+options.windows.bitlocker.off = Windows may automatically enable device encryption
+options.windows.qol.label = QoL: reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup
+options.windows.qol.short = QoL policies
+options.windows.qol.on = Windows will reduce Copilot, OneDrive, Teams, suggestions, and Fast Startup
+options.windows.qol.off = Windows keeps its default Copilot, OneDrive, Teams, suggestions, and Fast Startup behavior
+options.windows.ca2023.label = Use Windows UEFI CA 2023 signed bootloaders
+options.windows.ca2023.short = CA 2023
+options.windows.ca2023.on = CA 2023 boot media requires updated Secure Boot firmware certificates
+options.windows.ca2023.off = Boot media will use the standard Windows bootloaders
+options.windows.skusipolicy.label = Apply SkuSiPolicy.p7b Secure Boot revocations
+options.windows.skusipolicy.short = SkuSiPolicy
+options.windows.skusipolicy.on = SkuSiPolicy.p7b Secure Boot revocations will be applied
+options.windows.skusipolicy.off = SkuSiPolicy.p7b Secure Boot revocations will not be applied
+options.windows.smode.label = Force Windows S Mode (expert)
+options.windows.smode.short = Force S Mode
+options.windows.smode.on = S Mode may remain enforced after reinstall; review the plan carefully
+options.windows.smode.off = Windows S Mode will not be forced
+
+# Setup options: Windows status lines
+status.windows.choose_installer = Choose a Windows installer image before changing Windows options
+status.windows.not_windows = Windows setup options apply only to Windows installer images
+status.windows.scheme = Windows partition scheme: {scheme} · boot firmware: {firmware}
+status.windows.firmware = Boot firmware: {firmware} (experimental) · partition scheme: {scheme}
+
+# Setup options: Windows installer media card (Discover)
+options.windows.heading = Windows installer media
+options.windows.installer_ready = Windows ISO ready · setup choices unlocked
+options.windows.installer_locked = Choose a Windows ISO to unlock setup choices
+options.windows.choose_iso = Choose Windows ISO
+options.windows.replace_iso = Replace Windows ISO
+options.windows.unavailable_note = Unavailable items are not clickable. Existing autounattend.xml files are never overwritten.
+options.windows.silent_install_warning = Silent installation can erase the first disk Windows Setup detects and requires a separate high-friction safety design.
+
+# Setup options: Linux / Unix media
+options.linux.layout = Preserve the complete bootable disk layout
+options.linux.layout_short = Full disk layout
+options.linux.verify = Verify the written bytes with SHA-256
+options.linux.verify_short = Byte verification
+options.linux.boot_records_short = Boot records
+options.linux.unmount_short = Safe unmount
+
+# Setup options: media tools
+options.tools.title = Media tools
+options.tools.subtitle = Verification and backup utilities
+options.tools.bad_blocks_off = Bad blocks off
+options.tools.bad_blocks_passes = Bad blocks {passes}x
+options.tools.verify_image = Verify image
+options.tools.image_folder = Image folder
+options.tools.backup_drive = Back up drive
+
+# Review screen
+review.title = Review write plan
+review.subtitle = Nothing is written until the consequences are reviewed and acknowledged.
+review.subtitle_writing = Writing and verification are active • do not unplug the target.
+review.plan_summary = Plan summary
+review.field.source = Source
+review.field.target = Target
+review.field.method = Method
+review.field.consequence = Consequence
+review.consequence = All existing data and partitions on the selected target will be erased.
+review.permanent_changes = Permanent changes
+review.ordered_operations = Ordered operations
+review.step.erases = Erases data
+review.step.safe = Safe
+review.step.verifies = Verifies
+review.state.writing = Writing and verification are active
+review.state.final_confirm = One final confirmation is required
+review.warning.writing = Do not close the app, power off, or unplug the target drive.
+review.warning.idle = Review the exact target changes and irreversible consequences before writing.
+review.hint.open_confirmation = Open the confirmation to review changes, consequences, and the physical target.
+review.action.stop_safely = Stop safely
+review.action.written = Written & verified
+review.action.retry = Review & retry
+review.action.consequences = Review consequences
+review.status.writing = Writing and verification are active · do not unplug the target
+review.status.complete = Complete · the written media passed byte verification
+review.status.review = Review the physical target and permanent changes before writing
+
+# Confirmation dialog (the dialog never contains text the user must type; the erase phrase stays verbatim and is not a catalog message)
+confirm.title = Confirm permanent changes
+confirm.subtitle = Review what Bootable will change and what can go wrong.
+confirm.badge = Permanent
+confirm.physical_target = Physical target
+confirm.changes = Changes to this drive
+confirm.consequences = Consequences
+confirm.consequence.erase = Every existing file and partition on this physical drive will be permanently erased.
+confirm.consequence.wrong_drive = Choosing the wrong drive destroys the data on that drive; confirm its model, path, and capacity below.
+confirm.consequence.interrupted = Power loss, closing the app, or unplugging during writing can leave incomplete and unbootable media.
+confirm.consequence.recheck = Bootable rechecks the target identity immediately before erasure and verifies the result afterward.
+confirm.ack = I checked the physical target and understand that all of its existing data will be permanently erased.
+confirm.submit = Confirm erase & write
+confirm.acknowledge_first = Acknowledge first
+
+# Write result
+result.success.title = Write complete
+result.success.body = The image was written and verified. The removable drive can now be safely removed.
+result.authentication_denied.title = Write cancelled before erasure
+result.authentication_denied.body = Administrator authentication was cancelled or denied.
+result.stopped.title = Write stopped safely
+result.stopped.body = The media is incomplete and must be rewritten before use.
+result.failed.title = Write failed
+
+# Review and write status lines
+status.review.open = Reviewing the write plan • nothing has been written
+status.review.consequences = Review the target changes and consequences before writing
+status.review.ack_required = Acknowledge the consequences before confirming the write
+status.write.active = Writing is active • do not close the app or unplug the target
+status.write.started = Write started • do not unplug the target
+status.write.cancelled = Write cancelled before erasure • the target is unchanged
+status.write.stopping = Stopping safely • flushing completed writes; the media will remain incomplete
+
+# Discover: catalog shell
+discover.title = Discover bootable images
+discover.collapsed_hint = Browse trusted catalogs · Open
+discover.disclaimer = DistroWatch page-hit ranking measures interest, not quality or market share.
+discover.search_title = Search
+discover.search_placeholder = Search by name, slug, or base family…
+discover.windows_hint = Windows installer workflow · select an ISO to unlock every setup checkbox
+discover.quick.all = All
+discover.section.popular = Popular · six months
+discover.section.search = Search results
+discover.section.arch = Arch-based
+discover.section.debian = Debian-based
+
+# Discover: distribution rows and profile
+discover.item.independent = Independent
+discover.item.directory = Directory
+discover.item.directory_source = DistroWatch directory
+discover.item.hits_per_day = {hits}/day
+discover.item.size_unknown = Size unknown
+discover.item.publisher_checksum = Publisher {algorithm}
+discover.item.no_publisher_checksum = No publisher checksum
+discover.item.https_only = HTTPS only
+discover.detail.empty = Choose a distribution to load its profile and ISO files
+discover.detail.unknown_os = Unknown OS
+discover.detail.unknown_status = Unknown status
+discover.detail.unknown_origin = Unknown
+discover.detail.no_description = No description
+discover.detail.not_listed = Not listed
+discover.detail.based_on = Based on
+discover.detail.origin = Origin
+discover.detail.architecture = Architecture
+discover.detail.desktop = Desktop
+discover.detail.logo = Logo
+discover.detail.screenshot = Screenshot
+discover.detail.screenshot_of = {name} screenshot
+discover.detail.rating.one = ★ {rating}/10 · {count} review
+discover.detail.rating.other = ★ {rating}/10 · {count} reviews
+discover.detail.direct_isos = Direct ISO files
+discover.detail.loading = Loading…
+discover.detail.found = {count} found
+discover.detail.open_page = Open DistroWatch download page
+discover.detail.download_use = Download & use ISO
+discover.artwork.loading = Loading artwork…
+discover.artwork.none = No artwork
+discover.artwork.unavailable = Artwork unavailable
+
+# Discover: Raspberry Pi catalog
+pi.title = Official Raspberry Pi Imager catalog
+pi.subtitle = Board compatibility, compressed and extracted checksums included
+pi.board_filter = Board filter
+pi.compatible_images = Compatible images
+pi.all_images = All images
+pi.empty = No compatible Raspberry Pi images found
+pi.empty_query = No Raspberry Pi images match “{query}”
+pi.hint = Choose a board and image. Official checksums are verified before the image is used.
+pi.default_category = Raspberry Pi image
+pi.date_unknown = Date unknown
+pi.details = Download {download} · Expanded {expanded}\nReleased {date}\n{description}
+pi.download_use = Download, verify & use
+
+# Discover: catalog load states ({subject} comes from catalog.subject.*; {reason} and {warning} are core-produced text shown as received)
+catalog.state.idle = {subject} not loaded
+catalog.state.loading = Loading {subject}…
+catalog.state.ready = {subject} ready
+catalog.state.ready_cached = {subject} ready · cached
+catalog.state.ready_warning = {subject} ready · cached · {warning}
+catalog.state.empty = No {subject} found
+catalog.state.failed = Could not load {subject} · {reason} · retry
+catalog.subject.distributions = distributions
+catalog.subject.search_catalog = search catalog
+catalog.subject.pi_images = Raspberry Pi images
+catalog.subject.pi_boards = Raspberry Pi boards
+catalog.subject.base_distributions = {base}-based distributions
+catalog.subject.iso_releases = ISO releases
+catalog.subject.distribution_profile = distribution profile
+
+# Discover: status lines
+status.catalog.closed = Catalog closed • {guidance}
+status.catalog.search_closed = Search closed · showing DistroWatch six-month popularity
+status.catalog.popularity = Showing DistroWatch six-month popularity
+status.catalog.ready = DistroWatch catalog ready • rankings indicate interest, not quality
+status.catalog.loading_popularity = Loading DistroWatch six-month popularity…
+status.catalog.searching_directory = Searching DistroWatch's full distribution directory…
+status.catalog.loading = Loading distributions…
+status.catalog.loading_base = Searching DistroWatch for active {base}-based distributions…
+status.catalog.showing_base.one = Showing {count} active {base}-based distribution from DistroWatch
+status.catalog.showing_base.other = Showing {count} active {base}-based distributions from DistroWatch
+status.catalog.loading_releases = Resolving current {name} ISO files…
+status.catalog.profile_ready_no_iso = Profile ready · no direct ISO found
+status.catalog.profile_ready_errors.one = Profile ready · no direct ISO found · {count} source error
+status.catalog.profile_ready_errors.other = Profile ready · no direct ISO found · {count} source errors
+status.catalog.releases_loaded.one = {count} direct ISO release · {source}
+status.catalog.releases_loaded.other = {count} direct ISO releases · {source}
+status.catalog.source_warnings.one = {count} source warning
+status.catalog.source_warnings.other = {count} source warnings
+status.catalog.with_warnings = {summary} · {warnings}
+status.catalog.omarchy = Omarchy family · ISO releases are writable; installer-only derivatives are clearly marked
+status.catalog.omarchy_missing = Omarchy is missing from the current DistroWatch directory
+status.catalog.windows_tools = Windows media tools · choose a Windows ISO to unlock setup options
+status.catalog.windows_uses_iso = Windows tools use the selected local ISO
+status.catalog.pi_selected = Raspberry Pi image discovery selected
+status.catalog.pi_loading = Loading the official Raspberry Pi Imager catalog…
+status.catalog.pi_compatible = Showing images compatible with {board}
+status.catalog.pi_all = Showing every Raspberry Pi image
+status.catalog.pi_choose = Choose a Raspberry Pi image to download
+status.catalog.pi_selected_verify = Raspberry Pi image selected • download will be extracted and verified
+status.catalog.iso_selected_checksum = ISO selected • publisher checksum will be verified before use
+status.catalog.iso_selected_https = ISO selected • publisher checksum unavailable; HTTPS length and boot structure will be checked
+status.catalog.choose_distribution = Choose a distribution first
+status.catalog.choose_release = Choose an ISO release to download
+status.catalog.browser_opened = Opened the DistroWatch distribution page in your browser
+status.catalog.artwork_error = Could not decode catalog artwork: {error}
+
+# Downloads panel
+downloads.subtitle = Persistent history · interrupted transfers can resume
+downloads.empty = No managed downloads yet · choose an image from Discover to begin
+downloads.selected = Selected download
+downloads.interrupted_note = Interrupted transfers retain only owned partial files; explicit cancellation removes them.
+downloads.action.retry_resume = Retry / resume
+downloads.action.use_image = Use image
+downloads.action.remove = Remove entry
+downloads.action.cancel = Cancel download
+downloads.jobs_in_history.one = {count} download job in history
+downloads.jobs_in_history.other = {count} download jobs in history
+downloads.status.queued = Queued
+downloads.status.running = Downloading
+downloads.status.paused = Paused
+downloads.status.interrupted = Interrupted
+downloads.status.completed = Completed
+downloads.status.failed = Failed
+downloads.status.cancelled = Cancelled
+downloads.kind.iso = ISO
+downloads.kind.raspberry_pi = Raspberry Pi image
+
+# Download status lines
+status.download.history_unavailable = Download history unavailable · {error}
+status.download.queued = Download queued · it will start when the active job finishes
+status.download.retrying = Retrying download · preserved bytes will be resumed when supported
+status.download.starting = Starting managed download…
+status.download.retry_queued = Retry queued · it will start after the active download
+status.download.choose_job = Choose a download job first
+status.download.job_gone = Download job no longer exists
+status.download.start_failed = Could not start queued download · {error}
+status.download.using_completed = Using completed download {path}
+status.download.completed_unavailable = Downloaded image is unavailable · {error}
+status.download.history_removed = History entry removed · completed image kept
+status.download.iso_cancelled = ISO download cancelled
+status.download.pi_cancelled = Raspberry Pi image download cancelled
+status.download.ready = Ready · downloaded, verified, and inspected {name} · discovery remains open
+status.download.cancelled_cleaned = Download cancelled • temporary data cleaned up
+status.download.stopped = Download stopped · {error}
+status.download.paused = Download paused • resume or cancel when ready
+status.download.resumed = Download resumed
+status.download.cancelling = Cancelling download safely • cleaning temporary data…
+
+# Image, drive and options status lines
+status.startup = {media} · choose an image to begin
+status.image.busy = Image inspection is already running
+status.image.cancelled = Image selection cancelled
+status.image.inspecting = Inspecting image • compressed sources are measured after expansion…
+status.image.recognized = Recognized {kind}
+status.image.stopped = Image inspection stopped unexpectedly
+status.image.folder = Image browser folder: {path}
+status.image.folder_cancelled = Folder selection cancelled
+status.image.choose_first = Choose an image first
+status.image.no_recent = No recent image in that position
+status.prefs.save_failed = Preferences were not saved: {error}
+status.target.none_eligible = No eligible removable drive is available
+status.target.selected = Target selected · confirm the physical drive before reviewing the erase plan
+status.target.blocked = That drive is blocked and cannot be selected
+status.target.choose_first = Choose a target drive first
+status.drives.refresh_paused = Drive refresh is paused while writing • do not unplug the target
+status.drives.up_to_date = Drive list is up to date • automatic detection is on
+status.drives.changed = Drive details changed • list updated automatically
+status.drives.added.one = Detected {count} new drive • list updated automatically
+status.drives.added.other = Detected {count} new drives • list updated automatically
+status.drives.removed.one = Removed {count} drive • list updated automatically
+status.drives.removed.other = Removed {count} drives • list updated automatically
+status.drives.added_removed = Drive list changed: {added} added, {removed} removed • updated automatically
+status.options.expanded = Advanced options expanded • every choice is included in the reviewed plan
+status.options.collapsed = Advanced options collapsed • configured values remain active
+status.options.open_needs_image = Choose or download an image before opening media options
+status.checksum.algorithm = Checksum algorithm: {algorithm}
+status.checksum.choose_image = Choose an image before computing its checksum
+status.badblocks.off = Destructive bad-block check disabled
+status.badblocks.passes.one = Bad-block check: {count} destructive pattern before writing
+status.badblocks.passes.other = Bad-block check: {count} destructive patterns before writing
+status.backup.choose_drive = Choose a removable drive to back up
+status.backup.cancelled = Drive backup cancelled
+status.backup.running = Backing up {drive}…
+status.backup.done = Drive image saved to {path}
+status.backup.failed = {error} • last step: {step}
+
+# Catalog load failures and origins (shown inside catalog.state.* lines)
+catalog.failure.network = network unavailable
+catalog.failure.refresh = refresh unavailable
+catalog.failure.cache = cache unavailable
+catalog.failure.unsupported = catalog response unsupported
+catalog.failure.service = service unavailable
+catalog.source.network = updated now
+catalog.source.cache = cached
+catalog.source.stale_cache = cached · refresh failed
+
+# Write completion status lines (core-owned write session)
+status.write.complete = Complete • image written and verified • target can be safely removed
+status.write.auth_denied = Write cancelled before erasure • administrator authentication was cancelled or denied
+status.write.stopped = Write stopped safely • media is incomplete and must be rewritten before use
+status.write.failed = Write failed • {error}
+
+# Discover: result counts ({source} is the catalog origin label)
+status.catalog.distributions_loaded.one = {count} distribution · {source}
+status.catalog.distributions_loaded.other = {count} distributions · {source}
+status.catalog.pi_images_loaded.one = {count} Raspberry Pi image · {source}
+status.catalog.pi_images_loaded.other = {count} Raspberry Pi images · {source}
+status.catalog.base_loaded.one = {count} active {base}-based distribution · {source}
+status.catalog.base_loaded.other = {count} active {base}-based distributions · {source}

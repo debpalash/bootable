@@ -1,0 +1,3 @@
+a081ab202cfda17f6924128dbd2de8b63518ac0531bcfe3f1a1b88097c459bd4 *linuxmint-22.3-cinnamon-64bit.iso
+7609294da613b75eea89bb918292125e9f06418a368136fb190466e15bf8c373 *linuxmint-22.3-mate-64bit.iso
+45a835b5dddaf40e84d776549e0b19b3fbd49673b6cc6434ebddbfcd217df776 *linuxmint-22.3-xfce-64bit.iso

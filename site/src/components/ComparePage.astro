@@ -1,0 +1,98 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Breadcrumbs from './Breadcrumbs.astro';
+import CompareTable from './CompareTable.astro';
+import { competitors, bootableGaps, CHECKED_ON, CHECKED_ON_LABEL } from '../data/compare';
+import { bootableApp, breadcrumbs, webPage } from '../data/jsonld';
+
+interface Props {
+  id: keyof typeof competitors;
+}
+const { id } = Astro.props;
+const c = competitors[id];
+const path = `/${c.slug}`;
+const title = `Bootable vs ${c.name}: an honest comparison`;
+const description = `Factual comparison of Bootable and ${c.name}: platforms, interfaces, verification, drive safety, licensing, and what each cannot do. Sources linked, checked ${CHECKED_ON_LABEL}.`;
+
+const page = {
+  title: `${title} — Bootable`,
+  description,
+  ogTitle: title,
+  ogDescription: `Platforms, verification, safety, license, and gaps for Bootable and ${c.name}, with sources.`,
+  ogType: 'article' as const,
+  current: 'compare' as const,
+  jsonLd: [
+    bootableApp(),
+    webPage(title, path, description, CHECKED_ON),
+    breadcrumbs([{ name: 'Home', path: '/' }, { name: 'Compare', path: '/compare' }, { name: `Bootable vs ${c.name}` }]),
+  ],
+  crumbs: [{ label: 'Home', href: '/' }, { label: 'Compare', href: '/compare' }, { label: `vs ${c.name}` }],
+};
+---
+<Layout {...page}>
+<main class="guide-main">
+  <Breadcrumbs crumbs={page.crumbs} />
+  <article>
+    <header class="guide-hero">
+      <p class="eyebrow">Compare · Checked on {CHECKED_ON_LABEL}</p>
+      <h1>Bootable vs {c.name}</h1>
+      <p class="lede">{c.summary} Bootable is early-stage software, and this page says where it falls short.</p>
+    </header>
+    <div class="guide-body">
+      <div class="guide-content">
+        <h2 id="summary">In short</h2>
+        <p><strong>Choose {c.name} if:</strong></p>
+        <ul>{c.theyFit.map((t) => <li>{t}</li>)}</ul>
+        <p><strong>Choose Bootable if:</strong></p>
+        <ul>{c.bootableFits.map((t) => <li>{t}</li>)}</ul>
+
+        <h2 id="table">Side-by-side</h2>
+        <p class="compare-note">Checked on <time datetime={CHECKED_ON}>{CHECKED_ON_LABEL}</time>. Bracketed numbers link to the {c.name} source for that claim. Where a claim could not be verified from official pages, the cell says so rather than guessing.</p>
+        <CompareTable competitor={c} />
+
+        <h2 id="stronger">Where {c.name} is stronger</h2>
+        <ul>
+          {
+            c.theyDoBetter.map((t) => (
+              <li>
+                {t.text}
+                {(t.src ?? []).map((n) => (
+                  <sup><a href={c.sources[n - 1].url} rel="noopener" aria-label={`Source ${n}`}>[{n}]</a></sup>
+                ))}
+              </li>
+            ))
+          }
+        </ul>
+
+        <h2 id="gaps">Bootable&rsquo;s current gaps</h2>
+        <div class="guide-callout">
+          <ul>{bootableGaps.map((g) => <li>{g}</li>)}</ul>
+        </div>
+        <p>See the <a href="/roadmap">roadmap</a> for what is planned. Planned items are not shipped.</p>
+
+        <h2 id="sources">Sources</h2>
+        <p>All {c.name} claims on this page come from these official pages, read on {CHECKED_ON_LABEL}.</p>
+        <ol>
+          {c.sources.map((s) => <li><a href={s.url} rel="noopener">{s.label}</a></li>)}
+        </ol>
+        <p>Claims about Bootable come from its <a href="https://github.com/debpalash/bootable/blob/main/docs/rufus-parity.md">implementation status</a>, <a href="/features">features</a>, and <a href="/download">download</a> pages.</p>
+        <p class="compare-note">Bootable is not affiliated with {c.name}. Software changes; check the official site before deciding. Found an error? <a href="https://github.com/debpalash/bootable/issues/new">Open an issue</a> and we will correct it.</p>
+
+        <section class="related-guides"><h2>More comparisons</h2><ul>
+          <li><a href="/compare">All comparisons</a></li>
+          {Object.entries(competitors).filter(([k]) => k !== id).map(([, o]) => <li><a href={`/${o.slug}`}>Bootable vs {o.name}</a></li>)}
+          <li><a href="/rufus-alternative-linux-macos">Rufus alternative for Linux and macOS</a></li>
+        </ul></section>
+        <div class="guide-cta"><h2>Try Bootable</h2><p>Use a drive you can erase. Releases are unsigned today.</p><a class="button primary" href="/download">Download Bootable</a></div>
+      </div>
+      <aside class="guide-aside"><strong>On this page</strong><ul>
+        <li><a href="#summary">In short</a></li>
+        <li><a href="#table">Side-by-side</a></li>
+        <li><a href="#stronger">Where {c.name} is stronger</a></li>
+        <li><a href="#gaps">Bootable&rsquo;s gaps</a></li>
+        <li><a href="#sources">Sources</a></li>
+      </ul></aside>
+    </div>
+  </article>
+</main>
+</Layout>

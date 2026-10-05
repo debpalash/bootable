@@ -8,6 +8,8 @@ rust-version.workspace = true
 
 [dependencies]
 md-5.workspace = true
+minisign-verify.workspace = true
+pgp.workspace = true
 reqwest.workspace = true
 roxmltree.workspace = true
 scraper.workspace = true
@@ -28,6 +30,9 @@ zstd.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+blake2.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
 tempfile.workspace = true
 
 [lints]
